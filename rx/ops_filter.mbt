@@ -31,23 +31,30 @@ pub fn[T, E] Observable::take(self : Observable[T, E], n : Int) -> Observable[T,
     let complete = downstream.complete
     let remaining = Ref::Ref(n)
     let stopped = Ref::Ref(false)
-    source_fn({
-      next: fn(v : T) {
-        if !stopped.val {
-          if remaining.val > 0 {
-            remaining.val = remaining.val - 1
-            let done = remaining.val == 0
-            next(v)
-            if done {
-              stopped.val = true
-              complete()
+    if n <= 0 {
+      // Rx 语义：take(0) / take(负数) 不取任何值，立即完成
+      stopped.val = true
+      complete()
+      Subscription::empty()
+    } else {
+      source_fn({
+        next: fn(v : T) {
+          if !stopped.val {
+            if remaining.val > 0 {
+              remaining.val = remaining.val - 1
+              let done = remaining.val == 0
+              next(v)
+              if done {
+                stopped.val = true
+                complete()
+              }
             }
           }
-        }
-      },
-      error: fn(e : E) { if !stopped.val { error(e) } },
-      complete: fn() { if !stopped.val { complete() } },
-    })
+        },
+        error: fn(e : E) { if !stopped.val { error(e) } },
+        complete: fn() { if !stopped.val { complete() } },
+      })
+    }
   }
   Observable::new(subscribe_fn)
 }
@@ -306,10 +313,12 @@ pub fn[T, E : Default] Observable::element_at(
     let error = downstream.error
     let complete = downstream.complete
     let pos = Ref::Ref(0)
+    let found = Ref::Ref(false)
     source_fn({
       next: fn(v : T) {
         if pos.val == index {
           pos.val = pos.val + 1
+          found.val = true
           next(v)
           complete()
         } else {
@@ -317,7 +326,11 @@ pub fn[T, E : Default] Observable::element_at(
         }
       },
       error: error,
-      complete: fn() { error(E::default()) },
+      complete: fn() {
+        if !found.val {
+          error(E::default())
+        }
+      },
     })
   }
   Observable::new(subscribe_fn)

@@ -175,3 +175,33 @@ test "filter: includes 命中返回 true" {
   let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
   assert_eq(values.val, [true])
 }
+
+///|
+test "filter: element_at 命中后不发错误（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let got_err : Ref[Bool] = Ref::Ref(false)
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([10, 20, 30]).element_at(1)
+  let _ = obs.subscribe(
+    @rx.Observer::new(
+      fn(v : Int) { values.val.push(v) },
+      fn(_ : Unit) { got_err.val = true },
+      fn() {},
+    ),
+  )
+  assert_eq(values.val, [20])
+  assert_true(!got_err.val)
+}
+
+///|
+test "filter: element_at 越界发错误" {
+  let got_err : Ref[Bool] = Ref::Ref(false)
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([10, 20, 30]).element_at(9)
+  let _ = obs.subscribe(
+    @rx.Observer::new(
+      fn(_ : Int) {},
+      fn(_ : Unit) { got_err.val = true },
+      fn() {},
+    ),
+  )
+  assert_true(got_err.val)
+}

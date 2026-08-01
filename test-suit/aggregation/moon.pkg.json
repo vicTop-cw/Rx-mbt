@@ -1,0 +1,7 @@
+{
+  "test-import": {
+    "vicTop/RX-MBT/rx": "rx",
+    "moonbitlang/core/hashmap": "hashmap",
+    "moonbitlang/core/hashset": "hashset"
+  }
+}

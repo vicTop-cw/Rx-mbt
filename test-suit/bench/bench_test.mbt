@@ -15,13 +15,14 @@ test "bench: map 10 万元素" {
     name="mbt_map_100k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::from_iter(data).map(fn(x : Int) { x * 2 }).subscribe_on_next(
+      let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
+      let _ = src.map(fn(x : Int) { x * 2 }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
       )
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_map_100k: \{json}")
   assert_true(json.length() > 0)
 }
@@ -39,13 +40,14 @@ test "bench: filter 10 万元素" {
     name="mbt_filter_100k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::from_iter(data).filter(fn(x : Int) { x % 2 == 0 }).subscribe_on_next(
+      let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
+      let _ = src.filter(fn(x : Int) { x % 2 == 0 }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
       )
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_filter_100k: \{json}")
   assert_true(json.length() > 0)
 }
@@ -63,13 +65,14 @@ test "bench: reduce 10 万元素" {
     name="mbt_reduce_100k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::from_iter(data).reduce(0, fn(acc : Int, v : Int) { acc + v }).subscribe_on_next(
+      let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
+      let _ = src.reduce(0, fn(acc : Int, v : Int) { acc + v }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
       )
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_reduce_100k: \{json}")
   assert_true(json.length() > 0)
 }
@@ -87,13 +90,14 @@ test "bench: scan 10 万元素" {
     name="mbt_scan_100k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::from_iter(data).scan(0, fn(acc : Int, v : Int) { acc + v }).subscribe_on_next(
+      let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
+      let _ = src.scan(0, fn(acc : Int, v : Int) { acc + v }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
       )
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_scan_100k: \{json}")
   assert_true(json.length() > 0)
 }
@@ -111,7 +115,8 @@ test "bench: map+filter+take 链" {
     name="mbt_chain_100k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::from_iter(data)
+      let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
+      let _ = src
         .map(fn(x : Int) { x * 2 })
         .filter(fn(x : Int) { x % 4 == 0 })
         .take(100)
@@ -119,7 +124,7 @@ test "bench: map+filter+take 链" {
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_chain_100k: \{json}")
   assert_true(json.length() > 0)
 }
@@ -139,14 +144,14 @@ test "bench: zip 2x5 万元素" {
     name="mbt_zip_50k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::zip(
-        @rx.Observable::from_iter(a),
-        @rx.Observable::from_iter(b),
-      ).subscribe_on_next(fn(v : (Int, Int)) { values.val.push(v.0) })
+      let a_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(a)
+      let b_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(b)
+      let src = @rx.Observable::zip(a_obs, b_obs)
+      let _ = src.subscribe_on_next(fn(v : (Int, Int)) { values.val.push(v.0) })
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_zip_50k: \{json}")
   assert_true(json.length() > 0)
 }
@@ -166,14 +171,14 @@ test "bench: merge 2x5 万元素" {
     name="mbt_merge_50k",
     fn() {
       let values : Ref[Array[Int]] = Ref::Ref(Array::new())
-      let _ = @rx.Observable::merge(
-        @rx.Observable::from_iter(a),
-        @rx.Observable::from_iter(b),
-      ).subscribe_on_next(fn(v : Int) { values.val.push(v) })
+      let a_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(a)
+      let b_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(b)
+      let src = @rx.Observable::merge(a_obs, b_obs)
+      let _ = src.subscribe_on_next(fn(v : Int) { values.val.push(v) })
     },
     count=20,
   )
-  let json = summary.to_json().stringify()
+  let json = @json.to_json(summary).stringify()
   println("mbt_merge_50k: \{json}")
   assert_true(json.length() > 0)
 }

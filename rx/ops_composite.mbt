@@ -87,8 +87,10 @@ pub fn[T, E, U] zip(
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
     let emitted = Ref::Ref(false)
+    let both_subscribed = Ref::Ref(false)
     let try_emit : () -> Unit = fn() {
-      if done_a.val && done_b.val && !emitted.val {
+      // Rx 语义：双方都订阅后，任一源完成即终止（先把已缓冲的配对发完）
+      if both_subscribed.val && (done_a.val || done_b.val) && !emitted.val {
         emitted.val = true
         let na = buf_a.val.length()
         let nb = buf_b.val.length()
@@ -104,11 +106,14 @@ pub fn[T, E, U] zip(
       error: error,
       complete: fn() { done_a.val = true; try_emit() },
     })
-    b_fn({
+    let b_sub = b_fn({
       next: fn(v : U) { buf_b.val.push(v) },
       error: error,
       complete: fn() { done_b.val = true; try_emit() },
     })
+    both_subscribed.val = true
+    try_emit()
+    b_sub
   }
   Observable::new(subscribe_fn)
 }

@@ -114,7 +114,8 @@ test "conditions: find_index 未找到发 -1" {
 ///|
 test "conditions: is_empty 空流发 true" {
   let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
-  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::empty().is_empty()
+  let src : @rx.Observable[Int, Unit] = @rx.Observable::empty()
+  let obs : @rx.Observable[Bool, Unit] = src.is_empty()
   let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
   assert_eq(values.val, [true])
 }

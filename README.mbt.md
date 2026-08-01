@@ -53,9 +53,39 @@ fn main {
 ## 启动与测试
 
 ```bash
-moon check      # 类型检查
+moon check      # 类型检查（零警告零错误）
 moon test       # 运行全部测试
 ```
+
+### 版本与测试环境
+
+| 项目 | 值 |
+|---|---|
+| MoonBit 工具链 | `moon 0.1.20260724 (5f1406a 2026-07-24)` |
+| 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
+| 测试后端 | `moon test` 默认 wasm 后端 |
+| 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod`） |
+| 测试数量 | 140（基本 + 高压，见 `TEST_REPORT.md`） |
+| 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
+
+> 工具链版本以 `moon version` 输出为准。本项目在 Windows 11 + MoonBit 0.1.20260724 上验证通过。
+
+### 测试报告
+
+运行报告生成脚本（PowerShell，无需额外依赖）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/gen_test_report.ps1
+```
+
+产物：
+
+| 文件 | 说明 |
+|---|---|
+| `TEST_REPORT.md` | 测试环境、汇总统计、按包分类的完整测试清单 |
+| `TEST_REPORT.json` | 机器可读报告（供 CI / 对比脚本消费） |
+
+报告包含 moon 版本、生成时间、总测试数/通过/失败，以及每个测试包的全部测试名清单。
 
 测试按分类组织在 `test-suit/` 下（每个子目录独立成包，黑盒引用 `@rx`）：
 
@@ -71,7 +101,11 @@ moon test       # 运行全部测试
 | `test-suit/stress` | 高压测试：10 万元素链、多订阅者、Subject 高压、递归重试 |
 | `test-suit/bench` | 基准测试（`#skip` 默认跳过，`moon test -g bench` 运行） |
 
-基准结果写入 `moon_bench.json`，可与 Rx-Rust 的 `benches/bench.rs` 结果对比。
+基准测试以控制台 JSON 输出结果（每个用例一行），可与 Rx-Rust 的 `benches/bench.rs` 结果对比。如需保存：
+
+```bash
+moon test -p test-suit/bench --include-skipped > moon_bench.json
+```
 
 ## 核心抽象
 

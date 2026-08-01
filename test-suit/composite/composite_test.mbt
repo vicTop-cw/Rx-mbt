@@ -126,3 +126,20 @@ test "composite: zip 方法版配对" {
   let _ = a.zip(b).subscribe_on_next(fn(p : (Int, Int)) { values.val.push(p) })
   assert_eq(values.val, [(1, 10), (2, 20)])
 }
+
+///|
+test "composite: zip 任一源完成即终止（回归：不等挂起的另一源）" {
+  let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
+  let done : Ref[Bool] = Ref::Ref(false)
+  let a : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2])
+  let b : @rx.Observable[Int, Unit] = @rx.Observable::never()
+  let _ = @rx.zip(a, b).subscribe(
+    @rx.Observer::new(
+      fn(p : (Int, Int)) { values.val.push(p) },
+      fn(_ : Unit) {},
+      fn() { done.val = true },
+    ),
+  )
+  assert_eq(values.val, [])
+  assert_true(done.val)
+}
