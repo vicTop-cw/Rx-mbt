@@ -363,6 +363,8 @@ pub fn[T, E] Observable::circuit_breaker_on(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
+    // 防御：max_failures < 1 退化为 1（首个错误即熔断）
+    let threshold = if max_failures < 1 { 1 } else { max_failures }
     let failures = Ref::Ref(0)
     let open_at = Ref::Ref(-1L)
     source_fn({
@@ -379,7 +381,7 @@ pub fn[T, E] Observable::circuit_breaker_on(
           }
         } else {
           failures.val = failures.val + 1
-          if failures.val >= max_failures {
+          if failures.val >= threshold {
             open_at.val = clock.now()
           } else {
             error(e)

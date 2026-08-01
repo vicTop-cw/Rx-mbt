@@ -4,11 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-01 19:23:44 |
+| Generated at | 2026-08-01 19:26:43 |
 | moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
 | Test target | wasm |
-| Total tests | 155 |
-| Passed | 155 |
+| Total tests | 156 |
+| Passed | 156 |
 | Failed | 0 |
 
 **Result: PASS (all green)**
@@ -19,14 +19,14 @@
 |---|---|
 | vicTop/RX-MBT/rx | 7 |
 | vicTop/RX-MBT/test-suit/aggregation | 37 |
-| vicTop/RX-MBT/test-suit/composite | 21 |
+| vicTop/RX-MBT/test-suit/composite | 22 |
 | vicTop/RX-MBT/test-suit/core | 15 |
 | vicTop/RX-MBT/test-suit/create | 10 |
 | vicTop/RX-MBT/test-suit/filter | 24 |
 | vicTop/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop/RX-MBT/test-suit/stress | 10 |
 | vicTop/RX-MBT/test-suit/transform | 10 |
-| **Total** | **155** |
+| **Total** | **156** |
 
 ## Test listing
 
@@ -109,6 +109,7 @@
 | 19 | composite: zip 任一源错误时立即终止并取消对方订阅（回归） |
 | 20 | composite: amb a 胜出后 b 订阅被取消，b 后续值不转发（回归） |
 | 21 | composite: concat 进入第二段后 dispose 可取消第二段订阅（回归） |
+| 22 | composite: with_latest_from a 完成后 b 订阅被取消（回归） |
 
 ### vicTop/RX-MBT/test-suit/core
 

@@ -243,3 +243,16 @@ test "composite: concat 进入第二段后 dispose 可取消第二段订阅（�
   assert_eq(values.val, [1])
   assert_true(!done.val)
 }
+
+///|
+test "composite: with_latest_from a 完成后 b 订阅被取消（回归）" {
+  let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
+  let b : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let a : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2])
+  let _ = @rx.with_latest_from(a, b.as_observable()).subscribe_on_next(
+    fn(v : (Int, Int)) { values.val.push(v) },
+  )
+  // a 同步完成前 b 无值：无配对发射；a 完成后 b 订阅已取消
+  b.on_next(99) // 不应再影响任何输出
+  assert_eq(values.val, [])
+}

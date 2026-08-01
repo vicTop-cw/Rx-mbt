@@ -251,12 +251,22 @@ pub fn[T, E, U] with_latest_from(
     let init : U? = None
     let last_b = Ref::Ref(init)
     let done = Ref::Ref(false)
-    let b_sub = b_fn({
+    let a_sub = Ref::Ref(Subscription::empty())
+    let b_sub = Ref::Ref(Subscription::empty())
+    let fail : (E) -> Unit = fn(e : E) {
+      if !done.val {
+        done.val = true
+        (a_sub.val).dispose()
+        (b_sub.val).dispose()
+        error(e)
+      }
+    }
+    b_sub.val = b_fn({
       next: fn(v : U) { last_b.val = Some(v) },
-      error: error,
+      error: fail,
       complete: fn() {},
     })
-    let a_sub = a_fn({
+    a_sub.val = a_fn({
       next: fn(v : T) {
         if !done.val {
           match last_b.val {
@@ -265,18 +275,20 @@ pub fn[T, E, U] with_latest_from(
           }
         }
       },
-      error: error,
+      error: fail,
       complete: fn() {
         if !done.val {
           done.val = true
+          // a 完成即终止：取消 b 订阅，避免热流继续泄漏
+          (b_sub.val).dispose()
           complete()
         }
       },
     })
     Subscription::new(fn() {
       done.val = true
-      a_sub.dispose()
-      b_sub.dispose()
+      (a_sub.val).dispose()
+      (b_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

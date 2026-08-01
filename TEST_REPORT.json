@@ -1,10 +1,10 @@
 ﻿{
-    "generated_at":  "2026-08-01 19:23:44",
+    "generated_at":  "2026-08-01 19:26:43",
     "moon_version":  "moon 0.1.20260724 (5f1406a 2026-07-24)",
     "target":  "wasm",
     "summary":  {
-                    "total":  155,
-                    "passed":  155,
+                    "total":  156,
+                    "passed":  156,
                     "failed":  0
                 },
     "packages":  [
@@ -66,7 +66,7 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/composite",
-                         "count":  21,
+                         "count":  22,
                          "tests":  [
                                        "composite: start_with 前置发射前缀",
                                        "composite: concat 串接两个流",
@@ -88,7 +88,8 @@
                                        "composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标准语义）",
                                        "composite: zip 任一源错误时立即终止并取消对方订阅（回归）",
                                        "composite: amb a 胜出后 b 订阅被取消，b 后续值不转发（回归）",
-                                       "composite: concat 进入第二段后 dispose 可取消第二段订阅（回归）"
+                                       "composite: concat 进入第二段后 dispose 可取消第二段订阅（回归）",
+                                       "composite: with_latest_from a 完成后 b 订阅被取消（回归）"
                                    ]
                      },
                      {

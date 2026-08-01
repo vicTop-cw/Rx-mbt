@@ -518,7 +518,9 @@ pub fn[E] quantile(source : Observable[Double, E], q : Double) -> Observable[Dou
         let n = arr.length()
         if n > 0 {
           arr.sort()
-          let idx = (Double::from_int(n - 1) * q).to_int()
+          // 防御：q 夹取到 [0, 1]，避免 (n-1)*q 越界访问
+          let qq = if q < 0.0 { 0.0 } else if q > 1.0 { 1.0 } else { q }
+          let idx = (Double::from_int(n - 1) * qq).to_int()
           next(arr[idx])
         }
         complete()
