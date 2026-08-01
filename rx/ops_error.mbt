@@ -136,6 +136,8 @@ pub fn[T, E] Observable::retry_with_backoff_on(
     let done = Ref::Ref(false)
     let attempts = Ref::Ref(0)
     let try_ref = Ref::Ref(fn() {})
+    // 收集退避 timer，dispose 时统一取消，避免残留定时器继续触发重试
+    let timers = Ref::Ref(Array::new())
     let try_subscribe : () -> Unit = fn() {
       if done.val {
         return
@@ -146,7 +148,8 @@ pub fn[T, E] Observable::retry_with_backoff_on(
           let shift = 1 << attempts.val
           let delay = initial_ms * Int64::from_int(shift)
           attempts.val = attempts.val + 1
-          clock.set_timer(delay, fn() { (try_ref.val)() })
+          let handle = clock.set_timer(delay, fn() { (try_ref.val)() })
+          timers.val.push(handle)
         },
         complete: fn() {
           if !done.val {
@@ -158,7 +161,12 @@ pub fn[T, E] Observable::retry_with_backoff_on(
     }
     try_ref.val = try_subscribe
     try_subscribe()
-    Subscription::empty()
+    Subscription::new(fn() {
+      done.val = true
+      for t in timers.val {
+        t.dispose()
+      }
+    })
   }
   Observable::new(subscribe_fn)
 }

@@ -10,12 +10,17 @@
 /// 虚拟时钟：毫秒计数 + 定时器队列，通过 advance 手动推进
 pub struct Clock {
   ms : Ref[Int64]
-  timers : Ref[Array[(Int64, () -> Unit)]]
+  timers : Ref[Array[(Int64, Int, () -> Unit)]]
+  next_timer_id : Ref[Int]
 }
 
 /// 创建虚拟时钟（时间从 0 开始）
 pub fn Clock::new() -> Clock {
-  { ms: Ref::Ref(0L), timers: Ref::Ref(Array::new()) }
+  {
+    ms: Ref::Ref(0L),
+    timers: Ref::Ref(Array::new()),
+    next_timer_id: Ref::Ref(0),
+  }
 }
 
 /// 当前虚拟时间（毫秒）
@@ -38,13 +43,28 @@ pub fn Clock::advance(self : Clock, ms : Int64) -> Unit {
   }
   self.timers.val = remaining
   for t in due {
-    (t.1)()
+    (t.2)()
   }
 }
 
-/// 注册定时器：delay_ms 毫秒后触发 fire（内部使用）
-fn Clock::set_timer(self : Clock, delay_ms : Int64, fire : () -> Unit) -> Unit {
-  self.timers.val.push((self.ms.val + delay_ms, fire))
+/// 注册定时器：delay_ms 毫秒后触发 fire（内部使用），返回可取消的订阅句柄
+fn Clock::set_timer(
+  self : Clock,
+  delay_ms : Int64,
+  fire : () -> Unit,
+) -> Subscription {
+  let id = self.next_timer_id.val
+  self.next_timer_id.val = self.next_timer_id.val + 1
+  self.timers.val.push((self.ms.val + delay_ms, id, fire))
+  Subscription::new(fn() {
+    let keep = Array::new()
+    for t in self.timers.val {
+      if t.1 != id {
+        keep.push(t)
+      }
+    }
+    self.timers.val = keep
+  })
 }
 
 /// 默认虚拟时钟（全局共享）
@@ -70,18 +90,23 @@ pub fn interval_on(clock : Clock, ms : Int64) -> Observable[Int64, Unit] {
     let next = downstream.next
     let counter = Ref::Ref(0L)
     let stopped = Ref::Ref(false)
+    // 当前 timer 的取消句柄：dispose 时一并取消，避免残留定时器泄漏
+    let timer_handle = Ref::Ref(Subscription::empty())
     let timer_ref = Ref::Ref(fn() {})
     let tick : () -> Unit = fn() {
       if !stopped.val {
         let v = counter.val
         counter.val = counter.val + 1L
         next(v)
-        clock.set_timer(ms, timer_ref.val)
+        timer_handle.val = clock.set_timer(ms, timer_ref.val)
       }
     }
     timer_ref.val = tick
-    clock.set_timer(ms, tick)
-    Subscription::new(fn() { stopped.val = true })
+    timer_handle.val = clock.set_timer(ms, tick)
+    Subscription::new(fn() {
+      stopped.val = true
+      (timer_handle.val).dispose()
+    })
   })
 }
 
@@ -96,13 +121,16 @@ pub fn timer_on(clock : Clock, ms : Int64) -> Observable[Int64, Unit] {
     let next = downstream.next
     let complete = downstream.complete
     let stopped = Ref::Ref(false)
-    clock.set_timer(ms, fn() {
+    let handle = clock.set_timer(ms, fn() {
       if !stopped.val {
         next(0L)
         complete()
       }
     })
-    Subscription::new(fn() { stopped.val = true })
+    Subscription::new(fn() {
+      stopped.val = true
+      handle.dispose()
+    })
   })
 }
 
@@ -126,10 +154,32 @@ pub fn[T, E] Observable::delay_on(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    source_fn({
-      next: fn(v : T) { clock.set_timer(ms, fn() { next(v) }) },
+    let stopped = Ref::Ref(false)
+    // 收集所有待触发的 timer，dispose 时统一取消，避免残留
+    let timers = Ref::Ref(Array::new())
+    let source_sub = source_fn({
+      next: fn(v : T) {
+        if !stopped.val {
+          let handle = clock.set_timer(ms, fn() {
+            if !stopped.val { next(v) }
+          })
+          timers.val.push(handle)
+        }
+      },
       error: error,
-      complete: complete,
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      for t in timers.val {
+        t.dispose()
+      }
     })
   }
   Observable::new(subscribe_fn)
@@ -155,6 +205,7 @@ pub fn[T, E] Observable::debounce_on(
     let last_val = Ref::Ref(init)
     let running = Ref::Ref(false)
     let stopped = Ref::Ref(false)
+    let timer_handle = Ref::Ref(Subscription::empty())
     let flush : () -> Unit = fn() {
       match last_val.val {
         Some(x) => {
@@ -164,13 +215,13 @@ pub fn[T, E] Observable::debounce_on(
         None => ()
       }
     }
-    source_fn({
+    let source_sub = source_fn({
       next: fn(v : T) {
         if !stopped.val {
           last_val.val = Some(v)
           if !running.val {
             running.val = true
-            clock.set_timer(ms, fn() {
+            timer_handle.val = clock.set_timer(ms, fn() {
               running.val = false
               if !stopped.val {
                 flush()
@@ -188,6 +239,11 @@ pub fn[T, E] Observable::debounce_on(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      (timer_handle.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -263,6 +319,7 @@ pub fn[T, E : Default] Observable::timeout_on(
     let stopped = Ref::Ref(false)
     let due = Ref::Ref(clock.now() + ms)
     let armed = Ref::Ref(false)
+    let timer_handle = Ref::Ref(Subscription::empty())
     let arm_ref = Ref::Ref(fn() {})
     let arm : () -> Unit = fn() {
       if stopped.val {
@@ -270,7 +327,7 @@ pub fn[T, E : Default] Observable::timeout_on(
       }
       if !armed.val {
         armed.val = true
-        clock.set_timer(ms, fn() {
+        timer_handle.val = clock.set_timer(ms, fn() {
           armed.val = false
           if clock.now() >= due.val {
             stopped.val = true
@@ -283,7 +340,7 @@ pub fn[T, E : Default] Observable::timeout_on(
     }
     arm_ref.val = arm
     arm()
-    source_fn({
+    let source_sub = source_fn({
       next: fn(v : T) {
         if !stopped.val {
           next(v)
@@ -296,6 +353,11 @@ pub fn[T, E : Default] Observable::timeout_on(
         stopped.val = true
         complete()
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      (timer_handle.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -320,6 +382,7 @@ pub fn[T, E] Observable::sample_on(
     let init : T? = None
     let latest = Ref::Ref(init)
     let stopped = Ref::Ref(false)
+    let timer_handle = Ref::Ref(Subscription::empty())
     let timer_ref = Ref::Ref(fn() {})
     let tick : () -> Unit = fn() {
       if !stopped.val {
@@ -329,18 +392,23 @@ pub fn[T, E] Observable::sample_on(
           Some(x) => next(x)
           None => ()
         }
-        clock.set_timer(ms, timer_ref.val)
+        timer_handle.val = clock.set_timer(ms, timer_ref.val)
       }
     }
     timer_ref.val = tick
-    clock.set_timer(ms, tick)
-    source_fn({
+    timer_handle.val = clock.set_timer(ms, tick)
+    let source_sub = source_fn({
       next: fn(v : T) { latest.val = Some(v) },
       error: error,
       complete: fn() {
         stopped.val = true
         complete()
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      (timer_handle.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

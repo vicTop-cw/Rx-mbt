@@ -201,6 +201,7 @@ pub fn[T, E] Observable::buffer_time_on(
     let complete = downstream.complete
     let buf = Ref::Ref(Array::new())
     let stopped = Ref::Ref(false)
+    let timer_handle = Ref::Ref(Subscription::empty())
     let timer_ref = Ref::Ref(fn() {})
     let tick : () -> Unit = fn() {
       if !stopped.val {
@@ -209,12 +210,12 @@ pub fn[T, E] Observable::buffer_time_on(
         if !chunk.is_empty() {
           next(chunk)
         }
-        clock.set_timer(ms, timer_ref.val)
+        timer_handle.val = clock.set_timer(ms, timer_ref.val)
       }
     }
     timer_ref.val = tick
-    clock.set_timer(ms, tick)
-    source_fn({
+    timer_handle.val = clock.set_timer(ms, tick)
+    let source_sub = source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
@@ -224,6 +225,11 @@ pub fn[T, E] Observable::buffer_time_on(
         }
         complete()
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      (timer_handle.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -251,6 +257,7 @@ pub fn[T, E] Observable::window_on(
       let complete = downstream.complete
       let buf = Ref::Ref(Array::new())
       let stopped = Ref::Ref(false)
+      let timer_handle = Ref::Ref(Subscription::empty())
       let timer_ref = Ref::Ref(fn() {})
       let tick : () -> Unit = fn() {
         if !stopped.val {
@@ -259,12 +266,12 @@ pub fn[T, E] Observable::window_on(
           if !chunk.is_empty() {
             next(Observable::from_iter(chunk))
           }
-          clock.set_timer(ms, timer_ref.val)
+          timer_handle.val = clock.set_timer(ms, timer_ref.val)
         }
       }
       timer_ref.val = tick
-      clock.set_timer(ms, tick)
-      source_fn({
+      timer_handle.val = clock.set_timer(ms, tick)
+      let source_sub = source_fn({
         next: fn(v : T) { buf.val.push(v) },
         error: error,
         complete: fn() {
@@ -274,6 +281,11 @@ pub fn[T, E] Observable::window_on(
           }
           complete()
         },
+      })
+      Subscription::new(fn() {
+        stopped.val = true
+        source_sub.dispose()
+        (timer_handle.val).dispose()
       })
     }
   Observable::new(subscribe_fn)
