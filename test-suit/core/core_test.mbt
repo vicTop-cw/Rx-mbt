@@ -178,3 +178,42 @@ test "timeout_on 源完成后挂起 timer 不误触发错误（回归）" {
   clock.advance(100L)
   assert_true(!got_err.val)
 }
+
+///|
+test "timer_on 延迟触发一次并完成" {
+  let values : Ref[Array[Int64]] = Ref::Ref(Array::new())
+  let done : Ref[Bool] = Ref::Ref(false)
+  let clock = @rx.Clock::new()
+  let _ = @rx.timer_on(clock, 10L).subscribe(
+    @rx.Observer::new(
+      fn(v : Int64) { values.val.push(v) },
+      fn(_ : Unit) {},
+      fn() { done.val = true },
+    ),
+  )
+  // 时间未到：不发射不完成
+  assert_eq(values.val, [])
+  assert_true(!done.val)
+  clock.advance(9L)
+  assert_eq(values.val, [])
+  clock.advance(1L)
+  assert_eq(values.val, [0L])
+  assert_true(done.val)
+}
+
+///|
+test "interval_on 按周期发射递增计数" {
+  let values : Ref[Array[Int64]] = Ref::Ref(Array::new())
+  let clock = @rx.Clock::new()
+  let sub = @rx.interval_on(clock, 10L).subscribe_on_next(fn(v : Int64) { values.val.push(v) })
+  clock.advance(10L)
+  assert_eq(values.val, [0L])
+  clock.advance(10L)
+  assert_eq(values.val, [0L, 1L])
+  clock.advance(10L)
+  assert_eq(values.val, [0L, 1L, 2L])
+  sub.dispose()
+  // dispose 后不再发射
+  clock.advance(10L)
+  assert_eq(values.val, [0L, 1L, 2L])
+}

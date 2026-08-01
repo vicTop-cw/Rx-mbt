@@ -4,11 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-01 22:09:52 |
+| Generated at | 2026-08-01 22:14:21 |
 | moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
 | Test target | wasm |
-| Total tests | 193 |
-| Passed | 193 |
+| Total tests | 195 |
+| Passed | 195 |
 | Failed | 0 |
 
 **Result: PASS (all green)**
@@ -20,14 +20,14 @@
 | vicTop/RX-MBT/rx | 7 |
 | vicTop/RX-MBT/test-suit/aggregation | 37 |
 | vicTop/RX-MBT/test-suit/composite | 22 |
-| vicTop/RX-MBT/test-suit/core | 15 |
+| vicTop/RX-MBT/test-suit/core | 17 |
 | vicTop/RX-MBT/test-suit/create | 10 |
 | vicTop/RX-MBT/test-suit/filter | 26 |
 | vicTop/RX-MBT/test-suit/itor | 35 |
 | vicTop/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop/RX-MBT/test-suit/stress | 10 |
 | vicTop/RX-MBT/test-suit/transform | 10 |
-| **Total** | **193** |
+| **Total** | **195** |
 
 ## Test listing
 
@@ -131,6 +131,8 @@
 | 13 | ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复） |
 | 14 | delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟） |
 | 15 | timeout_on 源完成后挂起 timer 不误触发错误（回归） |
+| 16 | timer_on 延迟触发一次并完成 |
+| 17 | interval_on 按周期发射递增计数 |
 
 ### vicTop/RX-MBT/test-suit/create
 

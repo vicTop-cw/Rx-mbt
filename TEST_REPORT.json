@@ -1,10 +1,10 @@
 ﻿{
-    "generated_at":  "2026-08-01 22:09:52",
+    "generated_at":  "2026-08-01 22:14:21",
     "moon_version":  "moon 0.1.20260724 (5f1406a 2026-07-24)",
     "target":  "wasm",
     "summary":  {
-                    "total":  193,
-                    "passed":  193,
+                    "total":  195,
+                    "passed":  195,
                     "failed":  0
                 },
     "packages":  [
@@ -94,7 +94,7 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/core",
-                         "count":  15,
+                         "count":  17,
                          "tests":  [
                                        "run 立即消费并原样返回",
                                        "debug 透传所有值",
@@ -110,7 +110,9 @@
                                        "curry_map 返回可组合函数并应用",
                                        "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复）",
                                        "delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟）",
-                                       "timeout_on 源完成后挂起 timer 不误触发错误（回归）"
+                                       "timeout_on 源完成后挂起 timer 不误触发错误（回归）",
+                                       "timer_on 延迟触发一次并完成",
+                                       "interval_on 按周期发射递增计数"
                                    ]
                      },
                      {
