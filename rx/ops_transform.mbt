@@ -56,17 +56,35 @@ pub fn[T, E, U] Observable::flat_map(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    source_fn({
+    // 收集所有内层订阅，dispose 时统一释放，避免资源泄漏
+    let inner_subs = Ref::Ref(Array::new())
+    let stopped = Ref::Ref(false)
+    let source_sub = source_fn({
       next: fn(v : T) {
-        let inner = mapper(v)
-        let _ = inner.subscribe({
-          next: next,
-          error: error,
-          complete: fn() {},
-        })
+        if !stopped.val {
+          let inner = mapper(v)
+          let sub = inner.subscribe({
+            next: next,
+            error: error,
+            complete: fn() {},
+          })
+          inner_subs.val.push(sub)
+        }
       },
       error: error,
-      complete: complete,
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      for sub in inner_subs.val {
+        sub.dispose()
+      }
     })
   }
   Observable::new(subscribe_fn)
@@ -79,11 +97,12 @@ pub fn[T, E, Acc] Observable::scan(
   scanner : (Acc, T) -> Acc,
 ) -> Observable[Acc, E] {
   let source_fn = self.subscribe_fn
-  let acc = Ref::Ref(seed)
   let subscribe_fn : (Observer[Acc, E]) -> Subscription = fn(downstream : Observer[Acc, E]) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
+    // 累加器必须在每次订阅时重新创建：scan 是冷流，多次订阅互不影响
+    let acc = Ref::Ref(seed)
     source_fn({
       next: fn(v : T) {
         let cur = acc.val
@@ -118,22 +137,46 @@ pub fn[T, E, U] Observable::switch_map(
     let complete = downstream.complete
     let init_sub : (Subscription)? = None
     let current = Ref::Ref(init_sub)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let dispose_current : () -> Unit = fn() {
+      match current.val {
+        Some(sub) => sub.dispose()
+        None => ()
+      }
+      current.val = None
+    }
+    let source_sub = source_fn({
       next: fn(v : T) {
-        match current.val {
-          Some(sub) => sub.dispose()
-          None => ()
+        if !stopped.val {
+          dispose_current()
+          let inner = mapper(v)
+          let inner_sub = inner.subscribe({
+            next: next,
+            error: error,
+            complete: fn() {},
+          })
+          current.val = Some(inner_sub)
         }
-        let inner = mapper(v)
-        let inner_sub = inner.subscribe({
-          next: next,
-          error: error,
-          complete: fn() {},
-        })
-        current.val = Some(inner_sub)
       },
-      error: error,
-      complete: complete,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          dispose_current()
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          dispose_current()
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      dispose_current()
+      source_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)

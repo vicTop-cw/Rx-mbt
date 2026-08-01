@@ -46,6 +46,21 @@ test "transform: scan 累积并发出中间结果" {
 }
 
 ///|
+test "transform: scan 多次订阅各自独立（冷流语义）" {
+  // 回归：修复前 acc 在 subscribe_fn 外共享，第二次订阅会继承第一次的累积值
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).scan(
+    100,
+    fn(acc : Int, v : Int) { acc + v },
+  )
+  let first = Ref::Ref(Array::new())
+  let second = Ref::Ref(Array::new())
+  let _ = obs.subscribe_on_next(fn(v : Int) { first.val.push(v) })
+  let _ = obs.subscribe_on_next(fn(v : Int) { second.val.push(v) })
+  assert_eq(first.val, [101, 103, 106])
+  assert_eq(second.val, [101, 103, 106])
+}
+
+///|
 test "transform: concat_map 串行平铺" {
   let values : Ref[Array[Int]] = Ref::Ref(Array::new())
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2]).concat_map(

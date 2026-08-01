@@ -173,16 +173,18 @@ pub fn[T, E] Observable::catch_error(
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
-    source_fn({
+    let fallback_sub = Ref::Ref(Subscription::empty())
+    let source_sub = source_fn({
       next: next,
       error: fn(e : E) {
         if !done.val {
           done.val = true
-          let _ = handler(e).subscribe({
+          let sub = handler(e).subscribe({
             next: next,
             error: error,
             complete: complete,
           })
+          fallback_sub.val = sub
         }
       },
       complete: fn() {
@@ -191,6 +193,11 @@ pub fn[T, E] Observable::catch_error(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      done.val = true
+      source_sub.dispose()
+      (fallback_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -206,7 +213,7 @@ pub fn[T, E] Observable::on_error_return(
     let next = downstream.next
     let complete = downstream.complete
     let done = Ref::Ref(false)
-    source_fn({
+    let source_sub = source_fn({
       next: next,
       error: fn(_e : E) {
         if !done.val {
@@ -221,6 +228,10 @@ pub fn[T, E] Observable::on_error_return(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      done.val = true
+      source_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -238,16 +249,18 @@ pub fn[T, E] Observable::on_error_resume_next(
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
-    source_fn({
+    let resume_sub = Ref::Ref(Subscription::empty())
+    let source_sub = source_fn({
       next: next,
       error: fn(_e : E) {
         if !done.val {
           done.val = true
-          let _ = other_fn({
+          let sub = other_fn({
             next: next,
             error: error,
             complete: complete,
           })
+          resume_sub.val = sub
         }
       },
       complete: fn() {
@@ -256,6 +269,11 @@ pub fn[T, E] Observable::on_error_resume_next(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      done.val = true
+      source_sub.dispose()
+      (resume_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

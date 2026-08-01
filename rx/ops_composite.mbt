@@ -101,7 +101,7 @@ pub fn[T, E, U] zip(
         complete()
       }
     }
-    let _ = a_fn({
+    let a_sub = a_fn({
       next: fn(v : T) { buf_a.val.push(v) },
       error: error,
       complete: fn() { done_a.val = true; try_emit() },
@@ -113,7 +113,10 @@ pub fn[T, E, U] zip(
     })
     both_subscribed.val = true
     try_emit()
-    b_sub
+    Subscription::new(fn() {
+      a_sub.dispose()
+      b_sub.dispose()
+    })
   }
   Observable::new(subscribe_fn)
 }
@@ -154,15 +157,19 @@ pub fn[T, E, U] combine_latest(
         complete()
       }
     }
-    let _ = a_fn({
+    let a_sub = a_fn({
       next: fn(v : T) { last_a.val = Some(v); try_emit() },
       error: error,
       complete: fn() { done_a.val = true; maybe_complete() },
     })
-    b_fn({
+    let b_sub = b_fn({
       next: fn(v : U) { last_b.val = Some(v); try_emit() },
       error: error,
       complete: fn() { done_b.val = true; maybe_complete() },
+    })
+    Subscription::new(fn() {
+      a_sub.dispose()
+      b_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -181,17 +188,19 @@ pub fn[T, E, U] with_latest_from(
     let complete = downstream.complete
     let init : U? = None
     let last_b = Ref::Ref(init)
-    let _ = b_fn({
+    let done = Ref::Ref(false)
+    let b_sub = b_fn({
       next: fn(v : U) { last_b.val = Some(v) },
       error: error,
       complete: fn() {},
     })
-    let done = Ref::Ref(false)
-    a_fn({
+    let a_sub = a_fn({
       next: fn(v : T) {
-        match last_b.val {
-          Some(u) => next((v, u))
-          None => ()
+        if !done.val {
+          match last_b.val {
+            Some(u) => next((v, u))
+            None => ()
+          }
         }
       },
       error: error,
@@ -201,6 +210,11 @@ pub fn[T, E, U] with_latest_from(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      done.val = true
+      a_sub.dispose()
+      b_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -219,7 +233,7 @@ pub fn[T, E] amb(
     let complete = downstream.complete
     let winner = Ref::Ref(0)
     let done = Ref::Ref(false)
-    let _ = a_fn({
+    let a_sub = a_fn({
       next: fn(v : T) {
         if winner.val == 0 { winner.val = 1 }
         if winner.val == 1 { next(v) }
@@ -232,7 +246,7 @@ pub fn[T, E] amb(
         }
       },
     })
-    b_fn({
+    let b_sub = b_fn({
       next: fn(v : T) {
         if winner.val == 0 { winner.val = 2 }
         if winner.val == 2 { next(v) }
@@ -244,6 +258,11 @@ pub fn[T, E] amb(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      done.val = true
+      a_sub.dispose()
+      b_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -323,15 +342,19 @@ pub fn[T : Eq, E] sequence_equal(
         complete()
       }
     }
-    let _ = a_fn({
+    let a_sub = a_fn({
       next: fn(v : T) { buf_a.val.push(v) },
       error: error,
       complete: fn() { done_a.val = true; try_emit() },
     })
-    b_fn({
+    let b_sub = b_fn({
       next: fn(v : T) { buf_b.val.push(v) },
       error: error,
       complete: fn() { done_b.val = true; try_emit() },
+    })
+    Subscription::new(fn() {
+      a_sub.dispose()
+      b_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)

@@ -44,6 +44,39 @@ test "ReplaySubject with_buffer_size 只重放最近 N 个" {
 }
 
 ///|
+test "PublishSubject 完成后新订阅者立即收到完成信号" {
+  // 回归：修复前已完成主题的新订阅者永远不会收到终止信号且残留泄漏
+  let subject : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  subject.on_next(1)
+  subject.on_completed()
+  let values = Ref::Ref(Array::new())
+  let completed = Ref::Ref(false)
+  let _ = subject.subscribe(
+    @rx.Observer::new(fn(v : Int) { values.val.push(v) }, fn(_ : Unit) {}, fn() {
+      completed.val = true
+    }),
+  )
+  assert_eq(values.val, [])
+  assert_true(completed.val)
+}
+
+///|
+test "BehaviorSubject 出错后新订阅者立即收到错误且不重放当前值" {
+  // 回归：修复前已终止的 BehaviorSubject 会错误地重放 current 值
+  let subject : @rx.BehaviorSubject[Int, String] = @rx.BehaviorSubject::with_value(42)
+  subject.on_error("boom")
+  let values = Ref::Ref(Array::new())
+  let errs = Ref::Ref(Array::new())
+  let _ = subject.subscribe(
+    @rx.Observer::new(fn(v : Int) { values.val.push(v) }, fn(e : String) {
+      errs.val.push(e)
+    }, fn() {}),
+  )
+  assert_eq(values.val, [])
+  assert_eq(errs.val, ["boom"])
+}
+
+///|
 test "CurrentThreadScheduler 同步执行任务" {
   let scheduler = @rx.CurrentThreadScheduler::new()
   let ran = Ref::Ref(false)

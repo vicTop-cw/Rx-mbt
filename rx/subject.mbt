@@ -8,6 +8,8 @@ struct SubjectState[T, E] {
   observers : Ref[Array[(Int, Observer[T, E])]]
   next_id : Ref[Int]
   stopped : Ref[Bool]
+  // 终止方式：None=未终止；Some=以错误终止（记录错误值）；completed 用 stopped+error=None 区分
+  terminal_error : Ref[Option[E]]
 }
 
 fn[T, E] SubjectState::new() -> SubjectState[T, E] {
@@ -15,6 +17,7 @@ fn[T, E] SubjectState::new() -> SubjectState[T, E] {
     observers: Ref::Ref(Array::new()),
     next_id: Ref::Ref(0),
     stopped: Ref::Ref(false),
+    terminal_error: Ref::Ref(None),
   }
 }
 
@@ -22,6 +25,14 @@ fn[T, E] SubjectState::subscribe(
   self : SubjectState[T, E],
   observer : Observer[T, E],
 ) -> Subscription {
+  // 已终止的主题：新订阅者立即收到终止信号，不加入列表（避免残留泄漏）
+  if self.stopped.val {
+    match self.terminal_error.val {
+      Some(err) => observer.on_error(err)
+      None => observer.on_completed()
+    }
+    return Subscription::empty()
+  }
   let id = self.next_id.val
   self.next_id.val = self.next_id.val + 1
   self.observers.val.push((id, observer))
@@ -52,6 +63,7 @@ fn[T, E] SubjectState::on_error(self : SubjectState[T, E], err : E) -> Unit {
     return
   }
   self.stopped.val = true
+  self.terminal_error.val = Some(err)
   let snapshot = self.observers.val.copy()
   self.observers.val = Array::new()
   for entry in snapshot {
@@ -64,6 +76,7 @@ fn[T, E] SubjectState::on_completed(self : SubjectState[T, E]) -> Unit {
     return
   }
   self.stopped.val = true
+  self.terminal_error.val = None
   let snapshot = self.observers.val.copy()
   self.observers.val = Array::new()
   for entry in snapshot {
@@ -149,9 +162,12 @@ pub fn[T, E] BehaviorSubject::subscribe(
   self : BehaviorSubject[T, E],
   observer : Observer[T, E],
 ) -> Subscription {
-  match self.current.val {
-    Some(v) => observer.on_next(v)
-    None => ()
+  // 已终止的主题：不重放当前值，直接转发终止信号（符合 Rx 语义）
+  if !self.state.stopped.val {
+    match self.current.val {
+      Some(v) => observer.on_next(v)
+      None => ()
+    }
   }
   self.state.subscribe(observer)
 }

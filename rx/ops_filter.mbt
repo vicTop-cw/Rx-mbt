@@ -442,51 +442,63 @@ pub fn[T, E, K : Eq] Observable::distinct_until_changed_by(
   Observable::new(subscribe_fn)
 }
 
-/// 跳过，直到 trigger 发射后才放行
+/// skip_until：trigger 发射前丢弃源流的值，trigger 发射后放行
 pub fn[T, E] Observable::skip_until(
   self : Observable[T, E],
   trigger : Observable[Unit, E],
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let triggered = Ref::Ref(false)
-  let _ = trigger.subscribe({
-    next: fn(_ : Unit) { triggered.val = true },
-    error: fn(_ : E) {},
-    complete: fn() {},
-  })
+  let trigger_fn = trigger.subscribe_fn
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    source_fn({
+    // 状态必须每次订阅重新创建：冷流多次订阅互不影响
+    let triggered = Ref::Ref(false)
+    let trigger_sub = trigger_fn({
+      next: fn(_ : Unit) { triggered.val = true },
+      error: fn(_ : E) {},
+      complete: fn() {},
+    })
+    let source_sub = source_fn({
       next: fn(v : T) { if triggered.val { next(v) } },
       error: error,
       complete: complete,
+    })
+    Subscription::new(fn() {
+      trigger_sub.dispose()
+      source_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
-/// 发射，直到 trigger 发射就立即终止
+/// take_until：trigger 发射后立即终止源流
 pub fn[T, E] Observable::take_until(
   self : Observable[T, E],
   trigger : Observable[Unit, E],
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let stopped = Ref::Ref(false)
-  let _ = trigger.subscribe({
-    next: fn(_ : Unit) { stopped.val = true },
-    error: fn(_ : E) {},
-    complete: fn() {},
-  })
+  let trigger_fn = trigger.subscribe_fn
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    source_fn({
+    // 状态必须每次订阅重新创建：冷流多次订阅互不影响
+    let stopped = Ref::Ref(false)
+    let trigger_sub = trigger_fn({
+      next: fn(_ : Unit) { stopped.val = true },
+      error: fn(_ : E) {},
+      complete: fn() {},
+    })
+    let source_sub = source_fn({
       next: fn(v : T) { if !stopped.val { next(v) } },
       error: fn(e : E) { if !stopped.val { error(e) } },
       complete: fn() { if !stopped.val { complete() } },
+    })
+    Subscription::new(fn() {
+      trigger_sub.dispose()
+      source_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)

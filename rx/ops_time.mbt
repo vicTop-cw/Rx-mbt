@@ -154,22 +154,40 @@ pub fn[T, E] Observable::debounce_on(
     let init : T? = None
     let last_val = Ref::Ref(init)
     let running = Ref::Ref(false)
+    let stopped = Ref::Ref(false)
+    let flush : () -> Unit = fn() {
+      match last_val.val {
+        Some(x) => {
+          last_val.val = None
+          next(x)
+        }
+        None => ()
+      }
+    }
     source_fn({
       next: fn(v : T) {
-        last_val.val = Some(v)
-        if !running.val {
-          running.val = true
-          clock.set_timer(ms, fn() {
-            running.val = false
-            match last_val.val {
-              Some(x) => next(x)
-              None => ()
-            }
-          })
+        if !stopped.val {
+          last_val.val = Some(v)
+          if !running.val {
+            running.val = true
+            clock.set_timer(ms, fn() {
+              running.val = false
+              if !stopped.val {
+                flush()
+              }
+            })
+          }
         }
       },
       error: error,
-      complete: complete,
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          // Rx 语义：完成时立即发出最后一个未发射的值（不等 debounce 窗口）
+          flush()
+          complete()
+        }
+      },
     })
   }
   Observable::new(subscribe_fn)

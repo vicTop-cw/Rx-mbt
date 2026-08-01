@@ -288,21 +288,45 @@ pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E
     let complete = downstream.complete
     let init_sub : (Subscription)? = None
     let current = Ref::Ref(init_sub)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let dispose_current : () -> Unit = fn() {
+      match current.val {
+        Some(sub) => sub.dispose()
+        None => ()
+      }
+      current.val = None
+    }
+    let source_sub = source_fn({
       next: fn(inner : Observable[T, E]) {
-        match current.val {
-          Some(sub) => sub.dispose()
-          None => ()
+        if !stopped.val {
+          dispose_current()
+          let sub = inner.subscribe({
+            next: next,
+            error: error,
+            complete: fn() {},
+          })
+          current.val = Some(sub)
         }
-        let sub = inner.subscribe({
-          next: next,
-          error: error,
-          complete: fn() {},
-        })
-        current.val = Some(sub)
       },
-      error: error,
-      complete: complete,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          dispose_current()
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          dispose_current()
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      dispose_current()
+      source_sub.dispose()
     })
   }
   Observable::new(subscribe_fn)
