@@ -189,8 +189,18 @@ pub fn[T, E] Observable::take_while(
           }
         }
       },
-      error: error,
-      complete: complete,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
     })
   }
   Observable::new(subscribe_fn)

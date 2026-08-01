@@ -174,7 +174,9 @@ pub fn[T, E] BehaviorSubject::on_completed(self : BehaviorSubject[T, E]) -> Unit
 
 /// 转成 Observable
 pub fn[T, E] BehaviorSubject::as_observable(self : BehaviorSubject[T, E]) -> Observable[T, E] {
-  self.state.as_observable()
+  Observable::new(fn(observer : Observer[T, E]) -> Subscription {
+    self.subscribe(observer)
+  })
 }
 
 // ----------------------------------------------------------------------------
@@ -240,5 +242,7 @@ pub fn[T, E] ReplaySubject::on_completed(self : ReplaySubject[T, E]) -> Unit {
 
 /// 转成 Observable
 pub fn[T, E] ReplaySubject::as_observable(self : ReplaySubject[T, E]) -> Observable[T, E] {
-  self.state.as_observable()
+  Observable::new(fn(observer : Observer[T, E]) -> Subscription {
+    self.subscribe(observer)
+  })
 }

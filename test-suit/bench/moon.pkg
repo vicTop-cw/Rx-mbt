@@ -1,0 +1,5 @@
+import {
+  "vicTop/RX-MBT/rx" @rx,
+  "moonbitlang/core/bench" @bench_core,
+  "moonbitlang/core/json",
+}

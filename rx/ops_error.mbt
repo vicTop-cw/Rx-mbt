@@ -278,8 +278,11 @@ pub fn[T, E] Observable::backpressure_drop(self : Observable[T, E]) -> Observabl
   self
 }
 
-/// backpressure_error：保留签名（同步模型下透传）
-pub fn[T, E] Observable::backpressure_error(self : Observable[T, E]) -> Observable[T, E] {
+/// backpressure_error：缓冲区满（max_size）时发出错误（同步模型下透传）
+pub fn[T, E] Observable::backpressure_error(
+  self : Observable[T, E],
+  _max_size : Int,
+) -> Observable[T, E] {
   self
 }
 

@@ -5,7 +5,7 @@
 ///|
 test "run 立即消费并原样返回" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Int, Unit] = Observable::from_iter([1, 2, 3]).tap(
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).tap(
     fn(v) { values.val.push(v) },
   )
   let _ = obs.run()
@@ -15,7 +15,7 @@ test "run 立即消费并原样返回" {
 ///|
 test "debug 透传所有值" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Int, Unit] = Observable::from_iter([1, 2, 3]).debug(
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).debug(
     Some("Test"),
   )
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
@@ -25,7 +25,7 @@ test "debug 透传所有值" {
 ///|
 test "all 全满足发 true" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Bool, Unit] = Observable::from_iter([2, 4, 6]).all(
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([2, 4, 6]).all(
     fn(v) { v % 2 == 0 },
   )
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
@@ -34,18 +34,18 @@ test "all 全满足发 true" {
 
 ///|
 test "ReplaySubject with_buffer_size 只重放最近 N 个" {
-  let subject : ReplaySubject[Int, Unit] = ReplaySubject::with_buffer_size(2)
+  let subject : @rx.ReplaySubject[Int, Unit] = @rx.ReplaySubject::with_buffer_size(2)
   subject.on_next(1)
   subject.on_next(2)
   subject.on_next(3)
   let values = Ref::Ref(Array::new())
-  let _ = subject.subscribe(Observer::on_next_only(fn(v) { values.val.push(v) }))
+  let _ = subject.subscribe(@rx.Observer::on_next_only(fn(v) { values.val.push(v) }))
   assert_eq(values.val, [2, 3])
 }
 
 ///|
 test "CurrentThreadScheduler 同步执行任务" {
-  let scheduler = CurrentThreadScheduler::new()
+  let scheduler = @rx.CurrentThreadScheduler::new()
   let ran = Ref::Ref(false)
   scheduler.schedule(fn() { ran.val = true })
   assert_true(ran.val)
@@ -55,7 +55,7 @@ test "CurrentThreadScheduler 同步执行任务" {
 ///|
 test "cum_sum 累积求和逐值发出" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Int, Unit] = Observable::from_iter([1, 2, 3, 4]).cum_sum()
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4]).cum_sum()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [1, 3, 6, 10])
 }
@@ -63,7 +63,7 @@ test "cum_sum 累积求和逐值发出" {
 ///|
 test "cum_min 累积最小值逐值发出" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Int, Unit] = Observable::from_iter([5, 2, 8, 1]).cum_min()
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([5, 2, 8, 1]).cum_min()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [5, 2, 2, 1])
 }
@@ -71,7 +71,7 @@ test "cum_min 累积最小值逐值发出" {
 ///|
 test "cum_max 累积最大值逐值发出" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Int, Unit] = Observable::from_iter([3, 1, 9, 4]).cum_max()
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([3, 1, 9, 4]).cum_max()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [3, 3, 9, 9])
 }
@@ -79,7 +79,7 @@ test "cum_max 累积最大值逐值发出" {
 ///|
 test "abs 逐元素取绝对值" {
   let values = Ref::Ref(Array::new())
-  let obs : Observable[Double, Unit] = Observable::from_iter([-1.5, 2.0, -3.5]).abs()
+  let obs : @rx.Observable[Double, Unit] = @rx.Observable::from_iter([-1.5, 2.0, -3.5]).abs()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [1.5, 2.0, 3.5])
 }
@@ -87,11 +87,11 @@ test "abs 逐元素取绝对值" {
 ///|
 test "curry_map 返回可组合函数并应用" {
   let values = Ref::Ref(Array::new())
-  let mapper : (Observable[Int, Unit]) -> Observable[Int, Unit] = curry_map(
+  let mapper : (@rx.Observable[Int, Unit]) -> @rx.Observable[Int, Unit] = @rx.curry_map(
     fn(v : Int, k : Int) { v * k },
     10,
   )
-  let obs = mapper(Observable::from_iter([1, 2, 3]))
+  let obs = mapper(@rx.Observable::from_iter([1, 2, 3]))
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [10, 20, 30])
 }

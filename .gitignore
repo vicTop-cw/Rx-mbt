@@ -5,3 +5,9 @@ target
 .mooncakes/
 .moonagent/
 .atomcode/
+pkg.generated.mbti
+.vscode/
+/api_*.txt
+/mbt_names*.txt
+/rust_names.txt
+/_*.py

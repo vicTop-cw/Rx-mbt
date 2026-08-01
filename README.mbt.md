@@ -57,6 +57,22 @@ moon check      # 类型检查
 moon test       # 运行全部测试
 ```
 
+测试按分类组织在 `test-suit/` 下（每个子目录独立成包，黑盒引用 `@rx`）：
+
+| 目录 | 覆盖 |
+|---|---|
+| `test-suit/create` | of / from_iter / empty / never / error / repeat / range / from_callable / start |
+| `test-suit/transform` | map / filter_map / flat_map / scan / concat_map / switch_map / group_by / curry_map |
+| `test-suit/filter` | filter / take / skip / first / last / distinct / skip_until / take_until / contains |
+| `test-suit/aggregation` | count / reduce / collect / sum / average / min / max / mean / median / variance / rolling_* / to_map / to_set |
+| `test-suit/composite` | start_with / concat / merge / zip / combine_latest / with_latest_from / amb / iif / sequence_equal |
+| `test-suit/math_conditions` | drop_none / fill_none / clamp / abs / every / some / all / find / is_empty |
+| `test-suit/core` | run / debug / Subject / Scheduler / cum_* 等基础行为 |
+| `test-suit/stress` | 高压测试：10 万元素链、多订阅者、Subject 高压、递归重试 |
+| `test-suit/bench` | 基准测试（`#skip` 默认跳过，`moon test -g bench` 运行） |
+
+基准结果写入 `moon_bench.json`，可与 Rx-Rust 的 `benches/bench.rs` 结果对比。
+
 ## 核心抽象
 
 | 类型 | 说明 |

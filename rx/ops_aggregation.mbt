@@ -73,6 +73,38 @@ pub fn[T, E, Acc] Observable::reduce(
   Observable::new(subscribe_fn)
 }
 
+/// reduce_no_seed：无 seed 版本，首元素直接作为初始值（对应 Rx-Rust extended::reduce）
+pub fn[T, E] Observable::reduce_no_seed(
+  self : Observable[T, E],
+  f : (T, T) -> T,
+) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T? = None
+    let acc = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        match acc.val {
+          Some(cur) => { acc.val = Some(f(cur, v)) }
+          None => { acc.val = Some(v) }
+        }
+      },
+      error: error,
+      complete: fn() {
+        match acc.val {
+          Some(v) => next(v)
+          None => ()
+        }
+        complete()
+      },
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
 /// collect：把流中所有值收集成数组，流结束时发出
 pub fn[T, E] Observable::collect(self : Observable[T, E]) -> Observable[Array[T], E] {
   let source_fn = self.subscribe_fn
@@ -142,6 +174,29 @@ pub fn[T : Add, E] Observable::sum_direct(
   Observable::new(subscribe_fn)
 }
 
+/// sum_by：按 key_mapper 提取数值后累加，返回 Double（对应 Rx-Rust extended::sum）
+pub fn[T, E] Observable::sum_by(
+  self : Observable[T, E],
+  key_mapper : (T) -> Double,
+) -> Observable[Double, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Double, E]) -> Subscription = fn(downstream : Observer[Double, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let acc = Ref::Ref(0.0)
+    source_fn({
+      next: fn(v : T) { acc.val = acc.val + key_mapper(v) },
+      error: error,
+      complete: fn() {
+        next(acc.val)
+        complete()
+      },
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
 /// average：求 Double 流的算术平均值
 pub fn[E] Observable::average(self : Observable[Double, E]) -> Observable[Double, E] {
   let source_fn = self.subscribe_fn
@@ -173,6 +228,35 @@ pub fn[E] Observable::average_direct(self : Observable[Double, E]) -> Observable
   self.average()
 }
 
+/// average_by：按 key_mapper 提取数值后求均值，返回 Double（对应 Rx-Rust extended::average）
+pub fn[T, E] Observable::average_by(
+  self : Observable[T, E],
+  key_mapper : (T) -> Double,
+) -> Observable[Double, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Double, E]) -> Subscription = fn(downstream : Observer[Double, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let sum = Ref::Ref(0.0)
+    let cnt = Ref::Ref(0)
+    source_fn({
+      next: fn(v : T) {
+        sum.val = sum.val + key_mapper(v)
+        cnt.val = cnt.val + 1
+      },
+      error: error,
+      complete: fn() {
+        if cnt.val > 0 {
+          next(sum.val / Double::from_int(cnt.val))
+        }
+        complete()
+      },
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
 /// minimum：求最小值（流结束时发出）
 pub fn[T : Compare, E] Observable::minimum(self : Observable[T, E]) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
@@ -202,7 +286,37 @@ pub fn[T : Compare, E] Observable::minimum(self : Observable[T, E]) -> Observabl
   Observable::new(subscribe_fn)
 }
 
-/// maximum：求最大值（流结束时发出）
+/// minimum_by：按 key_mapper 提取比较值后求最小值（对应 Rx-Rust extended::minimum）
+pub fn[T, E] Observable::minimum_by(
+  self : Observable[T, E],
+  key_mapper : (T) -> Double,
+) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T? = None
+    let best = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        match best.val {
+          Some(cur) => { if key_mapper(v) < key_mapper(cur) { best.val = Some(v) } }
+          None => best.val = Some(v)
+        }
+      },
+      error: error,
+      complete: fn() {
+        match best.val {
+          Some(v) => next(v)
+          None => ()
+        }
+        complete()
+      },
+    })
+  }
+  Observable::new(subscribe_fn)
+}
 pub fn[T : Compare, E] Observable::maximum(self : Observable[T, E]) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
@@ -234,6 +348,38 @@ pub fn[T : Compare, E] Observable::maximum(self : Observable[T, E]) -> Observabl
 /// minimum_direct：minimum 的别名
 pub fn[T : Compare, E] Observable::minimum_direct(self : Observable[T, E]) -> Observable[T, E] {
   self.minimum()
+}
+
+/// maximum_by：按 key_mapper 提取比较值后求最大值（对应 Rx-Rust extended::maximum）
+pub fn[T, E] Observable::maximum_by(
+  self : Observable[T, E],
+  key_mapper : (T) -> Double,
+) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T? = None
+    let best = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        match best.val {
+          Some(cur) => { if key_mapper(v) > key_mapper(cur) { best.val = Some(v) } }
+          None => best.val = Some(v)
+        }
+      },
+      error: error,
+      complete: fn() {
+        match best.val {
+          Some(v) => next(v)
+          None => ()
+        }
+        complete()
+      },
+    })
+  }
+  Observable::new(subscribe_fn)
 }
 
 /// maximum_direct：maximum 的别名
