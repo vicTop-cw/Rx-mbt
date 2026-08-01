@@ -31,13 +31,14 @@ pub fn[T, E] Observable::take(self : Observable[T, E], n : Int) -> Observable[T,
     let complete = downstream.complete
     let remaining = Ref::Ref(n)
     let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
     if n <= 0 {
       // Rx 语义：take(0) / take(负数) 不取任何值，立即完成
       stopped.val = true
       complete()
       Subscription::empty()
     } else {
-      source_fn({
+      source_sub.val = source_fn({
         next: fn(v : T) {
           if !stopped.val {
             if remaining.val > 0 {
@@ -46,13 +47,29 @@ pub fn[T, E] Observable::take(self : Observable[T, E], n : Int) -> Observable[T,
               next(v)
               if done {
                 stopped.val = true
+                // 取够立即取消上游，避免热流继续泄漏
+                (source_sub.val).dispose()
                 complete()
               }
             }
           }
         },
-        error: fn(e : E) { if !stopped.val { error(e) } },
-        complete: fn() { if !stopped.val { complete() } },
+        error: fn(e : E) {
+          if !stopped.val {
+            stopped.val = true
+            error(e)
+          }
+        },
+        complete: fn() {
+          if !stopped.val {
+            stopped.val = true
+            complete()
+          }
+        },
+      })
+      Subscription::new(fn() {
+        stopped.val = true
+        (source_sub.val).dispose()
       })
     }
   }
@@ -100,18 +117,37 @@ pub fn[T, E] first(source : Observable[T, E], predicate : (T) -> Bool) -> Observ
     let error = downstream.error
     let complete = downstream.complete
     let found = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !found.val {
+        if !stopped.val && !found.val {
           if predicate(v) {
             found.val = true
+            stopped.val = true
             next(v)
+            // 找到后立即取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           }
         }
       },
-      error: error,
-      complete: complete,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -185,13 +221,16 @@ pub fn[T, E] Observable::take_while(
     let error = downstream.error
     let complete = downstream.complete
     let stopped = Ref::Ref(false)
-    source_fn({
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
         if !stopped.val {
           if predicate(v) {
             next(v)
           } else {
             stopped.val = true
+            // 谓词不满足即终止，取消上游避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           }
         }
@@ -208,6 +247,10 @@ pub fn[T, E] Observable::take_while(
           complete()
         }
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -314,23 +357,42 @@ pub fn[T, E : Default] Observable::element_at(
     let complete = downstream.complete
     let pos = Ref::Ref(0)
     let found = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if pos.val == index {
-          pos.val = pos.val + 1
-          found.val = true
-          next(v)
-          complete()
-        } else {
-          pos.val = pos.val + 1
+        if !stopped.val {
+          if pos.val == index {
+            pos.val = pos.val + 1
+            found.val = true
+            stopped.val = true
+            next(v)
+            // 命中后取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
+            complete()
+          } else {
+            pos.val = pos.val + 1
+          }
         }
       },
-      error: error,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
       complete: fn() {
-        if !found.val {
-          error(E::default())
+        if !stopped.val {
+          stopped.val = true
+          if !found.val {
+            error(E::default())
+          }
         }
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -488,19 +550,42 @@ pub fn[T, E] Observable::take_until(
     let complete = downstream.complete
     // 状态必须每次订阅重新创建：冷流多次订阅互不影响
     let stopped = Ref::Ref(false)
-    let trigger_sub = trigger_fn({
-      next: fn(_ : Unit) { stopped.val = true },
+    let trigger_sub = Ref::Ref(Subscription::empty())
+    let source_sub = Ref::Ref(Subscription::empty())
+    trigger_sub.val = trigger_fn({
+      next: fn(_ : Unit) {
+        if !stopped.val {
+          stopped.val = true
+          // 触发即终止：取消源流，避免热流继续泄漏
+          (source_sub.val).dispose()
+          complete()
+        }
+      },
       error: fn(_ : E) {},
       complete: fn() {},
     })
-    let source_sub = source_fn({
-      next: fn(v : T) { if !stopped.val { next(v) } },
-      error: fn(e : E) { if !stopped.val { error(e) } },
-      complete: fn() { if !stopped.val { complete() } },
+    source_sub.val = source_fn({
+      next: fn(v : T) {
+        if !stopped.val {
+          next(v)
+        }
+      },
+      error: fn(e : E) {
+        if !stopped.val {
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
     })
     Subscription::new(fn() {
-      trigger_sub.dispose()
-      source_sub.dispose()
+      stopped.val = true
+      (trigger_sub.val).dispose()
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -517,23 +602,40 @@ pub fn[T : Eq, E] Observable::contains(
     let error = downstream.error
     let complete = downstream.complete
     let found = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !found.val {
+        if !stopped.val && !found.val {
           if v == target {
             found.val = true
+            stopped.val = true
             next(true)
+            // 找到后立即取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           }
         }
       },
-      error: error,
-      complete: fn() {
-        if !found.val {
-          next(false)
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
         }
-        complete()
       },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          if !found.val {
+            next(false)
+          }
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

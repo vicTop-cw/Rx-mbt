@@ -234,6 +234,10 @@ pub fn[T, E] ReplaySubject::subscribe(
 
 /// 发射一个值（同时进入历史缓冲，超出 buffer_size 时丢弃最旧的）
 pub fn[T, E] ReplaySubject::on_next(self : ReplaySubject[T, E], value : T) -> Unit {
+  // 已终止的主题：忽略发射，避免无意义地继续缓冲（内存泄漏）
+  if self.state.stopped.val {
+    return
+  }
   let arr = self.buffer.val
   if self.buffer_size > 0 && arr.length() >= self.buffer_size {
     let keep = Array::new()

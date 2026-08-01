@@ -128,3 +128,15 @@ test "curry_map 返回可组合函数并应用" {
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [10, 20, 30])
 }
+
+///|
+test "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复）" {
+  let s : @rx.ReplaySubject[Int, Unit] = @rx.ReplaySubject::new()
+  s.on_next(1)
+  s.on_completed()
+  s.on_next(2) // 已终止：应被忽略，不进入缓冲
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let _ = s.as_observable().subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  // 终止后重放已完成前缓冲的历史（[1]），on_next(2) 未进入缓冲
+  assert_eq(values.val, [1])
+}

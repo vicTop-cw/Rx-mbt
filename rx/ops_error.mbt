@@ -14,12 +14,14 @@ pub fn[T, E] Observable::retry(self : Observable[T, E], times : Int) -> Observab
     let complete = downstream.complete
     let attempts = Ref::Ref(0)
     let done = Ref::Ref(false)
+    // 保存当前源订阅句柄，dispose 时取消，避免重试中的源流泄漏
+    let current_sub = Ref::Ref(Subscription::empty())
     let try_ref = Ref::Ref(fn() {})
     let try_subscribe : () -> Unit = fn() {
       if done.val {
         return
       }
-      let _ = source_fn({
+      current_sub.val = source_fn({
         next: next,
         error: fn(e : E) {
           if attempts.val < times {
@@ -40,7 +42,10 @@ pub fn[T, E] Observable::retry(self : Observable[T, E], times : Int) -> Observab
     }
     try_ref.val = try_subscribe
     try_subscribe()
-    Subscription::empty()
+    Subscription::new(fn() {
+      done.val = true
+      (current_sub.val).dispose()
+    })
   }
   Observable::new(subscribe_fn)
 }
@@ -52,14 +57,20 @@ pub fn[T, E] Observable::retry_indefinitely(self : Observable[T, E]) -> Observab
     let _error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
+    // 保存当前源订阅句柄，dispose 时取消，避免重试中的源流泄漏
+    let current_sub = Ref::Ref(Subscription::empty())
     let try_ref = Ref::Ref(fn() {})
     let try_subscribe : () -> Unit = fn() {
       if done.val {
         return
       }
-      let _ = source_fn({
+      current_sub.val = source_fn({
         next: next,
-        error: fn(_e : E) { (try_ref.val)() },
+        error: fn(_e : E) {
+          if !done.val {
+            (try_ref.val)()
+          }
+        },
         complete: fn() {
           if !done.val {
             done.val = true
@@ -70,7 +81,10 @@ pub fn[T, E] Observable::retry_indefinitely(self : Observable[T, E]) -> Observab
     }
     try_ref.val = try_subscribe
     try_subscribe()
-    Subscription::empty()
+    Subscription::new(fn() {
+      done.val = true
+      (current_sub.val).dispose()
+    })
   }
   Observable::new(subscribe_fn)
 }
@@ -85,19 +99,23 @@ pub fn[T, E] Observable::retry_when(
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
+    // 保存当前源订阅句柄，dispose 时取消，避免重试中的源流泄漏
+    let current_sub = Ref::Ref(Subscription::empty())
     let try_ref = Ref::Ref(fn() {})
     let try_subscribe : () -> Unit = fn() {
       if done.val {
         return
       }
-      let _ = source_fn({
+      current_sub.val = source_fn({
         next: next,
         error: fn(e : E) {
-          if should_retry(e) {
-            (try_ref.val)()
-          } else {
-            done.val = true
-            error(e)
+          if !done.val {
+            if should_retry(e) {
+              (try_ref.val)()
+            } else {
+              done.val = true
+              error(e)
+            }
           }
         },
         complete: fn() {
@@ -110,7 +128,10 @@ pub fn[T, E] Observable::retry_when(
     }
     try_ref.val = try_subscribe
     try_subscribe()
-    Subscription::empty()
+    Subscription::new(fn() {
+      done.val = true
+      (current_sub.val).dispose()
+    })
   }
   Observable::new(subscribe_fn)
 }
@@ -138,11 +159,13 @@ pub fn[T, E] Observable::retry_with_backoff_on(
     let try_ref = Ref::Ref(fn() {})
     // 收集退避 timer，dispose 时统一取消，避免残留定时器继续触发重试
     let timers = Ref::Ref(Array::new())
+    // 保存当前源订阅句柄，dispose 时取消，避免重试中的源流泄漏
+    let current_sub = Ref::Ref(Subscription::empty())
     let try_subscribe : () -> Unit = fn() {
       if done.val {
         return
       }
-      let _ = source_fn({
+      current_sub.val = source_fn({
         next: next,
         error: fn(_e : E) {
           let shift = 1 << attempts.val
@@ -163,6 +186,7 @@ pub fn[T, E] Observable::retry_with_backoff_on(
     try_subscribe()
     Subscription::new(fn() {
       done.val = true
+      (current_sub.val).dispose()
       for t in timers.val {
         t.dispose()
       }

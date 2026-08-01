@@ -205,3 +205,36 @@ test "filter: element_at 越界发错误" {
   )
   assert_true(got_err.val)
 }
+
+///|
+test "filter: take 取够后上游被取消，热流后续值不转发（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let s : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = s.as_observable().take(2).subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  s.on_next(1)
+  s.on_next(2)
+  s.on_next(3) // 已取够：应被忽略
+  assert_eq(values.val, [1, 2])
+}
+
+///|
+test "filter: contains 命中后上游被取消，后续值不转发（回归）" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let s : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = s.as_observable().contains(2).subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  s.on_next(1) // 未命中：不发射
+  s.on_next(2) // 命中：发 true 并取消上游
+  s.on_next(3) // 已终止：应被忽略
+  assert_eq(values.val, [true])
+}
+
+///|
+test "filter: element_at 命中后上游被取消，后续值不转发（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let s : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = s.as_observable().element_at(1).subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  s.on_next(10)
+  s.on_next(20)
+  s.on_next(30) // 已命中：应被忽略
+  assert_eq(values.val, [20])
+}

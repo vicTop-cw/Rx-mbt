@@ -352,16 +352,35 @@ pub fn[T, E] sample_first(source : Observable[T, E]) -> Observable[T, E] {
     let error = downstream.error
     let complete = downstream.complete
     let found = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !found.val {
+        if !stopped.val && !found.val {
           found.val = true
+          stopped.val = true
           next(v)
+          // 取到首值立即取消上游，避免热流继续泄漏
+          (source_sub.val).dispose()
           complete()
         }
       },
-      error: error,
-      complete: complete,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

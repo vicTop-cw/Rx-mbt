@@ -189,3 +189,37 @@ test "composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标�
   assert_eq(values.val, [])
   assert_true(!done.val)
 }
+
+///|
+test "composite: zip 任一源错误时立即终止并取消对方订阅（回归）" {
+  let got_err : Ref[Bool] = Ref::Ref(false)
+  let done : Ref[Bool] = Ref::Ref(false)
+  let a : @rx.Observable[Int, String] = @rx.Observable::error("boom")
+  let b : @rx.PublishSubject[Int, String] = @rx.PublishSubject::new()
+  let sub = @rx.zip(a, b.as_observable()).subscribe(
+    @rx.Observer::new(
+      fn(_ : (Int, Int)) {},
+      fn(e : String) { got_err.val = true; if e != "boom" { got_err.val = false } },
+      fn() { done.val = true },
+    ),
+  )
+  assert_true(got_err.val)
+  assert_true(!done.val)
+  sub.dispose()
+  // 对方订阅已被取消：后续 on_next 不再触发任何回调（不崩溃即可）
+  b.on_next(1)
+}
+
+///|
+test "composite: amb a 胜出后 b 订阅被取消，b 后续值不转发（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let a : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let b : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = @rx.amb(a.as_observable(), b.as_observable()).subscribe_on_next(
+    fn(v : Int) { values.val.push(v) },
+  )
+  a.on_next(1)
+  b.on_next(2)
+  a.on_next(3)
+  assert_eq(values.val, [1, 3])
+}

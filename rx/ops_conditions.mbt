@@ -13,24 +13,40 @@ pub fn[T, E] Observable::every(
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !done.val {
+        if !stopped.val {
           if !predicate(v) {
+            stopped.val = true
             done.val = true
             next(false)
+            // 提前终止：取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           }
         }
       },
-      error: error,
-      complete: fn() {
-        if !done.val {
-          done.val = true
-          next(true)
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
         }
-        complete()
       },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          if !done.val {
+            next(true)
+          }
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -47,24 +63,40 @@ pub fn[T, E] Observable::some(
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !done.val {
+        if !stopped.val {
           if predicate(v) {
+            stopped.val = true
             done.val = true
             next(true)
+            // 提前终止：取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           }
         }
       },
-      error: error,
-      complete: fn() {
-        if !done.val {
-          done.val = true
-          next(false)
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
         }
-        complete()
       },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          if !done.val {
+            next(false)
+          }
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -81,18 +113,37 @@ pub fn[T, E] Observable::find(
     let error = downstream.error
     let complete = downstream.complete
     let found = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !found.val {
+        if !stopped.val && !found.val {
           if predicate(v) {
             found.val = true
+            stopped.val = true
             next(v)
+            // 找到后立即取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           }
         }
       },
-      error: error,
-      complete: complete,
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -110,25 +161,42 @@ pub fn[T, E] Observable::find_index(
     let complete = downstream.complete
     let idx = Ref::Ref(0L)
     let found = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
       next: fn(v : T) {
-        if !found.val {
+        if !stopped.val && !found.val {
           if predicate(v) {
             found.val = true
+            stopped.val = true
             next(idx.val)
+            // 找到后立即取消上游，避免热流继续泄漏
+            (source_sub.val).dispose()
             complete()
           } else {
             idx.val = idx.val + 1L
           }
         }
       },
-      error: error,
-      complete: fn() {
-        if !found.val {
-          next(-1L)
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
         }
-        complete()
       },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          if !found.val {
+            next(-1L)
+          }
+          complete()
+        }
+      },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

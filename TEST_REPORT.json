@@ -1,10 +1,10 @@
 ﻿{
-    "generated_at":  "2026-08-01 19:08:58",
+    "generated_at":  "2026-08-01 19:19:45",
     "moon_version":  "moon 0.1.20260724 (5f1406a 2026-07-24)",
     "target":  "wasm",
     "summary":  {
-                    "total":  146,
-                    "passed":  146,
+                    "total":  152,
+                    "passed":  152,
                     "failed":  0
                 },
     "packages":  [
@@ -66,7 +66,7 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/composite",
-                         "count":  18,
+                         "count":  20,
                          "tests":  [
                                        "composite: start_with 前置发射前缀",
                                        "composite: concat 串接两个流",
@@ -85,12 +85,14 @@
                                        "composite: zip 方法版配对",
                                        "composite: zip 双方都有值时立即配对发射（Subject 热流回归）",
                                        "composite: zip 一方完成且缓冲耗尽即终止（不等挂起的另一源）",
-                                       "composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标准语义）"
+                                       "composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标准语义）",
+                                       "composite: zip 任一源错误时立即终止并取消对方订阅（回归）",
+                                       "composite: amb a 胜出后 b 订阅被取消，b 后续值不转发（回归）"
                                    ]
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/core",
-                         "count":  12,
+                         "count":  13,
                          "tests":  [
                                        "run 立即消费并原样返回",
                                        "debug 透传所有值",
@@ -103,7 +105,8 @@
                                        "cum_min 累积最小值逐值发出",
                                        "cum_max 累积最大值逐值发出",
                                        "abs 逐元素取绝对值",
-                                       "curry_map 返回可组合函数并应用"
+                                       "curry_map 返回可组合函数并应用",
+                                       "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复）"
                                    ]
                      },
                      {
@@ -124,7 +127,7 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/filter",
-                         "count":  21,
+                         "count":  24,
                          "tests":  [
                                        "filter: 只放行满足谓词的值",
                                        "filter: take 取前 n 个后完成",
@@ -146,7 +149,10 @@
                                        "filter: contains 未命中返回 false",
                                        "filter: includes 命中返回 true",
                                        "filter: element_at 命中后不发错误（回归）",
-                                       "filter: element_at 越界发错误"
+                                       "filter: element_at 越界发错误",
+                                       "filter: take 取够后上游被取消，热流后续值不转发（回归）",
+                                       "filter: contains 命中后上游被取消，后续值不转发（回归）",
+                                       "filter: element_at 命中后上游被取消，后续值不转发（回归）"
                                    ]
                      },
                      {

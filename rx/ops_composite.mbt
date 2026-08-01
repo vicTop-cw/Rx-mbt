@@ -88,6 +88,8 @@ pub fn[T, E, U] zip(
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
     let completed = Ref::Ref(false)
+    let a_sub = Ref::Ref(Subscription::empty())
+    let b_sub = Ref::Ref(Subscription::empty())
     let try_emit : () -> Unit = fn() {
       // 双方都非空：按到达顺序逐对发射
       while !buf_a.val.is_empty() && !buf_b.val.is_empty() && !completed.val {
@@ -95,29 +97,55 @@ pub fn[T, E, U] zip(
         let y = buf_b.val.remove(0)
         next((x, y))
       }
-      // 一方完成且其缓冲已耗尽：无法再配对，终止
+      // 一方完成且其缓冲已耗尽：无法再配对，终止并释放双方订阅
       if !completed.val {
         if (done_a.val && buf_a.val.is_empty()) || (done_b.val && buf_b.val.is_empty()) {
           completed.val = true
+          (a_sub.val).dispose()
+          (b_sub.val).dispose()
           complete()
         }
       }
     }
-    let a_sub = a_fn({
-      next: fn(v : T) { buf_a.val.push(v); try_emit() },
-      error: error,
-      complete: fn() { done_a.val = true; try_emit() },
+    let fail : (E) -> Unit = fn(e : E) {
+      if !completed.val {
+        completed.val = true
+        (a_sub.val).dispose()
+        (b_sub.val).dispose()
+        error(e)
+      }
+    }
+    a_sub.val = a_fn({
+      next: fn(v : T) {
+        if !completed.val {
+          buf_a.val.push(v)
+          try_emit()
+        }
+      },
+      error: fail,
+      complete: fn() {
+        done_a.val = true
+        try_emit()
+      },
     })
-    let b_sub = b_fn({
-      next: fn(v : U) { buf_b.val.push(v); try_emit() },
-      error: error,
-      complete: fn() { done_b.val = true; try_emit() },
+    b_sub.val = b_fn({
+      next: fn(v : U) {
+        if !completed.val {
+          buf_b.val.push(v)
+          try_emit()
+        }
+      },
+      error: fail,
+      complete: fn() {
+        done_b.val = true
+        try_emit()
+      },
     })
     try_emit()
     Subscription::new(fn() {
       completed.val = true
-      a_sub.dispose()
-      b_sub.dispose()
+      (a_sub.val).dispose()
+      (b_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -148,30 +176,54 @@ pub fn[T, E, U] combine_latest(
     let last_b = Ref::Ref(init_b)
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
+    let failed = Ref::Ref(false)
     let try_emit : () -> Unit = fn() {
-      match (last_a.val, last_b.val) {
-        (Some(x), Some(y)) => next((x, y))
-        _ => ()
+      if !failed.val {
+        match (last_a.val, last_b.val) {
+          (Some(x), Some(y)) => next((x, y))
+          _ => ()
+        }
       }
     }
     let maybe_complete : () -> Unit = fn() {
-      if done_a.val && done_b.val {
+      if !failed.val && done_a.val && done_b.val {
         complete()
       }
     }
-    let a_sub = a_fn({
-      next: fn(v : T) { last_a.val = Some(v); try_emit() },
-      error: error,
+    let a_sub = Ref::Ref(Subscription::empty())
+    let b_sub = Ref::Ref(Subscription::empty())
+    let fail : (E) -> Unit = fn(e : E) {
+      if !failed.val {
+        failed.val = true
+        (a_sub.val).dispose()
+        (b_sub.val).dispose()
+        error(e)
+      }
+    }
+    a_sub.val = a_fn({
+      next: fn(v : T) {
+        if !failed.val {
+          last_a.val = Some(v)
+          try_emit()
+        }
+      },
+      error: fail,
       complete: fn() { done_a.val = true; maybe_complete() },
     })
-    let b_sub = b_fn({
-      next: fn(v : U) { last_b.val = Some(v); try_emit() },
-      error: error,
+    b_sub.val = b_fn({
+      next: fn(v : U) {
+        if !failed.val {
+          last_b.val = Some(v)
+          try_emit()
+        }
+      },
+      error: fail,
       complete: fn() { done_b.val = true; maybe_complete() },
     })
     Subscription::new(fn() {
-      a_sub.dispose()
-      b_sub.dispose()
+      failed.val = true
+      (a_sub.val).dispose()
+      (b_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -235,50 +287,68 @@ pub fn[T, E] amb(
     let complete = downstream.complete
     let winner = Ref::Ref(0)
     let done = Ref::Ref(false)
-    let a_sub = a_fn({
+    let a_sub = Ref::Ref(Subscription::empty())
+    let b_sub = Ref::Ref(Subscription::empty())
+    a_sub.val = a_fn({
       next: fn(v : T) {
         if !done.val {
-          if winner.val == 0 { winner.val = 1 }
+          if winner.val == 0 {
+            winner.val = 1
+            // a 胜出：立即取消 b，避免另一路无限流继续泄漏
+            (b_sub.val).dispose()
+          }
           if winner.val == 1 { next(v) }
         }
       },
       error: fn(e : E) {
         if !done.val && winner.val != 2 {
           done.val = true
+          (a_sub.val).dispose()
+          (b_sub.val).dispose()
           error(e)
         }
       },
       complete: fn() {
         if !done.val && winner.val != 2 {
           done.val = true
+          (a_sub.val).dispose()
+          (b_sub.val).dispose()
           complete()
         }
       },
     })
-    let b_sub = b_fn({
+    b_sub.val = b_fn({
       next: fn(v : T) {
         if !done.val {
-          if winner.val == 0 { winner.val = 2 }
+          if winner.val == 0 {
+            winner.val = 2
+            // b 胜出：立即取消 a
+            (a_sub.val).dispose()
+          }
           if winner.val == 2 { next(v) }
         }
       },
       error: fn(e : E) {
         if !done.val && winner.val != 1 {
           done.val = true
+          (a_sub.val).dispose()
+          (b_sub.val).dispose()
           error(e)
         }
       },
       complete: fn() {
         if !done.val && winner.val != 1 {
           done.val = true
+          (a_sub.val).dispose()
+          (b_sub.val).dispose()
           complete()
         }
       },
     })
     Subscription::new(fn() {
       done.val = true
-      a_sub.dispose()
-      b_sub.dispose()
+      (a_sub.val).dispose()
+      (b_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
