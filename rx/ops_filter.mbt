@@ -339,11 +339,12 @@ pub fn[T, E : Default] Observable::element_at(
 /// 去重：丢弃已出现过的值
 pub fn[T : Hash + Eq, E] Observable::distinct(self : Observable[T, E]) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let seen : @hashset.HashSet[T] = @hashset.from_array([])
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
+    // 去重集合必须每次订阅重新创建：冷流多次订阅互不影响
+    let seen : @hashset.HashSet[T] = @hashset.from_array([])
     source_fn({
       next: fn(v : T) {
         if seen.add_and_check(v) {
@@ -363,11 +364,12 @@ pub fn[T, E, K : Hash + Eq] Observable::distinct_by(
   key_fn : (T) -> K,
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let seen : @hashset.HashSet[K] = @hashset.from_array([])
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
+    // 去重集合必须每次订阅重新创建：冷流多次订阅互不影响
+    let seen : @hashset.HashSet[K] = @hashset.from_array([])
     source_fn({
       next: fn(v : T) {
         let k = key_fn(v)

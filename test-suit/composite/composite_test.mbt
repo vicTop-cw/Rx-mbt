@@ -75,6 +75,17 @@ test "composite: amb 先发射者胜出" {
 }
 
 ///|
+test "composite: amb 先完成者胜出，另一方后续值被忽略（回归）" {
+  // 回归：修复前 a 先完成（done=true）后，b 发射的值仍会被转发
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let a : @rx.Observable[Int, Unit] = @rx.Observable::empty()
+  let b : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = @rx.amb(a, b.as_observable()).subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  b.on_next(99)
+  assert_eq(values.val, [])
+}
+
+///|
 test "composite: end_with 完成前追加后缀" {
   let values : Ref[Array[Int]] = Ref::Ref(Array::new())
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2]).end_with([9])
@@ -128,10 +139,27 @@ test "composite: zip 方法版配对" {
 }
 
 ///|
-test "composite: zip 任一源完成即终止（回归：不等挂起的另一源）" {
+test "composite: zip 双方都有值时立即配对发射（Subject 热流回归）" {
+  // 回归：修复前 zip 只在"一方完成"时才发射，热流下永远不会出值
+  let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
+  let a : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let b : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = @rx.zip(a.as_observable(), b.as_observable()).subscribe_on_next(
+    fn(p : (Int, Int)) { values.val.push(p) },
+  )
+  a.on_next(1)
+  b.on_next(10)
+  a.on_next(2)
+  b.on_next(20)
+  assert_eq(values.val, [(1, 10), (2, 20)])
+}
+
+///|
+test "composite: zip 一方完成且缓冲耗尽即终止（不等挂起的另一源）" {
   let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
   let done : Ref[Bool] = Ref::Ref(false)
-  let a : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2])
+  // a 立即完成且无缓冲值，b 永不完成：zip 应立即终止（Rx 标准语义）
+  let a : @rx.Observable[Int, Unit] = @rx.Observable::empty()
   let b : @rx.Observable[Int, Unit] = @rx.Observable::never()
   let _ = @rx.zip(a, b).subscribe(
     @rx.Observer::new(
@@ -142,4 +170,22 @@ test "composite: zip 任一源完成即终止（回归：不等挂起的另一�
   )
   assert_eq(values.val, [])
   assert_true(done.val)
+}
+
+///|
+test "composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标准语义）" {
+  let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
+  let done : Ref[Bool] = Ref::Ref(false)
+  // a=[1,2] 完成但缓冲有值，b=never 永不发射：zip 永不完成、不发值（标准行为）
+  let a : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2])
+  let b : @rx.Observable[Int, Unit] = @rx.Observable::never()
+  let _ = @rx.zip(a, b).subscribe(
+    @rx.Observer::new(
+      fn(p : (Int, Int)) { values.val.push(p) },
+      fn(_ : Unit) {},
+      fn() { done.val = true },
+    ),
+  )
+  assert_eq(values.val, [])
+  assert_true(!done.val)
 }

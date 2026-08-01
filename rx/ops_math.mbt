@@ -42,8 +42,11 @@ pub fn[T : Compare, E] Observable::top_k(
         let arr = buf.val
         arr.sort()
         arr.rev_in_place()
-        if arr.length() > k {
+        // k <= 0 无意义，防御：发出空数组（避免 truncate 负数越界）
+        if k > 0 && arr.length() > k {
           arr.truncate(k)
+        } else if k <= 0 {
+          arr.clear()
         }
         next(arr)
         complete()
@@ -70,8 +73,11 @@ pub fn[T : Compare, E] Observable::bottom_k(
       complete: fn() {
         let arr = buf.val
         arr.sort()
-        if arr.length() > k {
+        // k <= 0 无意义，防御：发出空数组（避免 truncate 负数越界）
+        if k > 0 && arr.length() > k {
           arr.truncate(k)
+        } else if k <= 0 {
+          arr.clear()
         }
         next(arr)
         complete()

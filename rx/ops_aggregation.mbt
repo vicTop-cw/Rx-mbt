@@ -33,10 +33,12 @@ pub fn[T, E] count_events(source : Observable[T, E], n : Int) -> Observable[Int,
     let error = downstream.error
     let complete = downstream.complete
     let counter = Ref::Ref(0)
+    // n <= 0 无意义（每 n 个事件发一次），防御：退化为每次发 1
+    let chunk = if n < 1 { 1 } else { n }
     source_fn({
       next: fn(_ : T) {
         counter.val = counter.val + 1
-        if counter.val >= n {
+        if counter.val >= chunk {
           let cnt = counter.val
           counter.val = 0
           next(cnt)
@@ -747,7 +749,8 @@ pub fn[E] Observable::rolling_sum(
       next: fn(v : Double) {
         buf.val.push(v)
         sum.val = sum.val + v
-        if buf.val.length() > n {
+        // n <= 0 时窗口退化为整个流（不做裁剪，避免 remove(0) 空指针）
+        if n > 0 && buf.val.length() > n {
           let old = buf.val.remove(0)
           sum.val = sum.val - old
         }
@@ -776,7 +779,8 @@ pub fn[E] Observable::rolling_mean(
       next: fn(v : Double) {
         buf.val.push(v)
         sum.val = sum.val + v
-        if buf.val.length() > n {
+        // n <= 0 时窗口退化为整个流（不做裁剪）
+        if n > 0 && buf.val.length() > n {
           let old = buf.val.remove(0)
           sum.val = sum.val - old
         }
@@ -803,7 +807,8 @@ pub fn[T : Compare, E] Observable::rolling_min(
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
-        if buf.val.length() > n {
+        // n <= 0 时窗口退化为整个流（不做裁剪）
+        if n > 0 && buf.val.length() > n {
           let _ = buf.val.remove(0)
         }
         let init : T? = None
@@ -840,7 +845,8 @@ pub fn[T : Compare, E] Observable::rolling_max(
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
-        if buf.val.length() > n {
+        // n <= 0 时窗口退化为整个流（不做裁剪）
+        if n > 0 && buf.val.length() > n {
           let _ = buf.val.remove(0)
         }
         let init : T? = None
@@ -877,7 +883,8 @@ pub fn[T, E] Observable::rolling_count(
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
-        if buf.val.length() > n {
+        // n <= 0 时窗口退化为整个流（不做裁剪）
+        if n > 0 && buf.val.length() > n {
           let _ = buf.val.remove(0)
         }
         next(buf.val.length())

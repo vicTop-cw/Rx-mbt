@@ -71,7 +71,7 @@ pub fn[T, E] merge(
   a.concat(b)
 }
 
-/// zip：按位置配对两个流的值，两者都完成后一次性按序发射
+/// zip：按位置配对两个流的值，双方都有值时立即发射配对
 pub fn[T, E, U] zip(
   a : Observable[T, E],
   b : Observable[U, E],
@@ -82,38 +82,40 @@ pub fn[T, E, U] zip(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
+    // 每个源一个 FIFO 缓冲：值到达后立即尝试与对方配对，符合 Rx zip 语义
     let buf_a = Ref::Ref(Array::new())
     let buf_b = Ref::Ref(Array::new())
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
-    let emitted = Ref::Ref(false)
-    let both_subscribed = Ref::Ref(false)
+    let completed = Ref::Ref(false)
     let try_emit : () -> Unit = fn() {
-      // Rx 语义：双方都订阅后，任一源完成即终止（先把已缓冲的配对发完）
-      if both_subscribed.val && (done_a.val || done_b.val) && !emitted.val {
-        emitted.val = true
-        let na = buf_a.val.length()
-        let nb = buf_b.val.length()
-        let n = if na < nb { na } else { nb }
-        for i = 0; i < n; i = i + 1 {
-          next((buf_a.val[i], buf_b.val[i]))
+      // 双方都非空：按到达顺序逐对发射
+      while !buf_a.val.is_empty() && !buf_b.val.is_empty() && !completed.val {
+        let x = buf_a.val.remove(0)
+        let y = buf_b.val.remove(0)
+        next((x, y))
+      }
+      // 一方完成且其缓冲已耗尽：无法再配对，终止
+      if !completed.val {
+        if (done_a.val && buf_a.val.is_empty()) || (done_b.val && buf_b.val.is_empty()) {
+          completed.val = true
+          complete()
         }
-        complete()
       }
     }
     let a_sub = a_fn({
-      next: fn(v : T) { buf_a.val.push(v) },
+      next: fn(v : T) { buf_a.val.push(v); try_emit() },
       error: error,
       complete: fn() { done_a.val = true; try_emit() },
     })
     let b_sub = b_fn({
-      next: fn(v : U) { buf_b.val.push(v) },
+      next: fn(v : U) { buf_b.val.push(v); try_emit() },
       error: error,
       complete: fn() { done_b.val = true; try_emit() },
     })
-    both_subscribed.val = true
     try_emit()
     Subscription::new(fn() {
+      completed.val = true
       a_sub.dispose()
       b_sub.dispose()
     })
@@ -235,10 +237,17 @@ pub fn[T, E] amb(
     let done = Ref::Ref(false)
     let a_sub = a_fn({
       next: fn(v : T) {
-        if winner.val == 0 { winner.val = 1 }
-        if winner.val == 1 { next(v) }
+        if !done.val {
+          if winner.val == 0 { winner.val = 1 }
+          if winner.val == 1 { next(v) }
+        }
       },
-      error: error,
+      error: fn(e : E) {
+        if !done.val && winner.val != 2 {
+          done.val = true
+          error(e)
+        }
+      },
       complete: fn() {
         if !done.val && winner.val != 2 {
           done.val = true
@@ -248,10 +257,17 @@ pub fn[T, E] amb(
     })
     let b_sub = b_fn({
       next: fn(v : T) {
-        if winner.val == 0 { winner.val = 2 }
-        if winner.val == 2 { next(v) }
+        if !done.val {
+          if winner.val == 0 { winner.val = 2 }
+          if winner.val == 2 { next(v) }
+        }
       },
-      error: error,
+      error: fn(e : E) {
+        if !done.val && winner.val != 1 {
+          done.val = true
+          error(e)
+        }
+      },
       complete: fn() {
         if !done.val && winner.val != 1 {
           done.val = true
