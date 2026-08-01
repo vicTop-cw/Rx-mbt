@@ -10,4 +10,5 @@ pkg.generated.mbti
 /api_*.txt
 /mbt_names*.txt
 /rust_names.txt
-/_*.py
+/_*.py/_check_out.txt 
+/_test_out.txt 

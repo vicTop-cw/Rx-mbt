@@ -1,6 +1,0 @@
-Test subscribed
-Test on_next
-Test on_next
-Test on_next
-Test on_completed
-Total tests: 143, passed: 143, failed: 0.
