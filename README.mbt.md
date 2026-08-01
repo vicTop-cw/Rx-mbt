@@ -1,4 +1,4 @@
-# RX-MBT
+﻿# RX-MBT
 
 Rx-Rust 的 MoonBit 复刻：基于 Observer 模式的响应式编程库，纯 MoonBit 实现，零外部依赖。
 
@@ -70,7 +70,7 @@ moon test       # 运行全部测试
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端 |
 | 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | 193（基本 + 高压 + 回归，全部通过，见 `TEST_REPORT.md`） |
+| 测试数量 | 195（基本 + 高压 + 回归，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。
@@ -201,3 +201,4 @@ subject.on_completed()
 - 监控类 API（文件/文件夹监听、`watch_file` / `watch_folder` 等）未移植
 - 时间类操作符基于虚拟时钟而非真实定时器，测试时用 `advance_time(ms)` 推进
 - 背压与线程池调度器在同步模型下为签名占位，语义等价透传/立即执行
+
