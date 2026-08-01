@@ -70,7 +70,7 @@ moon test       # 运行全部测试
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端 |
 | 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | 146（基本 + 高压 + 回归，全部通过，见 `TEST_REPORT.md`） |
+| 测试数量 | 193（基本 + 高压 + 回归，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。
@@ -103,6 +103,7 @@ powershell -ExecutionPolicy Bypass -File scripts/gen_test_report.ps1
 | `test-suit/composite` | start_with / concat / merge / zip / combine_latest / with_latest_from / amb / iif / sequence_equal |
 | `test-suit/math_conditions` | drop_none / fill_none / clamp / abs / every / some / all / find / is_empty |
 | `test-suit/core` | run / debug / Subject / Scheduler / cum_* 等基础行为 |
+| `test-suit/itor` | Itor / Node 可控制迭代器：send 插队 / set_pause / resume_iter / restart 重放 / stop / history 策略 |
 | `test-suit/stress` | 高压测试：10 万元素链、多订阅者、Subject 高压、递归重试 |
 | `test-suit/bench` | 基准测试（`#skip` 默认跳过，`moon test -g bench` 运行） |
 
@@ -120,6 +121,29 @@ moon test -p test-suit/bench --include-skipped > moon_bench.json
 | `Observer[T, E]` | 观察者，承载 `on_next` / `on_error` / `on_completed` 三个回调 |
 | `Subscription` | 订阅句柄，`dispose()` 幂等取消订阅 |
 | `Clock` | 虚拟时钟，时间类操作符基于它实现，`advance_time(ms)` 推进 |
+| `Node[T]` | 惰性链表节点：持有值 + 懒加载源 + fallback，`from_iter` 构建 |
+| `Itor[T]` | 可控制迭代器（vools 风格）：支持 send 插队 / 暂停 / 重放 / 停止 / 历史策略 |
+
+## Itor / Node（可控制迭代器）
+
+复刻 vools 的 `Itor` 相关 API，包装任意可重复迭代的源（`() -> Iter[T]`）：
+
+| API | 说明 |
+|---|---|
+| `Node::new(val, next?)` / `Node::from_iter(iter)` | 构造节点 / 从迭代器构建惰性链表 |
+| `Node::val()` / `Node::next()` | 取值 / 取下一节点（懒加载展开） |
+| `Node::to_itor()` / `Node::to_iter()` | 节点链表 → Itor / Iter |
+| `Itor::new(source)` / `from_array` / `from_iter` | 构造（数组源可重复迭代，副本独立） |
+| `Itor::next()` | 取下一个值（自动初始化源） |
+| `Itor::send(node, jump_when?)` / `send_value(v)` / `send_values(arr)` | 紧急插队 / 条件插队 |
+| `Itor::set_pause()` / `resume_iter()` / `stop()` | 暂停 / 恢复 / 终止 |
+| `Itor::restart()` | 回到 Pending，从历史头部重放，重放后继续源 |
+| `Itor::history_strategy(fn)` / `set_history_max(n)` | 历史保留策略（-1 全保留 / n 条窗口） |
+| `Itor::state()` / `is_pending` / `is_iterring` / `is_paused` / `is_stopped` | 状态查询 |
+| `Itor::copy()` / `call()` | 返回独立副本（共享源工厂） |
+| `Itor::do_iter(f, pre_f?, sub_f?)` | 副作用遍历（支持前置 / 后置钩子） |
+
+**取值顺序**：历史重放（restart 后）→ 紧急插队 → 待处理源值 → 源迭代器。
 
 ## 创建类工厂
 

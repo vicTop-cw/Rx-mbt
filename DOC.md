@@ -20,6 +20,7 @@
 - [Subject（多播主题）](#subject多播主题)
 - [调度器](#调度器)
 - [自由函数操作符](#自由函数操作符)
+- [Itor / Node（可控制迭代器）](#itor--node可控制迭代器)
 - [行为约定](#行为约定)
 
 ---
@@ -378,6 +379,58 @@
 | `with_latest_from` | `fn with_latest_from(Observable[T, E], Observable[U, E]) -> Observable[(T, U), E]` | 带最新值 |
 | `zip` | `fn zip(Observable[T, E], Observable[U, E]) -> Observable[(T, U), E]` | 配对 |
 | `arg_max` / `arg_min` | `fn arg_max(Observable[T, E]) -> Observable[Int, E]`（T : Compare） | 最值索引 |
+
+---
+
+## Itor / Node（可控制迭代器）
+
+复刻 vools 的 `Itor` 相关 API：可控制迭代器包装"可重复迭代的源"（`() -> Iter[T]`），支持紧急/条件插队、断点暂停、历史重放重启与停止。内部以惰性链表 `Node[T]` 组织产出序列。
+
+### `Node[T]`
+
+惰性链表节点：持有值 `val`，通过懒加载源 `iter` 按需展开下一节点，`fallback` 指向尾后接续节点。
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `fn new(T, next? : Node[T]) -> Node[T]` | 构造节点（可指定后继） |
+| `from_iter` | `fn from_iter(Iter[T]) -> Node[T]?` | 从迭代器构建链表头；空迭代器返回 `None` |
+| `val` | `fn val(Self) -> T` | 取节点值 |
+| `set_val` | `fn set_val(Self, T) -> Unit` | 设置节点值 |
+| `next` | `fn next(Self) -> Node[T]?` | 取下一节点；懒加载节点首次访问时从源取数展开 |
+| `set_next` | `fn set_next(Self, Node[T]?) -> Unit` | 手动设置后继并清除懒加载源 |
+| `to_iter` | `fn to_iter(Self) -> Iter[T]` | 按链表顺序产出（惰性） |
+| `to_itor` | `fn to_itor(Self) -> Itor[T]` | 链表 → Itor 实例 |
+
+### `Itor[T]`
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `fn new(() -> Iter[T]) -> Itor[T]` | 用源工厂构造（每次 copy 重新调用工厂） |
+| `from_array` | `fn from_array(Array[T]) -> Itor[T]` | 数组源（副本互相独立） |
+| `from_iter` | `fn from_iter(Iter[T]) -> Itor[T]` | 一次性迭代器源（副本共享底层迭代器，与 vools 一致） |
+| `next` | `fn next(Self) -> T?` | 取下一个值（自动初始化源） |
+| `send` | `fn send(Self, Node[T], jump_when? : (Self) -> Bool) -> Self` | 紧急插队；带 `jump_when` 则为条件插队 |
+| `send_value` | `fn send_value(Self, T) -> Self` | 插队单个值 |
+| `send_values` | `fn send_values(Self, Array[T]) -> Self` | 插队一组值 |
+| `set_pause` | `fn set_pause(Self) -> Self` | 强制暂停（暂停期 `next` 返回 `None` 且不推进源） |
+| `resume_iter` | `fn resume_iter(Self) -> Self` | 恢复迭代 |
+| `stop` | `fn stop(Self) -> Self` | 终止（后续 `next` 返回 `None`） |
+| `restart` | `fn restart(Self) -> Self` | 回到 Pending，从历史头部重放，重放后继续源 |
+| `copy` / `call` | `fn copy(Self) -> Self` | 返回独立副本（共享源工厂与历史策略） |
+| `history_strategy` | `fn history_strategy(Self, ((Self) -> Unit)?) -> Self` | 设置历史保留策略（`None` 完全保留） |
+| `set_history_max` | `fn set_history_max(Self, Int) -> Unit` | 窗口化：最多保留最近 N 条（`-1` 完全保留） |
+| `history_len` | `fn history_len(Self) -> Int` | 当前历史条数 |
+| `state` | `fn state(Self) -> ItorState` | 当前状态 |
+| `is_pending` / `is_iterring` / `is_paused` / `is_stopped` | `fn is_*(Self) -> Bool` | 状态查询 |
+| `do_iter` | `fn do_iter(Self, (Self) -> Unit, pre_f? : (Self) -> Self, sub_f? : (Self) -> Unit) -> Self` | 副作用遍历（支持前置/后置钩子） |
+
+### 取值顺序
+
+历史重放（restart 后）→ 紧急插队 → 待处理源值 → 源迭代器。
+
+### `ItorState`
+
+`Pending` / `Iterring` / `Paused` / `Stopped`（derive `Eq`、`Debug`）。
 
 ---
 

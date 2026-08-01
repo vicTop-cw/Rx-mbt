@@ -97,16 +97,21 @@ test "Node: 无限惰性链表可安全取前 N 个" {
       // 手动取前 3 个：验证惰性展开
       assert_eq(head.val(), 0)
       match head.next() {
-        Some(n1) => assert_eq(n1.val(), 1)
-        None => assert_true(false)
-      }
-      // next 已被缓存，不再调用迭代器：取值仍为 1
-      match head.next() {
-        Some(n1) => assert_eq(n1.val(), 1)
-        None => assert_true(false)
-      }
-      match head.next() {
-        Some(n2) => assert_eq(n2.val(), 2)
+        Some(n1) => {
+          assert_eq(n1.val(), 1)
+          // next 已被缓存，不再调用迭代器：取值仍为 1
+          match head.next() {
+            Some(n1b) => {
+              assert_eq(n1b.val(), 1)
+              // 沿 n1b 展开下一节点：迭代器第二次被调用，得到 2
+              match n1b.next() {
+                Some(n2) => assert_eq(n2.val(), 2)
+                None => assert_true(false)
+              }
+            }
+            None => assert_true(false)
+          }
+        }
         None => assert_true(false)
       }
     }
@@ -147,7 +152,7 @@ test "Node: to_itor 无限流可 stop 终止" {
       let gen = head.to_itor()
       assert_eq(gen.next(), Some(0))
       assert_eq(gen.next(), Some(1))
-      gen.stop()
+      ignore(gen.stop())
       assert_eq(gen.next(), None)
       assert_true(gen.is_stopped())
     }
@@ -221,12 +226,12 @@ test "Itor: 暂停期间不推进，恢复后继续" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
-  gen.set_pause()
+  ignore(gen.set_pause())
   assert_true(gen.is_paused())
   // 暂停期间 next 返回 None 且不推进源
   assert_eq(gen.next(), None)
   assert_eq(gen.next(), None)
-  gen.resume_iter()
+  ignore(gen.resume_iter())
   assert_true(gen.is_iterring())
   assert_eq(gen.next(), Some(2))
   assert_eq(gen.next(), Some(3))
@@ -238,7 +243,7 @@ test "Itor: 紧急插队单节点" {
   let itor = @rx.Itor::from_array([1, 2, 3, 4, 5])
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
-  gen.send(@rx.Node::new(99))
+  ignore(gen.send(@rx.Node::new(99)))
   assert_eq(gen.next(), Some(99))
   assert_eq(gen.next(), Some(2))
   let rest : Array[Int] = []
@@ -257,7 +262,7 @@ test "Itor: 紧急插队整条链表" {
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
   match @rx.Node::from_iter([98, 99].iter()) {
-    Some(chain) => gen.send(chain)
+    Some(chain) => ignore(gen.send(chain))
     None => assert_true(false)
   }
   assert_eq(gen.next(), Some(98))
@@ -278,7 +283,7 @@ test "Itor: send_value 插队单个值" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
-  gen.send_value(88)
+  ignore(gen.send_value(88))
   assert_eq(gen.next(), Some(88))
   assert_eq(gen.next(), Some(2))
 }
@@ -288,7 +293,7 @@ test "Itor: send_values 插队多个值" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
-  gen.send_values([88, 89])
+  ignore(gen.send_values([88, 89]))
   assert_eq(gen.next(), Some(88))
   assert_eq(gen.next(), Some(89))
   assert_eq(gen.next(), Some(2))
@@ -298,10 +303,10 @@ test "Itor: send_values 插队多个值" {
 test "Itor: 条件插队（历史长度达 3 时插入单节点）" {
   let itor = @rx.Itor::from_array([1, 2, 3, 4, 5])
   let gen = itor.call()
-  gen.send(
+  ignore(gen.send(
     @rx.Node::new(88),
     jump_when=fn(it : @rx.Itor[Int]) { it.history_len() == 3 },
-  )
+  ))
   let vals : Array[Int] = []
   while true {
     match gen.next() {
@@ -317,10 +322,10 @@ test "Itor: 条件插队整条链表" {
   let itor = @rx.Itor::from_array([1, 2, 3, 4, 5])
   let gen = itor.call()
   match @rx.Node::from_iter([88, 89].iter()) {
-    Some(chain) => gen.send(
+    Some(chain) => ignore(gen.send(
       chain,
       jump_when=fn(it : @rx.Itor[Int]) { it.history_len() == 3 },
-    )
+    ))
     None => assert_true(false)
   }
   let vals : Array[Int] = []
@@ -337,10 +342,10 @@ test "Itor: 条件插队整条链表" {
 test "Itor: 条件永不满足则不插队" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
-  gen.send(
+  ignore(gen.send(
     @rx.Node::new(99),
     jump_when=fn(it : @rx.Itor[Int]) { it.history_len() > 100 },
-  )
+  ))
   let vals : Array[Int] = []
   while true {
     match gen.next() {
@@ -357,7 +362,7 @@ test "Itor: 停止后插队无效（静默忽略）" {
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
   assert_eq(gen.next(), None)
-  gen.send(@rx.Node::new(99))
+  ignore(gen.send(@rx.Node::new(99)))
   assert_eq(gen.next(), None)
 }
 
@@ -366,11 +371,11 @@ test "Itor: 链式调用返回自身" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
-  gen.send(@rx.Node::new(99)).set_pause().resume_iter()
+  ignore(gen.send(@rx.Node::new(99)).set_pause().resume_iter())
   assert_eq(gen.next(), Some(99))
   assert_eq(gen.next(), Some(2))
-  gen.history_strategy(None)
-  gen.stop()
+  ignore(gen.history_strategy(None))
+  ignore(gen.stop())
   assert_true(gen.is_stopped())
 }
 
@@ -380,7 +385,7 @@ test "Itor: restart 重放历史并继续源" {
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
   assert_eq(gen.next(), Some(2))
-  gen.restart()
+  ignore(gen.restart())
   // 重放历史 [1, 2] 后继续源剩余 [3]
   let vals : Array[Int] = []
   while true {
@@ -404,7 +409,7 @@ test "Itor: 耗尽后 restart 仍可重放全部历史" {
     }
   }
   assert_eq(vals, [1, 2, 3])
-  gen.restart()
+  ignore(gen.restart())
   let replay : Array[Int] = []
   while true {
     match gen.next() {
@@ -428,7 +433,7 @@ test "Itor: set_history_max 保留最近 N 条（N=3）" {
     }
   }
   assert_eq(vals, [1, 2, 3, 4, 5])
-  gen.restart()
+  ignore(gen.restart())
   let replay : Array[Int] = []
   while true {
     match gen.next() {
@@ -451,7 +456,7 @@ test "Itor: set_history_max(-1) 完全保留" {
       None => break
     }
   }
-  gen.restart()
+  ignore(gen.restart())
   let replay : Array[Int] = []
   while true {
     match gen.next() {
@@ -473,7 +478,7 @@ test "Itor: set_history_max(0) 不保留历史" {
       None => break
     }
   }
-  gen.restart()
+  ignore(gen.restart())
   let replay : Array[Int] = []
   while true {
     match gen.next() {
@@ -488,9 +493,9 @@ test "Itor: set_history_max(0) 不保留历史" {
 test "Itor: 自定义历史策略（完全丢弃历史）" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   // 每次产出后清空历史：restart 后无内容可重放
-  itor.history_strategy(
+  ignore(itor.history_strategy(
     Some(fn(it : @rx.Itor[Int]) { it.set_history_max(0) }),
-  )
+  ))
   let gen = itor.call()
   let vals : Array[Int] = []
   while true {
@@ -500,7 +505,7 @@ test "Itor: 自定义历史策略（完全丢弃历史）" {
     }
   }
   assert_eq(vals, [1, 2, 3])
-  gen.restart()
+  ignore(gen.restart())
   let replay : Array[Int] = []
   while true {
     match gen.next() {
@@ -517,7 +522,7 @@ test "Itor: stop 提前终止（不产出剩余值）" {
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
   assert_eq(gen.next(), Some(2))
-  gen.stop()
+  ignore(gen.stop())
   assert_eq(gen.next(), None)
   assert_true(gen.is_stopped())
 }
@@ -527,14 +532,14 @@ test "Itor: do_iter 副作用遍历" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   let seen = Ref::Ref(0)
-  gen.do_iter(fn(it : @rx.Itor[Int]) {
+  ignore(gen.do_iter(fn(it : @rx.Itor[Int]) {
     while true {
       match it.next() {
         Some(_) => seen.val = seen.val + 1
         None => break
       }
     }
-  })
+  }))
   assert_eq(seen.val, 3)
   assert_true(gen.is_stopped())
 }
@@ -544,7 +549,7 @@ test "Itor: do_iter 带 pre_f 与 sub_f" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   let log : Array[String] = []
-  gen.do_iter(
+  ignore(gen.do_iter(
     fn(it : @rx.Itor[Int]) {
       log.push("f")
       while true {
@@ -554,12 +559,12 @@ test "Itor: do_iter 带 pre_f 与 sub_f" {
         }
       }
     },
-    pre_f=Some(fn(it : @rx.Itor[Int]) -> @rx.Itor[Int] {
+    pre_f=fn(it : @rx.Itor[Int]) -> @rx.Itor[Int] {
       log.push("pre")
       it
-    }),
-    sub_f=Some(fn(it : @rx.Itor[Int]) { log.push("sub") }),
-  )
+    },
+    sub_f=fn(_ : @rx.Itor[Int]) { log.push("sub") },
+  ))
   assert_eq(log, ["pre", "f", "sub"])
 }
 
@@ -570,7 +575,7 @@ test "Itor: 插队链保留后续源（懒加载链）" {
   assert_eq(gen.next(), Some(1))
   // 懒加载链表（Node::from_iter 产生）
   match @rx.Node::from_iter([88, 89].iter()) {
-    Some(chain) => gen.send(chain)
+    Some(chain) => ignore(gen.send(chain))
     None => assert_true(false)
   }
   assert_eq(gen.next(), Some(88))
@@ -596,8 +601,8 @@ test "Itor: restart 后新插队立即生效" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
-  gen.restart()
-  gen.send_value(99)
+  ignore(gen.restart())
+  ignore(gen.send_value(99))
   // 重放历史 [1]，插队 99 在重放后、源继续前
   let vals : Array[Int] = []
   while true {

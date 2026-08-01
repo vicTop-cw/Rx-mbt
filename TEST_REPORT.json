@@ -1,10 +1,10 @@
 ﻿{
-    "generated_at":  "2026-08-01 19:26:43",
+    "generated_at":  "2026-08-01 22:09:52",
     "moon_version":  "moon 0.1.20260724 (5f1406a 2026-07-24)",
     "target":  "wasm",
     "summary":  {
-                    "total":  156,
-                    "passed":  156,
+                    "total":  193,
+                    "passed":  193,
                     "failed":  0
                 },
     "packages":  [
@@ -131,7 +131,7 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/filter",
-                         "count":  24,
+                         "count":  26,
                          "tests":  [
                                        "filter: 只放行满足谓词的值",
                                        "filter: take 取前 n 个后完成",
@@ -156,7 +156,50 @@
                                        "filter: element_at 越界发错误",
                                        "filter: take 取够后上游被取消，热流后续值不转发（回归）",
                                        "filter: contains 命中后上游被取消，后续值不转发（回归）",
-                                       "filter: element_at 命中后上游被取消，后续值不转发（回归）"
+                                       "filter: element_at 命中后上游被取消，后续值不转发（回归）",
+                                       "filter: skip_until 触发后 trigger 订阅被取消（回归）",
+                                       "filter: take_until 触发后源流被取消（回归）"
+                                   ]
+                     },
+                     {
+                         "package":  "vicTop/RX-MBT/test-suit/itor",
+                         "count":  35,
+                         "tests":  [
+                                       "Node: 值读写与 next 链",
+                                       "Node: from_iter 基本链",
+                                       "Node: from_iter 空迭代器返回 None",
+                                       "Node: to_iter 按序产出",
+                                       "Node: to_iter 单节点",
+                                       "Node: 无限惰性链表可安全取前 N 个",
+                                       "Node: to_itor 转 Itor 并迭代",
+                                       "Node: to_itor 无限流可 stop 终止",
+                                       "Itor: 全量迭代",
+                                       "Itor: from_array 全量迭代",
+                                       "Itor: 耗尽后状态为 Stopped",
+                                       "Itor: 直接 next 逐个取值",
+                                       "Itor: call 返回独立副本，互不影响",
+                                       "Itor: 暂停期间不推进，恢复后继续",
+                                       "Itor: 紧急插队单节点",
+                                       "Itor: 紧急插队整条链表",
+                                       "Itor: send_value 插队单个值",
+                                       "Itor: send_values 插队多个值",
+                                       "Itor: 条件插队（历史长度达 3 时插入单节点）",
+                                       "Itor: 条件插队整条链表",
+                                       "Itor: 条件永不满足则不插队",
+                                       "Itor: 停止后插队无效（静默忽略）",
+                                       "Itor: 链式调用返回自身",
+                                       "Itor: restart 重放历史并继续源",
+                                       "Itor: 耗尽后 restart 仍可重放全部历史",
+                                       "Itor: set_history_max 保留最近 N 条（N=3）",
+                                       "Itor: set_history_max(-1) 完全保留",
+                                       "Itor: set_history_max(0) 不保留历史",
+                                       "Itor: 自定义历史策略（完全丢弃历史）",
+                                       "Itor: stop 提前终止（不产出剩余值）",
+                                       "Itor: do_iter 副作用遍历",
+                                       "Itor: do_iter 带 pre_f 与 sub_f",
+                                       "Itor: 插队链保留后续源（懒加载链）",
+                                       "Itor: 多副本独立迭代 from_array",
+                                       "Itor: restart 后新插队立即生效"
                                    ]
                      },
                      {

@@ -4,11 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-01 19:26:43 |
+| Generated at | 2026-08-01 22:09:52 |
 | moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
 | Test target | wasm |
-| Total tests | 156 |
-| Passed | 156 |
+| Total tests | 193 |
+| Passed | 193 |
 | Failed | 0 |
 
 **Result: PASS (all green)**
@@ -22,11 +22,12 @@
 | vicTop/RX-MBT/test-suit/composite | 22 |
 | vicTop/RX-MBT/test-suit/core | 15 |
 | vicTop/RX-MBT/test-suit/create | 10 |
-| vicTop/RX-MBT/test-suit/filter | 24 |
+| vicTop/RX-MBT/test-suit/filter | 26 |
+| vicTop/RX-MBT/test-suit/itor | 35 |
 | vicTop/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop/RX-MBT/test-suit/stress | 10 |
 | vicTop/RX-MBT/test-suit/transform | 10 |
-| **Total** | **156** |
+| **Total** | **193** |
 
 ## Test listing
 
@@ -174,6 +175,48 @@
 | 22 | filter: take 取够后上游被取消，热流后续值不转发（回归） |
 | 23 | filter: contains 命中后上游被取消，后续值不转发（回归） |
 | 24 | filter: element_at 命中后上游被取消，后续值不转发（回归） |
+| 25 | filter: skip_until 触发后 trigger 订阅被取消（回归） |
+| 26 | filter: take_until 触发后源流被取消（回归） |
+
+### vicTop/RX-MBT/test-suit/itor
+
+| # | Test name |
+|---|---|
+| 1 | Node: 值读写与 next 链 |
+| 2 | Node: from_iter 基本链 |
+| 3 | Node: from_iter 空迭代器返回 None |
+| 4 | Node: to_iter 按序产出 |
+| 5 | Node: to_iter 单节点 |
+| 6 | Node: 无限惰性链表可安全取前 N 个 |
+| 7 | Node: to_itor 转 Itor 并迭代 |
+| 8 | Node: to_itor 无限流可 stop 终止 |
+| 9 | Itor: 全量迭代 |
+| 10 | Itor: from_array 全量迭代 |
+| 11 | Itor: 耗尽后状态为 Stopped |
+| 12 | Itor: 直接 next 逐个取值 |
+| 13 | Itor: call 返回独立副本，互不影响 |
+| 14 | Itor: 暂停期间不推进，恢复后继续 |
+| 15 | Itor: 紧急插队单节点 |
+| 16 | Itor: 紧急插队整条链表 |
+| 17 | Itor: send_value 插队单个值 |
+| 18 | Itor: send_values 插队多个值 |
+| 19 | Itor: 条件插队（历史长度达 3 时插入单节点） |
+| 20 | Itor: 条件插队整条链表 |
+| 21 | Itor: 条件永不满足则不插队 |
+| 22 | Itor: 停止后插队无效（静默忽略） |
+| 23 | Itor: 链式调用返回自身 |
+| 24 | Itor: restart 重放历史并继续源 |
+| 25 | Itor: 耗尽后 restart 仍可重放全部历史 |
+| 26 | Itor: set_history_max 保留最近 N 条（N=3） |
+| 27 | Itor: set_history_max(-1) 完全保留 |
+| 28 | Itor: set_history_max(0) 不保留历史 |
+| 29 | Itor: 自定义历史策略（完全丢弃历史） |
+| 30 | Itor: stop 提前终止（不产出剩余值） |
+| 31 | Itor: do_iter 副作用遍历 |
+| 32 | Itor: do_iter 带 pre_f 与 sub_f |
+| 33 | Itor: 插队链保留后续源（懒加载链） |
+| 34 | Itor: 多副本独立迭代 from_array |
+| 35 | Itor: restart 后新插队立即生效 |
 
 ### vicTop/RX-MBT/test-suit/math_conditions
 

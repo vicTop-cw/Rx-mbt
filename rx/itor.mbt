@@ -263,6 +263,8 @@ pub fn[T] Itor::restart(self : Itor[T]) -> Itor[T] {
   self.replay_node = self.history_head
   // 清空 dummy 之后可能残留的插队节点
   self.dummy = None
+  // 清空暂存源值（取数期间发生 restart 的残留）
+  self.pending_source = None
   // 清空待处理的条件插队（重启视为新生命周期）
   self.conditional_jumps = []
   self
@@ -427,20 +429,10 @@ fn[T] Itor::process_conditional_jumps(self : Itor[T]) -> Unit {
 
 /// 获取下一个待产出的节点。
 ///
-/// 取值顺序：紧急插队 -> 历史重放 -> 待处理源值 -> 源迭代器。
+/// 取值顺序：历史重放 -> 紧急插队 -> 待处理源值 -> 源迭代器。
 /// 返回 `None` 表示没有更多数据。
 fn[T] Itor::get_next_node(self : Itor[T]) -> Node[T]? {
-  // 1. 紧急插队节点优先
-  match self.dummy {
-    Some(d) => {
-      self.dummy = d.next()
-      d.set_next(None)
-      return Some(d)
-    }
-    None => ()
-  }
-
-  // 2. 重放模式：从历史链表逐个重放
+  // 1. 历史重放优先（restart 后从历史头部重放；重放期间新插队排在重放之后）
   if self.replay_mode {
     match self.replay_node {
       Some(rn) => {
@@ -454,6 +446,16 @@ fn[T] Itor::get_next_node(self : Itor[T]) -> Node[T]? {
         self.replay_mode = false
       }
     }
+  }
+
+  // 2. 紧急插队节点（普通模式下优先级最高；重放结束后紧随重放）
+  match self.dummy {
+    Some(d) => {
+      self.dummy = d.next()
+      d.set_next(None)
+      return Some(d)
+    }
+    None => ()
   }
 
   // 3. 待处理源值（源迭代期间发生 restart 时暂存）
@@ -475,39 +477,37 @@ fn[T] Itor::get_next_node(self : Itor[T]) -> Node[T]? {
     None => None
     Some(val) => {
       // 取数期间可能发生了 restart 或紧急插队
-      match self.dummy {
-        Some(d) => {
-          // 优先处理紧急插队：保存该值，先产出插队值
-          self.pending_source = Some(Node::new(val))
-          self.dummy = d.next()
-          d.set_next(None)
-          Some(d)
-        }
-        None => {
-          if self.replay_mode {
-            // 取数期间被 restart：保存该值，等重放结束后再产出
-            self.pending_source = Some(Node::new(val))
-            match self.replay_node {
-              Some(rn) => {
-                self.replay_node = rn.next()
-                let node : Node[T] = Node::new(rn.val())
-                node.is_replay = true
-                Some(node)
-              }
-              None => {
-                // 历史为空，直接产出刚才取到的值
-                let ps = match self.pending_source {
-                  Some(p) => p
-                  None => Node::new(val)
-                }
-                self.pending_source = None
-                self.replay_mode = false
-                Some(ps)
-              }
-            }
-          } else {
-            Some(Node::new(val))
+      if self.replay_mode {
+        // 取数期间被 restart：保存该值，等重放结束后再产出
+        self.pending_source = Some(Node::new(val))
+        match self.replay_node {
+          Some(rn) => {
+            self.replay_node = rn.next()
+            let node : Node[T] = Node::new(rn.val())
+            node.is_replay = true
+            Some(node)
           }
+          None => {
+            // 历史为空，直接产出刚才取到的值
+            let ps = match self.pending_source {
+              Some(p) => p
+              None => Node::new(val)
+            }
+            self.pending_source = None
+            self.replay_mode = false
+            Some(ps)
+          }
+        }
+      } else {
+        match self.dummy {
+          Some(d) => {
+            // 优先处理紧急插队：保存该值，先产出插队值
+            self.pending_source = Some(Node::new(val))
+            self.dummy = d.next()
+            d.set_next(None)
+            Some(d)
+          }
+          None => Some(Node::new(val))
         }
       }
     }
