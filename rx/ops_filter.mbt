@@ -519,19 +519,28 @@ pub fn[T, E] Observable::skip_until(
     let complete = downstream.complete
     // 状态必须每次订阅重新创建：冷流多次订阅互不影响
     let triggered = Ref::Ref(false)
-    let trigger_sub = trigger_fn({
-      next: fn(_ : Unit) { triggered.val = true },
+    let trigger_sub = Ref::Ref(Subscription::empty())
+    let source_sub = Ref::Ref(Subscription::empty())
+    trigger_sub.val = trigger_fn({
+      next: fn(_ : Unit) {
+        if !triggered.val {
+          triggered.val = true
+          // 触发后取消 trigger 订阅，避免热流继续泄漏
+          (trigger_sub.val).dispose()
+        }
+      },
       error: fn(_ : E) {},
       complete: fn() {},
     })
-    let source_sub = source_fn({
+    source_sub.val = source_fn({
       next: fn(v : T) { if triggered.val { next(v) } },
       error: error,
       complete: complete,
     })
     Subscription::new(fn() {
-      trigger_sub.dispose()
-      source_sub.dispose()
+      triggered.val = true
+      (trigger_sub.val).dispose()
+      (source_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)

@@ -238,3 +238,33 @@ test "filter: element_at 命中后上游被取消，后续值不转发（回归�
   s.on_next(30) // 已命中：应被忽略
   assert_eq(values.val, [20])
 }
+
+///|
+test "filter: skip_until 触发后 trigger 订阅被取消（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let src : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let trigger : @rx.PublishSubject[Unit, Unit] = @rx.PublishSubject::new()
+  let _ = src.as_observable().skip_until(trigger.as_observable()).subscribe_on_next(
+    fn(v : Int) { values.val.push(v) },
+  )
+  src.on_next(1) // 未触发：跳过
+  trigger.on_next(()) // 触发：此后放行
+  src.on_next(2)
+  trigger.on_next(()) // trigger 已取消：不再产生副作用（不崩溃即可）
+  src.on_next(3)
+  assert_eq(values.val, [2, 3])
+}
+
+///|
+test "filter: take_until 触发后源流被取消（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let src : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let trigger : @rx.PublishSubject[Unit, Unit] = @rx.PublishSubject::new()
+  let _ = src.as_observable().take_until(trigger.as_observable()).subscribe_on_next(
+    fn(v : Int) { values.val.push(v) },
+  )
+  src.on_next(1)
+  trigger.on_next(()) // 触发：终止并取消源流
+  src.on_next(2) // 已取消：应被忽略
+  assert_eq(values.val, [1])
+}
