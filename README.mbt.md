@@ -72,11 +72,11 @@ moon test       # 运行全部测试
 
 ## 操作符
 
-**转换类**：`map` / `filter_map` / `flat_map` / `flat_map_latest` / `scan` / `concat_map` / `switch_map` / `group_by`
+**转换类**：`map` / `filter_map` / `flat_map` / `flat_map_latest` / `scan` / `concat_map` / `switch_map` / `group_by` / `curry_map`
 
 **过滤类**：`filter` / `take` / `skip` / `first` / `last` / `take_while` / `skip_while` / `skip_n_events` / `take_n_events` / `skip_last` / `take_last` / `element_at` / `distinct` / `distinct_by` / `distinct_until_changed` / `distinct_until_changed_by` / `skip_until` / `take_until` / `contains` / `includes` / `sort` / `top_k` / `bottom_k` / `drop_none` / `fill_none` / `clamp`
 
-**聚合类**：`count` / `reduce` / `collect` / `to_list` / `sum` / `average` / `minimum` / `maximum` / `min` / `max` / `mean` / `median` / `variance` / `std` / `quantile` / `n_unique` / `arg_min` / `arg_max` / `cum_prod` / `cum_mean` / `rolling_sum` / `rolling_mean` / `rolling_min` / `rolling_max` / `rolling_count` / `to_map` / `to_set`
+**聚合类**：`count` / `reduce` / `collect` / `to_list` / `sum` / `average` / `minimum` / `maximum` / `min` / `max` / `mean` / `median` / `variance` / `std` / `quantile` / `n_unique` / `arg_min` / `arg_max` / `cum_prod` / `cum_mean` / `cum_sum` / `cum_min` / `cum_max` / `rolling_sum` / `rolling_mean` / `rolling_min` / `rolling_max` / `rolling_count` / `to_map` / `to_set` / `abs`
 
 **组合类**：`start_with` / `concat` / `merge` / `zip` / `combine_latest` / `with_latest_from` / `amb` / `end_with` / `iif` / `sequence_equal`
 

@@ -510,6 +510,81 @@ pub fn[E] Observable::cum_mean(self : Observable[Double, E]) -> Observable[Doubl
   Observable::new(subscribe_fn)
 }
 
+/// cum_sum：累积求和（每个值发出到当前的累计和）
+pub fn[T : Add + Default, E] Observable::cum_sum(self : Observable[T, E]) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T = Default::default()
+    let acc = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        acc.val = acc.val + v
+        next(acc.val)
+      },
+      error: error,
+      complete: complete,
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// cum_min：累积最小值（每个值发出当前最小值）
+pub fn[T : Compare, E] Observable::cum_min(self : Observable[T, E]) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T? = None
+    let best = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        match best.val {
+          Some(cur) => { if v.compare(cur) < 0 { best.val = Some(v) } }
+          None => best.val = Some(v)
+        }
+        match best.val {
+          Some(x) => next(x)
+          None => ()
+        }
+      },
+      error: error,
+      complete: complete,
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// cum_max：累积最大值（每个值发出当前最大值）
+pub fn[T : Compare, E] Observable::cum_max(self : Observable[T, E]) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T? = None
+    let best = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        match best.val {
+          Some(cur) => { if v.compare(cur) > 0 { best.val = Some(v) } }
+          None => best.val = Some(v)
+        }
+        match best.val {
+          Some(x) => next(x)
+          None => ()
+        }
+      },
+      error: error,
+      complete: complete,
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
 /// rolling_sum：滑动窗口求和（窗口大小 n，每个值发出当前窗口和）
 pub fn[E] Observable::rolling_sum(
   self : Observable[Double, E],

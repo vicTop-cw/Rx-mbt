@@ -153,3 +153,25 @@ pub fn[T : Compare, E] Observable::clamp(
   }
   Observable::new(subscribe_fn)
 }
+
+/// abs：对 Double 流逐元素取绝对值
+pub fn[E] Observable::abs(self : Observable[Double, E]) -> Observable[Double, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Double, E]) -> Subscription = fn(downstream : Observer[Double, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    source_fn({
+      next: fn(v : Double) {
+        if v < 0.0 {
+          next(-v)
+        } else {
+          next(v)
+        }
+      },
+      error: error,
+      complete: complete,
+    })
+  }
+  Observable::new(subscribe_fn)
+}

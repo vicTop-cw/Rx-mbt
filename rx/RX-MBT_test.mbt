@@ -51,3 +51,47 @@ test "CurrentThreadScheduler 同步执行任务" {
   assert_true(ran.val)
   assert_true(scheduler.now() >= 0L)
 }
+
+///|
+test "cum_sum 累积求和逐值发出" {
+  let values = Ref::Ref(Array::new())
+  let obs : Observable[Int, Unit] = Observable::from_iter([1, 2, 3, 4]).cum_sum()
+  let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
+  assert_eq(values.val, [1, 3, 6, 10])
+}
+
+///|
+test "cum_min 累积最小值逐值发出" {
+  let values = Ref::Ref(Array::new())
+  let obs : Observable[Int, Unit] = Observable::from_iter([5, 2, 8, 1]).cum_min()
+  let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
+  assert_eq(values.val, [5, 2, 2, 1])
+}
+
+///|
+test "cum_max 累积最大值逐值发出" {
+  let values = Ref::Ref(Array::new())
+  let obs : Observable[Int, Unit] = Observable::from_iter([3, 1, 9, 4]).cum_max()
+  let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
+  assert_eq(values.val, [3, 3, 9, 9])
+}
+
+///|
+test "abs 逐元素取绝对值" {
+  let values = Ref::Ref(Array::new())
+  let obs : Observable[Double, Unit] = Observable::from_iter([-1.5, 2.0, -3.5]).abs()
+  let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
+  assert_eq(values.val, [1.5, 2.0, 3.5])
+}
+
+///|
+test "curry_map 返回可组合函数并应用" {
+  let values = Ref::Ref(Array::new())
+  let mapper : (Observable[Int, Unit]) -> Observable[Int, Unit] = curry_map(
+    fn(v : Int, k : Int) { v * k },
+    10,
+  )
+  let obs = mapper(Observable::from_iter([1, 2, 3]))
+  let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
+  assert_eq(values.val, [10, 20, 30])
+}

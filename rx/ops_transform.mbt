@@ -179,3 +179,14 @@ pub fn[T, E, K : Hash + Eq] Observable::group_by(
     }
   Observable::new(subscribe_fn)
 }
+
+/// curry_map：把 `func(value, arg)` 部分应用到源流上，返回一个函数，
+/// 该函数接收 Observable 并返回应用后的 Observable（函数式组合用）
+pub fn[T, E, R, A] curry_map(
+  func : (T, A) -> R,
+  arg : A,
+) -> (Observable[T, E]) -> Observable[R, E] {
+  fn(source : Observable[T, E]) -> Observable[R, E] {
+    source.map(fn(v : T) { func(v, arg) })
+  }
+}
