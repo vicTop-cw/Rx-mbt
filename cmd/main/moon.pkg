@@ -1,5 +1,6 @@
-// import {
-//   "username/RX-MBT" @lib,
-// }
+import {
+  "vicTop/RX-MBT/rx" @rx,
+  "moonbitlang/core/debug",
+}
 
 pkgtype(kind: "executable")

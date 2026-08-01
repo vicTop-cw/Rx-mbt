@@ -2,6 +2,54 @@
 
 Rx-Rust 的 MoonBit 复刻：基于 Observer 模式的响应式编程库，纯 MoonBit 实现，零外部依赖。
 
+## 作为三方依赖使用
+
+本仓库是标准 MoonBit 库模块，**库代码在 `rx/` 子包中**，可通过两种方式引入：
+
+### 方式一：git 依赖（无需发布到中心仓库）
+
+```bash
+# 在你的项目里执行（仓库地址替换为实际 git 地址）
+moon add git+https://<你的仓库地址>.git
+```
+
+然后在依赖包的 `moon.pkg` 中声明并起别名：
+
+```toml
+import {
+  "vicTop/RX-MBT/rx" @rx,
+}
+```
+
+### 方式二：发布到 MoonBit 中心仓库
+
+```bash
+moon publish
+# 之后任何项目可用：
+moon add vicTop/RX-MBT
+```
+
+### 使用示例（外部项目视角）
+
+```moonbit
+// moon.pkg 中已 import "vicTop/RX-MBT/rx" @rx
+fn main {
+  // 链式调用：map -> filter -> collect
+  let result = @rx.Observable::from_iter([1, 2, 3, 4, 5])
+    .map(fn(x) { x * 2 })
+    .filter(fn(x) { x > 4 })
+  let _ = result.subscribe_on_next(fn(v) { println(v) })
+
+  // Subject 多播
+  let subject : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let _ = subject.subscribe(@rx.Observer::on_next_only(fn(v) { println("收到: \{v}") }))
+  subject.on_next(42)
+  subject.on_completed()
+}
+```
+
+本仓库自带的 `cmd/main` 就是一个完整可运行的示例：`moon run cmd/main`。
+
 ## 启动与测试
 
 ```bash

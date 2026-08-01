@@ -19,8 +19,8 @@ repository = ""
 
 license = "Apache-2.0"
 
-keywords = []
+keywords = ["reactive", "rx", "observable", "observer", "stream"]
 
 preferred_target = "wasm"
 
-description = ""
+description = "Rx-Rust 的 MoonBit 复刻：基于 Observer 模式的响应式编程库（Observable / Subject / Scheduler / 操作符），零外部依赖。"
