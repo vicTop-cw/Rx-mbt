@@ -140,3 +140,41 @@ test "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复
   // 终止后重放已完成前缓冲的历史（[1]），on_next(2) 未进入缓冲
   assert_eq(values.val, [1])
 }
+
+///|
+test "delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let done : Ref[Bool] = Ref::Ref(false)
+  let clock = @rx.Clock::new()
+  let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3])
+  let _ = src.delay_on(clock, 10L).subscribe(
+    @rx.Observer::new(
+      fn(v : Int) { values.val.push(v) },
+      fn(_ : Unit) {},
+      fn() { done.val = true },
+    ),
+  )
+  // 源已同步完成，但延迟值尚未发射，complete 也不应已触发
+  assert_eq(values.val, [])
+  assert_true(!done.val)
+  clock.advance(10L)
+  assert_eq(values.val, [1, 2, 3])
+  assert_true(done.val)
+}
+
+///|
+test "timeout_on 源完成后挂起 timer 不误触发错误（回归）" {
+  let got_err : Ref[Bool] = Ref::Ref(false)
+  let clock = @rx.Clock::new()
+  let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1])
+  let _ = src.timeout_on(clock, 50L).subscribe(
+    @rx.Observer::new(
+      fn(_ : Int) {},
+      fn(_ : Unit) { got_err.val = true },
+      fn() {},
+    ),
+  )
+  // 源已完成，推进时钟越过超时点：不应触发错误
+  clock.advance(100L)
+  assert_true(!got_err.val)
+}

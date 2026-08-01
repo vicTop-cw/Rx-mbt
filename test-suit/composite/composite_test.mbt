@@ -223,3 +223,23 @@ test "composite: amb a 胜出后 b 订阅被取消，b 后续值不转发（回�
   a.on_next(3)
   assert_eq(values.val, [1, 3])
 }
+
+///|
+test "composite: concat 进入第二段后 dispose 可取消第二段订阅（回归）" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let done : Ref[Bool] = Ref::Ref(false)
+  let tail : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
+  let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1])
+  let sub = src.concat(tail.as_observable()).subscribe(
+    @rx.Observer::new(
+      fn(v : Int) { values.val.push(v) },
+      fn(_ : Unit) {},
+      fn() { done.val = true },
+    ),
+  )
+  assert_eq(values.val, [1]) // 第一段已完成，第二段已订阅
+  sub.dispose()
+  tail.on_next(2) // 第二段已取消：不转发
+  assert_eq(values.val, [1])
+  assert_true(!done.val)
+}

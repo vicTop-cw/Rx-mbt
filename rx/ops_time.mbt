@@ -169,8 +169,15 @@ pub fn[T, E] Observable::delay_on(
       error: error,
       complete: fn() {
         if !stopped.val {
-          stopped.val = true
-          complete()
+          // Rx 语义：complete 也要延迟到所有挂起值发射之后，
+          // 避免 stopped 提前拦截尚未触发的延迟值
+          let handle = clock.set_timer(ms, fn() {
+            if !stopped.val {
+              stopped.val = true
+              complete()
+            }
+          })
+          timers.val.push(handle)
         }
       },
     })
@@ -234,6 +241,8 @@ pub fn[T, E] Observable::debounce_on(
       complete: fn() {
         if !stopped.val {
           stopped.val = true
+          // 取消挂起的 debounce timer，避免时钟队列残留空转定时器
+          (timer_handle.val).dispose()
           // Rx 语义：完成时立即发出最后一个未发射的值（不等 debounce 窗口）
           flush()
           complete()
@@ -329,11 +338,13 @@ pub fn[T, E : Default] Observable::timeout_on(
         armed.val = true
         timer_handle.val = clock.set_timer(ms, fn() {
           armed.val = false
-          if clock.now() >= due.val {
-            stopped.val = true
-            error(E::default())
-          } else {
-            (arm_ref.val)()
+          if !stopped.val {
+            if clock.now() >= due.val {
+              stopped.val = true
+              error(E::default())
+            } else {
+              (arm_ref.val)()
+            }
           }
         })
       }
@@ -351,6 +362,8 @@ pub fn[T, E : Default] Observable::timeout_on(
       error: error,
       complete: fn() {
         stopped.val = true
+        // 取消挂起的超时 timer，避免时钟队列残留空转定时器
+        (timer_handle.val).dispose()
         complete()
       },
     })
@@ -402,6 +415,8 @@ pub fn[T, E] Observable::sample_on(
       error: error,
       complete: fn() {
         stopped.val = true
+        // 取消采样 timer，避免时钟队列残留空转定时器
+        (timer_handle.val).dispose()
         complete()
       },
     })

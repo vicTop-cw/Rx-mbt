@@ -4,11 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-01 19:19:45 |
+| Generated at | 2026-08-01 19:23:44 |
 | moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
 | Test target | wasm |
-| Total tests | 152 |
-| Passed | 152 |
+| Total tests | 155 |
+| Passed | 155 |
 | Failed | 0 |
 
 **Result: PASS (all green)**
@@ -19,14 +19,14 @@
 |---|---|
 | vicTop/RX-MBT/rx | 7 |
 | vicTop/RX-MBT/test-suit/aggregation | 37 |
-| vicTop/RX-MBT/test-suit/composite | 20 |
-| vicTop/RX-MBT/test-suit/core | 13 |
+| vicTop/RX-MBT/test-suit/composite | 21 |
+| vicTop/RX-MBT/test-suit/core | 15 |
 | vicTop/RX-MBT/test-suit/create | 10 |
 | vicTop/RX-MBT/test-suit/filter | 24 |
 | vicTop/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop/RX-MBT/test-suit/stress | 10 |
 | vicTop/RX-MBT/test-suit/transform | 10 |
-| **Total** | **152** |
+| **Total** | **155** |
 
 ## Test listing
 
@@ -108,6 +108,7 @@
 | 18 | composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标准语义） |
 | 19 | composite: zip 任一源错误时立即终止并取消对方订阅（回归） |
 | 20 | composite: amb a 胜出后 b 订阅被取消，b 后续值不转发（回归） |
+| 21 | composite: concat 进入第二段后 dispose 可取消第二段订阅（回归） |
 
 ### vicTop/RX-MBT/test-suit/core
 
@@ -126,6 +127,8 @@
 | 11 | abs 逐元素取绝对值 |
 | 12 | curry_map 返回可组合函数并应用 |
 | 13 | ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复） |
+| 14 | delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟） |
+| 15 | timeout_on 源完成后挂起 timer 不误触发错误（回归） |
 
 ### vicTop/RX-MBT/test-suit/create
 

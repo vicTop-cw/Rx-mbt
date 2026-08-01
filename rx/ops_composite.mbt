@@ -37,19 +37,27 @@ pub fn[T, E] Observable::concat(
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
-    source_fn({
+    let stopped = Ref::Ref(false)
+    let other_sub = Ref::Ref(Subscription::empty())
+    let source_sub = source_fn({
       next: next,
       error: error,
       complete: fn() {
-        if !done.val {
+        if !done.val && !stopped.val {
           done.val = true
-          let _ = other_fn({
+          other_sub.val = other_fn({
             next: next,
             error: error,
             complete: complete,
           })
         }
       },
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      done.val = true
+      source_sub.dispose()
+      (other_sub.val).dispose()
     })
   }
   Observable::new(subscribe_fn)
@@ -407,6 +415,21 @@ pub fn[T : Eq, E] sequence_equal(
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
     let emitted = Ref::Ref(false)
+    let a_sub = Ref::Ref(Subscription::empty())
+    let b_sub = Ref::Ref(Subscription::empty())
+    let stop_all : () -> Unit = fn() {
+      if !emitted.val {
+        emitted.val = true
+        (a_sub.val).dispose()
+        (b_sub.val).dispose()
+      }
+    }
+    let fail : (E) -> Unit = fn(e : E) {
+      if !emitted.val {
+        stop_all()
+        error(e)
+      }
+    }
     let try_emit : () -> Unit = fn() {
       if done_a.val && done_b.val && !emitted.val {
         emitted.val = true
@@ -428,19 +451,22 @@ pub fn[T : Eq, E] sequence_equal(
         complete()
       }
     }
-    let a_sub = a_fn({
-      next: fn(v : T) { buf_a.val.push(v) },
-      error: error,
+    a_sub.val = a_fn({
+      next: fn(v : T) {
+        if !emitted.val { buf_a.val.push(v) }
+      },
+      error: fail,
       complete: fn() { done_a.val = true; try_emit() },
     })
-    let b_sub = b_fn({
-      next: fn(v : T) { buf_b.val.push(v) },
-      error: error,
+    b_sub.val = b_fn({
+      next: fn(v : T) {
+        if !emitted.val { buf_b.val.push(v) }
+      },
+      error: fail,
       complete: fn() { done_b.val = true; try_emit() },
     })
     Subscription::new(fn() {
-      a_sub.dispose()
-      b_sub.dispose()
+      stop_all()
     })
   }
   Observable::new(subscribe_fn)
