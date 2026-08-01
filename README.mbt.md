@@ -57,18 +57,23 @@ moon check      # 类型检查（零警告零错误）
 moon test       # 运行全部测试
 ```
 
+> 完整的 API 签名与语义说明见 [DOC.md](DOC.md)（按分类整理的全部公开 API）。
+
 ### 版本与测试环境
+
+本项目在以下环境验证通过：
 
 | 项目 | 值 |
 |---|---|
-| MoonBit 工具链 | `moon 0.1.20260724 (5f1406a 2026-07-24)` |
+| MoonBit 工具链 | `moon 0.1.20260724 (5f1406a 2026-07-24)`（`moon version` 输出） |
+| 操作系统 | Windows 11（PowerShell 7 / Windows PowerShell 5.1 均可运行脚本） |
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端 |
-| 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod`） |
-| 测试数量 | 140（基本 + 高压，见 `TEST_REPORT.md`） |
+| 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
+| 测试数量 | 146（基本 + 高压 + 回归，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
-> 工具链版本以 `moon version` 输出为准。本项目在 Windows 11 + MoonBit 0.1.20260724 上验证通过。
+> 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。
 
 ### 测试报告
 

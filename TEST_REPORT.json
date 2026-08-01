@@ -1,10 +1,10 @@
 ﻿{
-    "generated_at":  "2026-08-01 17:52:46",
+    "generated_at":  "2026-08-01 19:08:58",
     "moon_version":  "moon 0.1.20260724 (5f1406a 2026-07-24)",
     "target":  "wasm",
     "summary":  {
-                    "total":  140,
-                    "passed":  140,
+                    "total":  146,
+                    "passed":  146,
                     "failed":  0
                 },
     "packages":  [
@@ -66,7 +66,7 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/composite",
-                         "count":  15,
+                         "count":  18,
                          "tests":  [
                                        "composite: start_with 前置发射前缀",
                                        "composite: concat 串接两个流",
@@ -76,23 +76,28 @@
                                        "composite: combine_latest 任一源新值时组合",
                                        "composite: with_latest_from a 发值时带 b 最新值",
                                        "composite: amb 先发射者胜出",
+                                       "composite: amb 先完成者胜出，另一方后续值被忽略（回归）",
                                        "composite: end_with 完成前追加后缀",
                                        "composite: iif 条件为真选 then 分支",
                                        "composite: iif 条件为假选 otherwise 分支",
                                        "composite: sequence_equal 相等返回 true",
                                        "composite: sequence_equal 不等返回 false",
                                        "composite: zip 方法版配对",
-                                       "composite: zip 任一源完成即终止（回归：不等挂起的另一源）"
+                                       "composite: zip 双方都有值时立即配对发射（Subject 热流回归）",
+                                       "composite: zip 一方完成且缓冲耗尽即终止（不等挂起的另一源）",
+                                       "composite: zip 一方完成但缓冲有值则等另一方配对（Rx 标准语义）"
                                    ]
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/core",
-                         "count":  10,
+                         "count":  12,
                          "tests":  [
                                        "run 立即消费并原样返回",
                                        "debug 透传所有值",
                                        "all 全满足发 true",
                                        "ReplaySubject with_buffer_size 只重放最近 N 个",
+                                       "PublishSubject 完成后新订阅者立即收到完成信号",
+                                       "BehaviorSubject 出错后新订阅者立即收到错误且不重放当前值",
                                        "CurrentThreadScheduler 同步执行任务",
                                        "cum_sum 累积求和逐值发出",
                                        "cum_min 累积最小值逐值发出",
@@ -189,12 +194,13 @@
                      },
                      {
                          "package":  "vicTop/RX-MBT/test-suit/transform",
-                         "count":  9,
+                         "count":  10,
                          "tests":  [
                                        "transform: map 对每个值应用映射",
                                        "transform: filter_map 保留 Some 丢弃 None",
                                        "transform: flat_map 平铺内部流",
                                        "transform: scan 累积并发出中间结果",
+                                       "transform: scan 多次订阅各自独立（冷流语义）",
                                        "transform: concat_map 串行平铺",
                                        "transform: switch_map 切换到最新内部流",
                                        "transform: flat_map_latest 别名 switch_map",
