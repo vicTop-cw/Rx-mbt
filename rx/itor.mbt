@@ -181,6 +181,26 @@ pub fn[T] Itor::state(self : Itor[T]) -> ItorState {
   self.state
 }
 
+/// 是否处于 Pending（未开始或已重置）
+pub fn[T] Itor::is_pending(self : Itor[T]) -> Bool {
+  self.state == Pending
+}
+
+/// 是否处于 Iterring（正在迭代中）
+pub fn[T] Itor::is_iterring(self : Itor[T]) -> Bool {
+  self.state == Iterring
+}
+
+/// 是否处于 Paused（已暂停）
+pub fn[T] Itor::is_paused(self : Itor[T]) -> Bool {
+  self.state == Paused
+}
+
+/// 是否处于 Stopped（已终止）
+pub fn[T] Itor::is_stopped(self : Itor[T]) -> Bool {
+  self.state == Stopped
+}
+
 /// 插队：将 `jump` 节点链表插入到下一个产出位置。
 ///
 /// 在 `jump_when` 为 `None` 时紧急插队（下一轮立即产出）；

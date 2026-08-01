@@ -1,0 +1,321 @@
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:131:30 ]
+     │
+ 131 │       assert_eq(gen.state(), @rx.Stopped)
+     │                              ─────┬─────  
+     │                                   ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:150:7 ]
+     │
+ 150 │       gen.stop()
+     │       ─────┬────  
+     │            ╰────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:152:30 ]
+     │
+ 152 │       assert_eq(gen.state(), @rx.Stopped)
+     │                              ─────┬─────  
+     │                                   ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:192:26 ]
+     │
+ 192 │   assert_eq(gen.state(), @rx.Stopped)
+     │                          ─────┬─────  
+     │                               ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:202:27 ]
+     │
+ 202 │   assert_eq(itor.state(), @rx.Stopped)
+     │                           ─────┬─────  
+     │                                ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:209:26 ]
+     │
+ 209 │   assert_eq(gen.state(), @rx.Pending)
+     │                          ─────┬─────  
+     │                               ╰─────── Cannot create values of the read-only type: Pending.
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:210:27 ]
+     │
+ 210 │   assert_eq(itor.state(), @rx.Pending)
+     │                           ─────┬─────  
+     │                                ╰─────── Cannot create values of the read-only type: Pending.
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:212:26 ]
+     │
+ 212 │   assert_eq(gen.state(), @rx.Iterring)
+     │                          ──────┬─────  
+     │                                ╰─────── Cannot create values of the read-only type: Iterring.
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:213:27 ]
+     │
+ 213 │   assert_eq(itor.state(), @rx.Pending)
+     │                           ─────┬─────  
+     │                                ╰─────── Cannot create values of the read-only type: Pending.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:224:3 ]
+     │
+ 224 │   gen.set_pause()
+     │   ───────┬───────  
+     │          ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:225:26 ]
+     │
+ 225 │   assert_eq(gen.state(), @rx.Paused)
+     │                          ─────┬────  
+     │                               ╰────── Cannot create values of the read-only type: Paused.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:229:3 ]
+     │
+ 229 │   gen.resume_iter()
+     │   ────────┬────────  
+     │           ╰────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:230:26 ]
+     │
+ 230 │   assert_eq(gen.state(), @rx.Iterring)
+     │                          ──────┬─────  
+     │                                ╰─────── Cannot create values of the read-only type: Iterring.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:241:3 ]
+     │
+ 241 │   gen.send(@rx.Node::new(99))
+     │   ─────────────┬─────────────  
+     │                ╰─────────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:260:20 ]
+     │
+ 260 │     Some(chain) => gen.send(chain)
+     │                    ───────┬───────  
+     │                           ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:281:3 ]
+     │
+ 281 │   gen.send_value(88)
+     │   ─────────┬────────  
+     │            ╰────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:291:3 ]
+     │
+ 291 │   gen.send_values([88, 89])
+     │   ────────────┬────────────  
+     │               ╰────────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:301:3 ]
+     │
+ 301 │ ╭─▶   gen.send(
+     ┆ ┆   
+ 304 │ ├─▶   )
+     │ │         
+     │ ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:320:20 ]
+     │
+ 320 │ ╭─▶     Some(chain) => gen.send(
+     ┆ ┆   
+ 323 │ ├─▶     )
+     │ │           
+     │ ╰─────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:340:3 ]
+     │
+ 340 │ ╭─▶   gen.send(
+     ┆ ┆   
+ 343 │ ├─▶   )
+     │ │         
+     │ ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:360:3 ]
+     │
+ 360 │   gen.send(@rx.Node::new(99))
+     │   ─────────────┬─────────────  
+     │                ╰─────────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:369:3 ]
+     │
+ 369 │   gen.send(@rx.Node::new(99)).set_pause().resume_iter()
+     │   ──────────────────────────┬──────────────────────────  
+     │                             ╰──────────────────────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:372:3 ]
+     │
+ 372 │   gen.history_strategy(None)
+     │   ─────────────┬────────────  
+     │                ╰────────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:373:3 ]
+     │
+ 373 │   gen.stop()
+     │   ─────┬────  
+     │        ╰────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:374:26 ]
+     │
+ 374 │   assert_eq(gen.state(), @rx.Stopped)
+     │                          ─────┬─────  
+     │                               ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:383:3 ]
+     │
+ 383 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:407:3 ]
+     │
+ 407 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:431:3 ]
+     │
+ 431 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:454:3 ]
+     │
+ 454 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:476:3 ]
+     │
+ 476 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:491:3 ]
+     │
+ 491 │ ╭─▶   itor.history_strategy(
+     ┆ ┆   
+ 493 │ ├─▶   )
+     │ │         
+     │ ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:503:3 ]
+     │
+ 503 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:520:3 ]
+     │
+ 520 │   gen.stop()
+     │   ─────┬────  
+     │        ╰────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:522:26 ]
+     │
+ 522 │   assert_eq(gen.state(), @rx.Stopped)
+     │                          ─────┬─────  
+     │                               ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:530:3 ]
+     │
+ 530 │ ╭─▶   gen.do_iter(fn(it : @rx.Itor[Int]) {
+     ┆ ┆   
+ 537 │ ├─▶   })
+     │ │          
+     │ ╰────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4036]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:539:26 ]
+     │
+ 539 │   assert_eq(gen.state(), @rx.Stopped)
+     │                          ─────┬─────  
+     │                               ╰─────── Cannot create values of the read-only type: Stopped.
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:547:3 ]
+     │
+ 547 │ ╭─▶   gen.do_iter(
+     ┆ ┆   
+ 562 │ ├─▶   )
+     │ │         
+     │ ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4014]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:557:11 ]
+     │
+ 557 │ ╭─▶     pre_f=Some(fn(it : @rx.Itor[Int]) -> @rx.Itor[Int] {
+     ┆ ┆   
+ 560 │ ├─▶     }),
+     │ │             
+     │ ╰───────────── Constr Type Mismatch(constructor Some)
+        has type : _/0?
+        wanted   : (@vicTop/RX-MBT/rx.Itor[Int]) -> @vicTop/RX-MBT/rx.Itor[Int]
+─────╯
+Error: [4014]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:561:11 ]
+     │
+ 561 │     sub_f=Some(fn(it : @rx.Itor[Int]) { log.push("sub") }),
+     │           ────────────────────────┬───────────────────────  
+     │                                   ╰───────────────────────── Constr Type Mismatch(constructor Some)
+        has type : _/0?
+        wanted   : (@vicTop/RX-MBT/rx.Itor[Int]) -> Unit
+─────╯
+Warning: [0002]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:561:19 ]
+     │
+ 561 │     sub_f=Some(fn(it : @rx.Itor[Int]) { log.push("sub") }),
+     │                   ─┬  
+     │                    ╰── Warning (unused_value): Unused variable 'it'
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:573:20 ]
+     │
+ 573 │     Some(chain) => gen.send(chain)
+     │                    ───────┬───────  
+     │                           ╰───────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:599:3 ]
+     │
+ 599 │   gen.restart()
+     │   ──────┬──────  
+     │         ╰──────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Error: [4139]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\test-suit\itor\itor_test.mbt:600:3 ]
+     │
+ 600 │   gen.send_value(99)
+     │   ─────────┬────────  
+     │            ╰────────── This expression has type @vicTop/RX-MBT/rx.Itor[Int], its value cannot be implicitly ignored (hint: use `ignore(...)` or `let _ = ...` to explicitly ignore it).
+─────╯
+Failed with 1 warnings, 42 errors.
+Error: failed when checking project

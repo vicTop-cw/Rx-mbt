@@ -1,0 +1,30 @@
+Error: [3006]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\rx\itor.mbt:120:3 ]
+     │
+ 120 │   pub Pending
+     │   ─┬─  
+     │    ╰─── No individual visibility for enum constructor.
+─────╯
+Error: [3006]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\rx\itor.mbt:121:3 ]
+     │
+ 121 │   pub Iterring
+     │   ─┬─  
+     │    ╰─── No individual visibility for enum constructor.
+─────╯
+Error: [3006]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\rx\itor.mbt:122:3 ]
+     │
+ 122 │   pub Paused
+     │   ─┬─  
+     │    ╰─── No individual visibility for enum constructor.
+─────╯
+Error: [3006]
+     ╭─[ C:\Users\victo\.atomcode-air\workspace\rx-mbt\rx\itor.mbt:123:3 ]
+     │
+ 123 │   pub Stopped
+     │   ─┬─  
+     │    ╰─── No individual visibility for enum constructor.
+─────╯
+Failed with 0 warnings, 4 errors.
+Error: failed when checking project

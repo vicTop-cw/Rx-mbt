@@ -128,7 +128,7 @@ test "Node: to_itor 转 Itor 并迭代" {
         }
       }
       assert_eq(vals, [1, 2, 3])
-      assert_eq(gen.state(), @rx.Stopped)
+      assert_true(gen.is_stopped())
     }
     None => assert_true(false)
   }
@@ -149,7 +149,7 @@ test "Node: to_itor 无限流可 stop 终止" {
       assert_eq(gen.next(), Some(1))
       gen.stop()
       assert_eq(gen.next(), None)
-      assert_eq(gen.state(), @rx.Stopped)
+      assert_true(gen.is_stopped())
     }
     None => assert_true(false)
   }
@@ -189,7 +189,7 @@ test "Itor: 耗尽后状态为 Stopped" {
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
   assert_eq(gen.next(), None)
-  assert_eq(gen.state(), @rx.Stopped)
+  assert_true(gen.is_stopped())
 }
 
 ///|
@@ -199,18 +199,18 @@ test "Itor: 直接 next 逐个取值" {
   assert_eq(itor.next(), Some(2))
   assert_eq(itor.next(), Some(3))
   assert_eq(itor.next(), None)
-  assert_eq(itor.state(), @rx.Stopped)
+  assert_true(itor.is_stopped())
 }
 
 ///|
 test "Itor: call 返回独立副本，互不影响" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
-  assert_eq(gen.state(), @rx.Pending)
-  assert_eq(itor.state(), @rx.Pending)
+  assert_true(gen.is_pending())
+  assert_true(itor.is_pending())
   assert_eq(gen.next(), Some(1))
-  assert_eq(gen.state(), @rx.Iterring)
-  assert_eq(itor.state(), @rx.Pending)
+  assert_true(gen.is_iterring())
+  assert_true(itor.is_pending())
   // 原实例仍可独立迭代
   assert_eq(itor.next(), Some(1))
   assert_eq(itor.next(), Some(2))
@@ -222,12 +222,12 @@ test "Itor: 暂停期间不推进，恢复后继续" {
   let gen = itor.call()
   assert_eq(gen.next(), Some(1))
   gen.set_pause()
-  assert_eq(gen.state(), @rx.Paused)
+  assert_true(gen.is_paused())
   // 暂停期间 next 返回 None 且不推进源
   assert_eq(gen.next(), None)
   assert_eq(gen.next(), None)
   gen.resume_iter()
-  assert_eq(gen.state(), @rx.Iterring)
+  assert_true(gen.is_iterring())
   assert_eq(gen.next(), Some(2))
   assert_eq(gen.next(), Some(3))
   assert_eq(gen.next(), None)
@@ -371,7 +371,7 @@ test "Itor: 链式调用返回自身" {
   assert_eq(gen.next(), Some(2))
   gen.history_strategy(None)
   gen.stop()
-  assert_eq(gen.state(), @rx.Stopped)
+  assert_true(gen.is_stopped())
 }
 
 ///|
@@ -519,7 +519,7 @@ test "Itor: stop 提前终止（不产出剩余值）" {
   assert_eq(gen.next(), Some(2))
   gen.stop()
   assert_eq(gen.next(), None)
-  assert_eq(gen.state(), @rx.Stopped)
+  assert_true(gen.is_stopped())
 }
 
 ///|
@@ -536,7 +536,7 @@ test "Itor: do_iter 副作用遍历" {
     }
   })
   assert_eq(seen.val, 3)
-  assert_eq(gen.state(), @rx.Stopped)
+  assert_true(gen.is_stopped())
 }
 
 ///|
