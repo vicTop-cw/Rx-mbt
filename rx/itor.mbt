@@ -568,3 +568,17 @@ pub fn[T] Itor::history_len(self : Itor[T]) -> Int {
   }
   count
 }
+
+/// 折叠：从 seed 开始，逐次调用 f(acc, next_value) 消费整个迭代器。
+/// 对应 Haskell `Data.Iterator.fold`（或 Prelude `foldl`）语义：
+/// 持续调用 `next` 直到流结束（状态为 Stopped），返回最终累积值。
+pub fn[T, Acc] Itor::fold(self : Itor[T], seed : Acc, f : (Acc, T) -> Acc) -> Acc {
+  let mut acc = seed
+  while true {
+    match self.next() {
+      Some(v) => acc = f(acc, v)
+      None => break
+    }
+  }
+  acc
+}
