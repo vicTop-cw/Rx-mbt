@@ -1099,3 +1099,871 @@ pub fn[T] Itor::intercalate(self : Itor[Array[T]], sep : Array[T]) -> Itor[T] {
     })
   })
 }
+
+// ============================================================================
+// Haskell Data.List 语义对照补全（第二批）
+// 补齐以下缺失语义操作：
+//   折叠：foldl1 / foldr1 / and / or / maximum_by / minimum_by
+//   扫描：scanl1 / scanr / scanr1
+//   排序：sort（默认自然序，T : Compare）
+//   前缀/后缀：strip_prefix / strip_suffix / is_subsequence_of
+//   索引：(!!) 按下标取元素 at
+//   集合：nub_by / delete_first / delete_first_by / difference(\\) /
+//         union / intersect / insert / insert_by
+//   分组：group_adjacent_by（自定义谓词相邻分组）
+//   结构：transpose / subsequences / permutations / chunks_of / fold_map
+//   多元 zip：zip3 / zip_with3 / unzip / unzip3
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 折叠类补全（消费式）
+// ----------------------------------------------------------------------------
+
+/// foldl1：无种子左折叠。首元素作为初始累积值；空迭代器返回 None。
+/// 语义同 Haskell `foldl1 f xs`。
+pub fn[T] Itor::foldl1(self : Itor[T], f : (T, T) -> T) -> T? {
+  let init : T? = None
+  let acc = Ref::Ref(init)
+  while true {
+    match self.next() {
+      Some(v) => {
+        match acc.val {
+          Some(a) => acc.val = Some(f(a, v))
+          None => acc.val = Some(v)
+        }
+      }
+      None => break
+    }
+  }
+  acc.val
+}
+
+/// foldr1：无种子右折叠。末元素作为初始累积值；空迭代器返回 None。
+/// 语义同 Haskell `foldr1 f xs`：f(x1, f(x2, ... f(x(n-1), xn)))。
+pub fn[T] Itor::foldr1(self : Itor[T], f : (T, T) -> T) -> T? {
+  let arr = self.to_array()
+  if arr.is_empty() {
+    return None
+  }
+  let mut acc = arr[arr.length() - 1]
+  let mut i = arr.length() - 2
+  while i >= 0 {
+    acc = f(arr[i], acc)
+    i = i - 1
+  }
+  Some(acc)
+}
+
+/// all_true：Bool 流是否全为 true（短路，遇到 false 立即返回）。
+/// 语义同 Haskell `and` = foldr (&&) True（`and` 为 MoonBit 关键字故改名）。
+pub fn Itor::all_true(self : Itor[Bool]) -> Bool {
+  while true {
+    match self.next() {
+      Some(v) => {
+        if !v {
+          return false
+        }
+      }
+      None => break
+    }
+  }
+  true
+}
+
+/// any_true：Bool 流是否存在 true（短路，遇到 true 立即返回）。
+/// 语义同 Haskell `or` = foldr (||) False（`or` 为 MoonBit 关键字故改名）。
+pub fn Itor::any_true(self : Itor[Bool]) -> Bool {
+  while true {
+    match self.next() {
+      Some(v) => {
+        if v {
+          return true
+        }
+      }
+      None => break
+    }
+  }
+  false
+}
+
+/// maximum_by：按比较函数求最大，空迭代器返回 None。
+/// 语义同 Haskell `maximumBy cmp xs`。cmp 返回负数/零/正数。
+pub fn[T] Itor::maximum_by(self : Itor[T], cmp : (T, T) -> Int) -> T? {
+  let init : T? = None
+  let best = Ref::Ref(init)
+  while true {
+    match self.next() {
+      Some(v) => {
+        match best.val {
+          Some(cur) => {
+            if cmp(v, cur) > 0 {
+              best.val = Some(v)
+            }
+          }
+          None => best.val = Some(v)
+        }
+      }
+      None => break
+    }
+  }
+  best.val
+}
+
+/// minimum_by：按比较函数求最小，空迭代器返回 None。
+/// 语义同 Haskell `minimumBy cmp xs`。cmp 返回负数/零/正数。
+pub fn[T] Itor::minimum_by(self : Itor[T], cmp : (T, T) -> Int) -> T? {
+  let init : T? = None
+  let best = Ref::Ref(init)
+  while true {
+    match self.next() {
+      Some(v) => {
+        match best.val {
+          Some(cur) => {
+            if cmp(v, cur) < 0 {
+              best.val = Some(v)
+            }
+          }
+          None => best.val = Some(v)
+        }
+      }
+      None => break
+    }
+  }
+  best.val
+}
+
+// ----------------------------------------------------------------------------
+// 扫描类补全（scanl1 / scanr / scanr1）
+// ----------------------------------------------------------------------------
+
+/// scanl1：无种子左扫描。首元素作为初始累积值，逐元素产出累积。
+/// 语义同 Haskell `scanl1 f xs`；空迭代器返回空。
+pub fn[T] Itor::scanl1(self : Itor[T], f : (T, T) -> T) -> Itor[T] {
+  let src = self
+  let init : T? = None
+  let acc = Ref::Ref(init)
+  let started = Ref::Ref(false)
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      if !started.val {
+        match src.next() {
+          Some(v) => {
+            started.val = true
+            acc.val = Some(v)
+            return Some(v)
+          }
+          None => return None
+        }
+      }
+      match src.next() {
+        Some(v) => {
+          match acc.val {
+            Some(a) => {
+              let new_acc = f(a, v)
+              acc.val = Some(new_acc)
+              Some(new_acc)
+            }
+            None => {
+              acc.val = Some(v)
+              Some(v)
+            }
+          }
+        }
+        None => None
+      }
+    })
+  })
+}
+
+/// scanr：带种子的右扫描。从右往左累积，结果顺序与输入一致（末尾附 seed）。
+/// 语义同 Haskell `scanr f z xs`；空迭代器产出 [z]。
+pub fn[T, Acc] Itor::scanr(self : Itor[T], seed : Acc, f : (T, Acc) -> Acc) -> Itor[Acc] {
+  let src = self
+  Itor::new(fn() {
+    let results = Ref::Ref(Array::new())
+    let idx = Ref::Ref(0)
+    let loaded = Ref::Ref(false)
+    Iter::new(fn() -> Acc? {
+      if !loaded.val {
+        // 先收集全部（右折叠依赖右端）
+        let arr = Array::new()
+        while true {
+          match src.next() {
+            Some(v) => arr.push(v)
+            None => break
+          }
+        }
+        // 从右往左累积：results[i] = f(arr[i], results[i+1])，最后补 seed
+        let out = Array::new()
+        let mut acc = seed
+        let mut i = arr.length() - 1
+        while i >= 0 {
+          acc = f(arr[i], acc)
+          out.push(acc)
+          i = i - 1
+        }
+        out.rev_in_place()
+        out.push(seed)
+        results.val = out
+        loaded.val = true
+      }
+      if idx.val < results.val.length() {
+        let v = results.val[idx.val]
+        idx.val = idx.val + 1
+        Some(v)
+      } else {
+        None
+      }
+    })
+  })
+}
+
+/// scanr1：无种子的右扫描。末元素自身作为累积起点。
+/// 语义同 Haskell `scanr1 f xs`；空迭代器返回空。
+pub fn[T] Itor::scanr1(self : Itor[T], f : (T, T) -> T) -> Itor[T] {
+  let src = self
+  Itor::new(fn() {
+    let buf = Ref::Ref(Array::new())
+    let idx = Ref::Ref(0)
+    let loaded = Ref::Ref(false)
+    Iter::new(fn() -> T? {
+      if !loaded.val {
+        while true {
+          match src.next() {
+            Some(v) => buf.val.push(v)
+            None => break
+          }
+        }
+        let arr = buf.val
+        let results = Array::new()
+        if !arr.is_empty() {
+          let mut acc = arr[arr.length() - 1]
+          let mut i = arr.length() - 2
+          while i >= 0 {
+            acc = f(arr[i], acc)
+            results.push(acc)
+            i = i - 1
+          }
+          results.rev_in_place()
+          results.push(arr[arr.length() - 1])
+        }
+        buf.val = results
+        loaded.val = true
+      }
+      if idx.val < buf.val.length() {
+        let v = buf.val[idx.val]
+        idx.val = idx.val + 1
+        Some(v)
+      } else {
+        None
+      }
+    })
+  })
+}
+
+// ----------------------------------------------------------------------------
+// 排序补全
+// ----------------------------------------------------------------------------
+
+/// sort：按自然序排序（T : Compare）。
+/// 语义同 Haskell `sort xs`。收集全部后排序再逐个产出。
+pub fn[T : Compare] Itor::sort(self : Itor[T]) -> Itor[T] {
+  self.sort_by(fn(a : T, b : T) { a.compare(b) })
+}
+
+// ----------------------------------------------------------------------------
+// 前缀 / 后缀 / 子序列（消费式）
+// ----------------------------------------------------------------------------
+
+/// strip_prefix：若流以 xs 为前缀，返回剥离后的剩余部分；否则 None。
+/// 语义同 Haskell `stripPrefix xs ys`（消费式，返回剩余数组）。
+pub fn[T : Eq] Itor::strip_prefix(self : Itor[T], xs : Array[T]) -> Array[T]? {
+  let arr = self.to_array()
+  if xs.length() > arr.length() {
+    return None
+  }
+  let mut i = 0
+  while i < xs.length() {
+    if arr[i] != xs[i] {
+      return None
+    }
+    i = i + 1
+  }
+  let rest = Array::new()
+  let mut j = xs.length()
+  while j < arr.length() {
+    rest.push(arr[j])
+    j = j + 1
+  }
+  Some(rest)
+}
+
+/// strip_suffix：若流以 xs 为后缀，返回剥离后的剩余部分；否则 None。
+/// 语义同 Haskell `stripSuffix xs ys`（消费式，返回剩余数组）。
+pub fn[T : Eq] Itor::strip_suffix(self : Itor[T], xs : Array[T]) -> Array[T]? {
+  let arr = self.to_array()
+  if xs.length() > arr.length() {
+    return None
+  }
+  let offset = arr.length() - xs.length()
+  let mut i = 0
+  while i < xs.length() {
+    if arr[offset + i] != xs[i] {
+      return None
+    }
+    i = i + 1
+  }
+  let rest = Array::new()
+  let mut j = 0
+  while j < offset {
+    rest.push(arr[j])
+    j = j + 1
+  }
+  Some(rest)
+}
+
+/// is_subsequence_of：sub 是否为流的子序列（元素按序出现、不必连续）。
+/// 语义同 Haskell `isSubsequenceOf sub ys`。消费式。
+pub fn[T : Eq] Itor::is_subsequence_of(self : Itor[T], sub : Array[T]) -> Bool {
+  let mut sub_i = 0
+  while sub_i < sub.length() {
+    let mut found = false
+    while true {
+      match self.next() {
+        Some(v) => {
+          if v == sub[sub_i] {
+            found = true
+            break
+          }
+        }
+        None => break
+      }
+    }
+    if !found {
+      return false
+    }
+    sub_i = sub_i + 1
+  }
+  true
+}
+
+// ----------------------------------------------------------------------------
+// 索引访问（(!!) 语义）
+// ----------------------------------------------------------------------------
+
+/// at：返回第 index 个元素（0 起），越界返回 None。
+/// 语义同 Haskell `(!!)`，但越界返回 None 而非抛错。
+pub fn[T] Itor::at(self : Itor[T], index : Int) -> T? {
+  if index < 0 {
+    return None
+  }
+  let mut i = 0
+  while true {
+    match self.next() {
+      Some(v) => {
+        if i == index {
+          return Some(v)
+        }
+        i = i + 1
+      }
+      None => return None
+    }
+  } nobreak {
+    None
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 集合操作（nub_by / delete / difference / union / intersect / insert）
+// ----------------------------------------------------------------------------
+
+/// nub_by：按自定义相等谓词去重（保留首次出现顺序）。
+/// 语义同 Haskell `nubBy eq xs`。O(n²) 线性查找，无 Hash 约束。
+pub fn[T] Itor::nub_by(self : Itor[T], eq : (T, T) -> Bool) -> Itor[T] {
+  let src = self
+  let seen = Ref::Ref(Array::new())
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      let mut result : T? = None
+      while true {
+        match src.next() {
+          Some(v) => {
+            let mut dup = false
+            for s in seen.val {
+              if eq(s, v) {
+                dup = true
+                break
+              }
+            }
+            if !dup {
+              seen.val.push(v)
+              result = Some(v)
+              break
+            }
+          }
+          None => break
+        }
+      }
+      result
+    })
+  })
+}
+
+/// delete_first：删除第一个等于 target 的元素（其余保留原序）。
+/// 语义同 Haskell `delete target xs`。惰性返回新迭代器。
+pub fn[T : Eq] Itor::delete_first(self : Itor[T], target : T) -> Itor[T] {
+  let src = self
+  let removed = Ref::Ref(false)
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      let mut result : T? = None
+      while true {
+        match src.next() {
+          Some(v) => {
+            if !removed.val && v == target {
+              removed.val = true
+              continue
+            }
+            result = Some(v)
+            break
+          }
+          None => break
+        }
+      }
+      result
+    })
+  })
+}
+
+/// delete_first_by：按自定义相等谓词删除第一个匹配 target 的元素。
+/// 语义同 Haskell `deleteBy eq target xs`。惰性返回新迭代器。
+pub fn[T] Itor::delete_first_by(
+  self : Itor[T],
+  target : T,
+  eq : (T, T) -> Bool,
+) -> Itor[T] {
+  let src = self
+  let removed = Ref::Ref(false)
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      let mut result : T? = None
+      while true {
+        match src.next() {
+          Some(v) => {
+            if !removed.val && eq(v, target) {
+              removed.val = true
+              continue
+            }
+            result = Some(v)
+            break
+          }
+          None => break
+        }
+      }
+      result
+    })
+  })
+}
+
+/// difference：列表差集。对 ys 中每个元素，依次删除流中第一个相等的出现。
+/// 语义同 Haskell `(\\)`：xs \\ ys。消费式，返回剩余数组。
+pub fn[T : Eq] Itor::difference(self : Itor[T], ys : Array[T]) -> Array[T] {
+  let arr = self.to_array()
+  let remaining = ys.copy()
+  let result = Array::new()
+  for v in arr {
+    let mut found_idx : Int? = None
+    let mut i = 0
+    while i < remaining.length() {
+      if remaining[i] == v {
+        found_idx = Some(i)
+        break
+      }
+      i = i + 1
+    }
+    match found_idx {
+      Some(idx) => {
+        // 消耗 ys 中的一个匹配
+        ignore(remaining.remove(idx))
+      }
+      None => result.push(v)
+    }
+  }
+  result
+}
+
+/// union：并集。流自身全部保留，ys 中未在结果中出现过的元素按序追加。
+/// 语义同 Haskell `union xs ys`（保持 xs 顺序，ys 去重后补充）。
+pub fn[T : Eq] Itor::union(self : Itor[T], ys : Array[T]) -> Array[T] {
+  let result = self.to_array()
+  for y in ys {
+    let mut seen = false
+    for r in result {
+      if r == y {
+        seen = true
+        break
+      }
+    }
+    if !seen {
+      result.push(y)
+    }
+  }
+  result
+}
+
+/// intersect：交集。流中出现在 ys 里的元素按原顺序保留。
+/// 语义同 Haskell `intersect xs ys`。消费式，返回数组。
+pub fn[T : Eq] Itor::intersect(self : Itor[T], ys : Array[T]) -> Array[T] {
+  let result = Array::new()
+  while true {
+    match self.next() {
+      Some(v) => {
+        let mut found = false
+        for y in ys {
+          if y == v {
+            found = true
+            break
+          }
+        }
+        if found {
+          result.push(v)
+        }
+      }
+      None => break
+    }
+  }
+  result
+}
+
+/// insert：把 x 插入已排序流中的正确位置（保持升序）。
+/// 语义同 Haskell `insert x xs`（T : Compare）。惰性返回新迭代器。
+pub fn[T : Compare] Itor::insert(self : Itor[T], x : T) -> Itor[T] {
+  let src = self
+  let inserted = Ref::Ref(false)
+  let init : T? = None
+  let pending = Ref::Ref(init)
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      // 1. 待发暂存值（x 插入后，被 x 挤占的 v 先发）
+      match pending.val {
+        Some(v) => {
+          pending.val = None
+          return Some(v)
+        }
+        None => ()
+      }
+      if inserted.val {
+        return src.next()
+      }
+      match src.next() {
+        Some(v) => {
+          if x.compare(v) <= 0 {
+            // x 应排在 v 之前：插入 x，暂存 v
+            inserted.val = true
+            pending.val = Some(v)
+            Some(x)
+          } else {
+            Some(v)
+          }
+        }
+        None => {
+          // 流耗尽，x 追加在末尾
+          inserted.val = true
+          Some(x)
+        }
+      }
+    })
+  })
+}
+
+/// insert_by：按自定义比较函数把 x 插入已排序流中的正确位置。
+/// 语义同 Haskell `insertBy cmp x xs`。惰性返回新迭代器。
+pub fn[T] Itor::insert_by(self : Itor[T], cmp : (T, T) -> Int, x : T) -> Itor[T] {
+  let src = self
+  let inserted = Ref::Ref(false)
+  let init : T? = None
+  let pending = Ref::Ref(init)
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      match pending.val {
+        Some(v) => {
+          pending.val = None
+          return Some(v)
+        }
+        None => ()
+      }
+      if inserted.val {
+        return src.next()
+      }
+      match src.next() {
+        Some(v) => {
+          if cmp(x, v) <= 0 {
+            inserted.val = true
+            pending.val = Some(v)
+            Some(x)
+          } else {
+            Some(v)
+          }
+        }
+        None => {
+          inserted.val = true
+          Some(x)
+        }
+      }
+    })
+  })
+}
+
+// ----------------------------------------------------------------------------
+// 分组（group_adjacent_by，自定义谓词相邻分组）
+// ----------------------------------------------------------------------------
+
+/// group_adjacent_by：把相邻且满足 f(a, b) 的元素分成组。
+/// 语义同 Haskell `groupBy f xs`。消费式，返回组数组。
+pub fn[T] Itor::group_adjacent_by(self : Itor[T], f : (T, T) -> Bool) -> Array[Array[T]] {
+  let groups = Array::new()
+  let init : T? = None
+  let prev = Ref::Ref(init)
+  let cur = Ref::Ref(Array::new())
+  let flush : () -> Unit = fn() {
+    if !cur.val.is_empty() {
+      groups.push(cur.val)
+      cur.val = Array::new()
+    }
+  }
+  while true {
+    match self.next() {
+      Some(v) => {
+        match prev.val {
+          Some(p) => {
+            if f(p, v) {
+              cur.val.push(v)
+            } else {
+              flush()
+              cur.val.push(v)
+            }
+          }
+          None => cur.val.push(v)
+        }
+        prev.val = Some(v)
+      }
+      None => break
+    }
+  }
+  flush()
+  groups
+}
+
+// ----------------------------------------------------------------------------
+// 结构操作（transpose / subsequences / permutations / chunks_of / fold_map）
+// ----------------------------------------------------------------------------
+
+/// transpose：数组流按列转置。结果第 i 行 = 各输入行第 i 列（按最长行对齐）。
+/// 语义同 Haskell `transpose`。消费式，返回转置后的行数组。
+pub fn[T] Itor::transpose(self : Itor[Array[T]]) -> Array[Array[T]] {
+  let rows = self.to_array()
+  let mut max_len = 0
+  for row in rows {
+    if row.length() > max_len {
+      max_len = row.length()
+    }
+  }
+  let result = Array::new()
+  let mut i = 0
+  while i < max_len {
+    let col = Array::new()
+    for row in rows {
+      if i < row.length() {
+        col.push(row[i])
+      }
+    }
+    result.push(col)
+    i = i + 1
+  }
+  result
+}
+
+/// subsequences：所有子序列（保持原序，共 2^n 个，含空与全量）。
+/// 语义同 Haskell `subsequences`。消费式，返回子序列数组。
+pub fn[T] Itor::subsequences(self : Itor[T]) -> Array[Array[T]] {
+  let arr = self.to_array()
+  let n = arr.length()
+  let result = Array::new()
+  let mut mask = 0
+  while mask < (1 << n) {
+    let sub = Array::new()
+    let mut i = 0
+    while i < n {
+      if (mask & (1 << i)) != 0 {
+        sub.push(arr[i])
+      }
+      i = i + 1
+    }
+    result.push(sub)
+    mask = mask + 1
+  }
+  result
+}
+
+/// permutations：所有排列（共 n! 个）。
+/// 语义同 Haskell `permutations`。消费式，返回排列数组。
+pub fn[T] Itor::permutations(self : Itor[T]) -> Array[Array[T]] {
+  let arr = self.to_array()
+  let result = Array::new()
+  let n = arr.length()
+  // 递归回溯生成全排列
+  fn gen(idx : Int) -> Unit {
+    if idx == n - 1 {
+      result.push(arr.copy())
+      return
+    }
+    let mut i = idx
+    while i < n {
+      // 交换 arr[idx] 与 arr[i]
+      let tmp = arr[idx]
+      arr[idx] = arr[i]
+      arr[i] = tmp
+      gen(idx + 1)
+      // 换回
+      let tmp2 = arr[idx]
+      arr[idx] = arr[i]
+      arr[i] = tmp2
+      i = i + 1
+    }
+  }
+  if n == 0 {
+    return result
+  }
+  gen(0)
+  result
+}
+
+/// chunks_of：按每 n 个一组分块（最后一块可能不足 n）。
+/// 语义同 Haskell `chunksOf n`（Data.List.Split）。惰性返回块迭代器。
+pub fn[T] Itor::chunks_of(self : Itor[T], n : Int) -> Itor[Array[T]] {
+  let src = self
+  Itor::new(fn() {
+    Iter::new(fn() -> Array[T]? {
+      if n <= 0 {
+        return None
+      }
+      let chunk = Array::new()
+      let mut i = 0
+      while i < n {
+        match src.next() {
+          Some(v) => {
+            chunk.push(v)
+            i = i + 1
+          }
+          None => break
+        }
+      }
+      if chunk.is_empty() {
+        None
+      } else {
+        Some(chunk)
+      }
+    })
+  })
+}
+
+/// fold_map：映射后折叠。语义同 Haskell `foldMap`（以 combine 为 Monoid 结合律）。
+/// 消费式，返回最终累积值。
+pub fn[T, R] Itor::fold_map(
+  self : Itor[T],
+  seed : R,
+  mapper : (T) -> R,
+  combine : (R, R) -> R,
+) -> R {
+  let mut acc = seed
+  while true {
+    match self.next() {
+      Some(v) => acc = combine(acc, mapper(v))
+      None => break
+    }
+  }
+  acc
+}
+
+// ----------------------------------------------------------------------------
+// 多元 zip 家族（zip3 / zip_with3 / unzip / unzip3）
+// ----------------------------------------------------------------------------
+
+/// zip3：三路 zip，任一方耗尽即结束。
+/// 语义同 Haskell `zip3 xs ys zs`。
+pub fn[T, U, V] Itor::zip3(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+) -> Itor[(T, U, V)] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  Itor::new(fn() {
+    Iter::new(fn() -> (T, U, V)? {
+      match (src_a.next(), src_b.next(), src_c.next()) {
+        (Some(x), Some(y), Some(z)) => Some((x, y, z))
+        _ => None
+      }
+    })
+  })
+}
+
+/// zip_with3：三路合并，任一方耗尽即结束。
+/// 语义同 Haskell `zipWith3 f xs ys zs`。
+pub fn[T, U, V, R] Itor::zip_with3(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  f : (T, U, V) -> R,
+) -> Itor[R] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  Itor::new(fn() {
+    Iter::new(fn() -> R? {
+      match (src_a.next(), src_b.next(), src_c.next()) {
+        (Some(x), Some(y), Some(z)) => Some(f(x, y, z))
+        _ => None
+      }
+    })
+  })
+}
+
+/// unzip：二元组流拆分为两个数组。
+/// 语义同 Haskell `unzip`。消费式。
+pub fn[T, U] Itor::unzip(self : Itor[(T, U)]) -> (Array[T], Array[U]) {
+  let col_t = Array::new()
+  let col_u = Array::new()
+  while true {
+    match self.next() {
+      Some((a, b)) => {
+        col_t.push(a)
+        col_u.push(b)
+      }
+      None => break
+    }
+  }
+  (col_t, col_u)
+}
+
+/// unzip3：三元组流拆分为三个数组。
+/// 语义同 Haskell `unzip3`。消费式。
+pub fn[T, U, V] Itor::unzip3(
+  self : Itor[(T, U, V)],
+) -> (Array[T], Array[U], Array[V]) {
+  let col_t = Array::new()
+  let col_u = Array::new()
+  let col_v = Array::new()
+  while true {
+    match self.next() {
+      Some((a, b, c)) => {
+        col_t.push(a)
+        col_u.push(b)
+        col_v.push(c)
+      }
+      None => break
+    }
+  }
+  (col_t, col_u, col_v)
+}

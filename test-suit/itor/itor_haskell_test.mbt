@@ -534,3 +534,434 @@ test "haskell-itor: 变换后仍可 restart 重放" {
   }
   assert_eq(vals, [10, 20, 30])
 }
+
+// ============================================================================
+// 第二批 Haskell Data.List 语义测试
+// 覆盖：foldl1/foldr1/all_true/any_true/maximum_by/minimum_by/sort/
+// scanl1/scanr/scanr1/strip_prefix/strip_suffix/is_subsequence_of/at/
+// nub_by/delete_first/delete_first_by/difference/union/intersect/
+// insert/insert_by/group_adjacent_by/transpose/subsequences/permutations/
+// chunks_of/fold_map/zip3/zip_with3/unzip/unzip3
+// ============================================================================
+
+///|
+test "haskell-itor2: foldl1 无种子左折叠" {
+  // Haskell: foldl1 (+) [1,2,3,4] = 10
+  assert_eq(@rx.Itor::from_array([1, 2, 3, 4]).foldl1(fn(a : Int, b : Int) { a + b }), Some(10))
+  // 减法验证方向：foldl1 (-) [1,2,3] = ((1-2)-3) = -4
+  assert_eq(@rx.Itor::from_array([1, 2, 3]).foldl1(fn(a : Int, b : Int) { a - b }), Some(-4))
+}
+
+///|
+test "haskell-itor2: foldl1 空迭代器返回 None" {
+  let empty : Array[Int] = []
+  let r = @rx.Itor::from_array(empty).foldl1(fn(a : Int, b : Int) { a + b })
+  if r is Some(_) {
+    assert_true(false)
+  }
+}
+
+///|
+test "haskell-itor2: foldr1 无种子右折叠" {
+  // Haskell: foldr1 (-) [1,2,3] = 1-(2-3) = 2
+  assert_eq(@rx.Itor::from_array([1, 2, 3]).foldr1(fn(a : Int, b : Int) { a - b }), Some(2))
+  // 单元素：返回该元素
+  assert_eq(@rx.Itor::from_array([7]).foldr1(fn(a : Int, b : Int) { a + b }), Some(7))
+}
+
+///|
+test "haskell-itor2: foldr1 空迭代器返回 None" {
+  let empty : Array[Int] = []
+  let r = @rx.Itor::from_array(empty).foldr1(fn(a : Int, b : Int) { a + b })
+  if r is Some(_) {
+    assert_true(false)
+  }
+}
+
+///|
+test "haskell-itor2: all_true / any_true 短路判定" {
+  assert_true(@rx.Itor::from_array([true, true, true]).all_true())
+  assert_false(@rx.Itor::from_array([true, false, true]).all_true())
+  assert_true(@rx.Itor::from_array([false, true]).any_true())
+  assert_false(@rx.Itor::from_array([false, false]).any_true())
+  // 空流：all_true = True，any_true = False
+  let empty : Array[Bool] = []
+  assert_true(@rx.Itor::from_array(empty).all_true())
+  assert_false(@rx.Itor::from_array(empty).any_true())
+}
+
+///|
+test "haskell-itor2: maximum_by / minimum_by 自定义比较" {
+  // 按绝对值求最大
+  let max_abs = @rx.Itor::from_array([-5, 3, 2]).maximum_by(fn(a : Int, b : Int) {
+    (a * a).compare(b * b)
+  })
+  assert_eq(max_abs, Some(-5))
+  // 按字符串长度求最小
+  let min_len = @rx.Itor::from_array(["aaa", "b", "cc"]).minimum_by(fn(a : String, b : String) {
+    a.length().compare(b.length())
+  })
+  assert_eq(min_len, Some("b"))
+}
+
+///|
+test "haskell-itor2: maximum_by / minimum_by 空迭代器返回 None" {
+  let empty : Array[Int] = []
+  let r = @rx.Itor::from_array(empty).maximum_by(fn(a : Int, b : Int) { a.compare(b) })
+  if r is Some(_) {
+    assert_true(false)
+  }
+}
+
+///|
+test "haskell-itor2: sort 默认自然序" {
+  assert_eq(
+    @rx.Itor::from_array([3, 1, 2, 5, 4]).sort().to_array(),
+    [1, 2, 3, 4, 5],
+  )
+  assert_eq(@rx.Itor::from_array([3, 1]).sort().to_array(), [1, 3])
+}
+
+///|
+test "haskell-itor2: scanl1 无种子左扫描" {
+  // Haskell: scanl1 (+) [1,2,3] = [1,3,6]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).scanl1(fn(a : Int, b : Int) { a + b }).to_array(),
+    [1, 3, 6],
+  )
+  // 空迭代器
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).scanl1(fn(a : Int, b : Int) { a + b }).to_array(), [])
+}
+
+///|
+test "haskell-itor2: scanr 右扫描" {
+  // Haskell: scanr (+) 0 [1,2,3] = [6,5,3,0]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).scanr(0, fn(x : Int, acc : Int) { x + acc }).to_array(),
+    [6, 5, 3, 0],
+  )
+  // 减法验证方向：scanr (-) 0 [1,2,3] = [1-(2-(3-0)), 2-(3-0), 3-0, 0] = [2,-1,3,0]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).scanr(0, fn(x : Int, acc : Int) { x - acc }).to_array(),
+    [2, -1, 3, 0],
+  )
+  // 空迭代器：只发 seed
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).scanr(99, fn(x : Int, acc : Int) { x + acc }).to_array(), [99])
+}
+
+///|
+test "haskell-itor2: scanr1 无种子右扫描" {
+  // Haskell: scanr1 (+) [1,2,3] = [6,5,3]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).scanr1(fn(a : Int, b : Int) { a + b }).to_array(),
+    [6, 5, 3],
+  )
+  // 减法：scanr1 (-) [1,2,3] = [1-(2-3), 2-3, 3] = [2,-1,3]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).scanr1(fn(a : Int, b : Int) { a - b }).to_array(),
+    [2, -1, 3],
+  )
+  // 空迭代器
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).scanr1(fn(a : Int, b : Int) { a + b }).to_array(), [])
+}
+
+///|
+test "haskell-itor2: strip_prefix / strip_suffix 剥离前后缀" {
+  // Haskell: stripPrefix [1,2] [1,2,3] = Just [3]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).strip_prefix([1, 2]),
+    Some([3]),
+  )
+  // 不匹配返回 None
+  let r = @rx.Itor::from_array([1, 2, 3]).strip_prefix([2, 3])
+  if r is Some(_) {
+    assert_true(false)
+  }
+  // 完全匹配返回空数组
+  assert_eq(
+    @rx.Itor::from_array([1, 2]).strip_prefix([1, 2]),
+    Some([]),
+  )
+  // strip_suffix
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).strip_suffix([2, 3]),
+    Some([1]),
+  )
+  let r2 = @rx.Itor::from_array([1, 2, 3]).strip_suffix([1, 2])
+  if r2 is Some(_) {
+    assert_true(false)
+  }
+}
+
+///|
+test "haskell-itor2: is_subsequence_of 子序列判定" {
+  // Haskell: isSubsequenceOf [1,3] [1,2,3] = True（不必连续）
+  assert_true(@rx.Itor::from_array([1, 2, 3, 4]).is_subsequence_of([1, 3]))
+  assert_true(@rx.Itor::from_array([1, 2, 3]).is_subsequence_of([1, 2, 3]))
+  // 顺序不对则 False
+  assert_false(@rx.Itor::from_array([1, 2, 3]).is_subsequence_of([3, 1]))
+  // 缺失元素 False
+  assert_false(@rx.Itor::from_array([1, 2, 3]).is_subsequence_of([1, 4]))
+  // 空子序列恒 True
+  assert_true(@rx.Itor::from_array([1, 2, 3]).is_subsequence_of([]))
+}
+
+///|
+test "haskell-itor2: at 按下标取元素" {
+  // Haskell: [10,20,30] !! 1 = 20
+  assert_eq(@rx.Itor::from_array([10, 20, 30]).at(1), Some(20))
+  assert_eq(@rx.Itor::from_array([10, 20, 30]).at(0), Some(10))
+  assert_eq(@rx.Itor::from_array([10, 20, 30]).at(2), Some(30))
+  // 越界返回 None
+  assert_eq(@rx.Itor::from_array([10, 20, 30]).at(3), None)
+  assert_eq(@rx.Itor::from_array([10, 20, 30]).at(-1), None)
+  // 空迭代器
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).at(0), None)
+}
+
+///|
+test "haskell-itor2: nub_by 自定义谓词去重" {
+  // 按绝对值去重
+  assert_eq(
+    @rx.Itor::from_array([1, -1, 2, -2, 1]).nub_by(fn(a : Int, b : Int) { a.abs() == b.abs() }).to_array(),
+    [1, 2],
+  )
+}
+
+///|
+test "haskell-itor2: delete_first 删除首个匹配" {
+  // Haskell: delete 2 [1,2,3,2] = [1,3,2]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3, 2]).delete_first(2).to_array(),
+    [1, 3, 2],
+  )
+  // 不存在则原样保留
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).delete_first(9).to_array(),
+    [1, 2, 3],
+  )
+}
+
+///|
+test "haskell-itor2: delete_first_by 自定义谓词删除" {
+  // 删除第一个绝对值等于 2 的元素（即 -2）
+  assert_eq(
+    @rx.Itor::from_array([1, -2, 3, 2]).delete_first_by(2, fn(a : Int, t : Int) { a.abs() == t.abs() }).to_array(),
+    [1, 3, 2],
+  )
+}
+
+///|
+test "haskell-itor2: difference 列表差集" {
+  // Haskell: [1,2,3,2,4] \\ [2,4] = [1,3,2]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3, 2, 4]).difference([2, 4]),
+    [1, 3, 2],
+  )
+  // 完全移除
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).difference([1, 2, 3]),
+    [],
+  )
+}
+
+///|
+test "haskell-itor2: union 并集" {
+  // Haskell: union [1,2,3] [2,3,4,4] = [1,2,3,4]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3]).union([2, 3, 4, 4]),
+    [1, 2, 3, 4],
+  )
+}
+
+///|
+test "haskell-itor2: intersect 交集" {
+  // Haskell: intersect [1,2,3,4] [2,4,5] = [2,4]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3, 4]).intersect([2, 4, 5]),
+    [2, 4],
+  )
+  // 空交集
+  assert_eq(
+    @rx.Itor::from_array([1, 2]).intersect([3, 4]),
+    [],
+  )
+}
+
+///|
+test "haskell-itor2: insert 有序插入" {
+  // Haskell: insert 3 [1,2,4,5] = [1,2,3,4,5]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 4, 5]).insert(3).to_array(),
+    [1, 2, 3, 4, 5],
+  )
+  // 插入到开头
+  assert_eq(
+    @rx.Itor::from_array([2, 3]).insert(1).to_array(),
+    [1, 2, 3],
+  )
+  // 插入到末尾
+  assert_eq(
+    @rx.Itor::from_array([1, 2]).insert(9).to_array(),
+    [1, 2, 9],
+  )
+  // 空迭代器
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).insert(5).to_array(), [5])
+}
+
+///|
+test "haskell-itor2: insert_by 自定义比较插入" {
+  // 输入流须已按比较序排好：[2, -3, 5]（绝对值序 2 < 3 < 5）
+  // 插入 -1（绝对值 1）：应排最前
+  assert_eq(
+    @rx.Itor::from_array([2, -3, 5]).insert_by(fn(a : Int, b : Int) { a.abs().compare(b.abs()) }, -1).to_array(),
+    [-1, 2, -3, 5],
+  )
+  // 插入绝对值最大的 9：应排末尾
+  assert_eq(
+    @rx.Itor::from_array([2, -3, 5]).insert_by(fn(a : Int, b : Int) { a.abs().compare(b.abs()) }, 9).to_array(),
+    [2, -3, 5, 9],
+  )
+}
+
+///|
+test "haskell-itor2: group_adjacent_by 自定义谓词分组" {
+  // 按奇偶分组（相邻同奇偶为一组）
+  let groups = @rx.Itor::from_array([1, 3, 2, 4, 5]).group_adjacent_by(fn(a : Int, b : Int) {
+    (a % 2) == (b % 2)
+  })
+  assert_eq(groups, [[1, 3], [2, 4], [5]])
+}
+
+///|
+test "haskell-itor2: transpose 转置" {
+  // Haskell: transpose [[1,2,3],[4,5,6]] = [[1,4],[2,5],[3,6]]
+  assert_eq(
+    @rx.Itor::from_array([[1, 2, 3], [4, 5, 6]]).transpose(),
+    [[1, 4], [2, 5], [3, 6]],
+  )
+  // 不等长：短行缺失列跳过
+  assert_eq(
+    @rx.Itor::from_array([[1, 2], [3]]).transpose(),
+    [[1, 3], [2]],
+  )
+}
+
+///|
+test "haskell-itor2: subsequences 子序列枚举" {
+  // Haskell: subsequences [1,2] = [[],[1],[2],[1,2]]
+  let subs = @rx.Itor::from_array([1, 2]).subsequences()
+  assert_eq(subs.length(), 4)
+  assert_eq(subs[0], [])
+  assert_eq(subs[3], [1, 2])
+  // 3 个元素共 8 个子序列
+  assert_eq(@rx.Itor::from_array([1, 2, 3]).subsequences().length(), 8)
+}
+
+///|
+test "haskell-itor2: permutations 排列枚举" {
+  // 3 个元素共 6 个排列
+  let perms = @rx.Itor::from_array([1, 2, 3]).permutations()
+  assert_eq(perms.length(), 6)
+  // 每个排列都是原数组的一个重排（元素和为 6，长度 3）
+  for p in perms {
+    assert_eq(p.length(), 3)
+    assert_eq(p[0] + p[1] + p[2], 6)
+  }
+  // 单元素
+  assert_eq(@rx.Itor::from_array([7]).permutations(), [[7]])
+}
+
+///|
+test "haskell-itor2: chunks_of 按大小分块" {
+  // chunksOf 3 [1..7] = [[1,2,3],[4,5,6],[7]]
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3, 4, 5, 6, 7]).chunks_of(3).to_array(),
+    [[1, 2, 3], [4, 5, 6], [7]],
+  )
+  // n 超过长度：整块
+  assert_eq(
+    @rx.Itor::from_array([1, 2]).chunks_of(5).to_array(),
+    [[1, 2]],
+  )
+  // 空迭代器
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).chunks_of(3).to_array(), [])
+}
+
+///|
+test "haskell-itor2: fold_map 映射折叠" {
+  // foldMap：每个元素平方后求和
+  let total = @rx.Itor::from_array([1, 2, 3]).fold_map(0, fn(x : Int) { x * x }, fn(
+    acc : Int,
+    v : Int,
+  ) {
+    acc + v
+  })
+  assert_eq(total, 14)
+  // 空迭代器返回 seed
+  let empty : Array[Int] = []
+  assert_eq(@rx.Itor::from_array(empty).fold_map(5, fn(x : Int) { x }, fn(acc : Int, v : Int) { acc + v }), 5)
+}
+
+///|
+test "haskell-itor2: zip3 三路配对" {
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3])
+      .zip3(@rx.Itor::from_array(["a", "b", "c"]), @rx.Itor::from_array([true, false, true]))
+      .to_array(),
+    [(1, "a", true), (2, "b", false), (3, "c", true)],
+  )
+  // 任一方耗尽提前结束
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3])
+      .zip3(@rx.Itor::from_array(["a"]), @rx.Itor::from_array([true, false]))
+      .to_array(),
+    [(1, "a", true)],
+  )
+}
+
+///|
+test "haskell-itor2: zip_with3 三路合并" {
+  assert_eq(
+    @rx.Itor::from_array([1, 2, 3])
+      .zip_with3(
+        @rx.Itor::from_array([10, 20, 30]),
+        @rx.Itor::from_array([100, 200, 300]),
+        fn(a : Int, b : Int, c : Int) { a + b + c },
+      )
+      .to_array(),
+    [111, 222, 333],
+  )
+}
+
+///|
+test "haskell-itor2: unzip 拆分二元组" {
+  let (as_, bs) = @rx.Itor::from_array([(1, "a"), (2, "b"), (3, "c")]).unzip()
+  assert_eq(as_, [1, 2, 3])
+  assert_eq(bs, ["a", "b", "c"])
+}
+
+///|
+test "haskell-itor2: unzip3 拆分三元组" {
+  let (as_, bs, cs) = @rx.Itor::from_array([(1, "a", true), (2, "b", false)]).unzip3()
+  assert_eq(as_, [1, 2])
+  assert_eq(bs, ["a", "b"])
+  assert_eq(cs, [true, false])
+}
+
+///|
+test "haskell-itor2: 新增变换操作链式组合" {
+  // sort -> chunks_of -> zip 组合
+  let result = @rx.Itor::from_array([5, 3, 1, 4, 2])
+    .sort()
+    .chunks_of(2)
+    .zip(@rx.Itor::from_array(["a", "b", "c"]))
+    .to_array()
+  assert_eq(result, [([1, 2], "a"), ([3, 4], "b"), ([5], "c")])
+}

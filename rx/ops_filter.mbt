@@ -3,6 +3,12 @@
 // skip_last / take_last / element_at / distinct 系列 / skip_until / take_until
 // ============================================================================
 
+/// 内部信号：take 取够后抛异常中断同步无限源（iterate / repeat_infinite / cycle）
+/// 的同步循环。仅用于同步订阅路径；异步源走 dispose 分支，不会触发。
+priv suberror TakeInterrupt {
+  TakeInterrupt
+}
+
 /// 过滤：只放行满足 predicate 的值
 pub fn[T, E] Observable::filter(
   self : Observable[T, E],
@@ -32,45 +38,66 @@ pub fn[T, E] Observable::take(self : Observable[T, E], n : Int) -> Observable[T,
     let remaining = Ref::Ref(n)
     let stopped = Ref::Ref(false)
     let source_sub = Ref::Ref(Subscription::empty())
+    // 标记 source_fn 是否已返回：同步源取够时尚未返回（可 raise 中断）；
+    // 异步源返回后触发 next（只能 dispose）
+    let source_done = Ref::Ref(false)
     if n <= 0 {
       // Rx 语义：take(0) / take(负数) 不取任何值，立即完成
       stopped.val = true
       complete()
       Subscription::empty()
     } else {
-      source_sub.val = source_fn({
-        next: fn(v : T) {
-          if !stopped.val {
-            if remaining.val > 0 {
-              remaining.val = remaining.val - 1
-              let done = remaining.val == 0
-              next(v)
-              if done {
-                stopped.val = true
-                // 取够立即取消上游，避免热流继续泄漏
-                (source_sub.val).dispose()
-                complete()
+      let result = try {
+        source_sub.val = source_fn({
+          next: fn(v : T) {
+            if !stopped.val {
+              if remaining.val > 0 {
+                remaining.val = remaining.val - 1
+                let done = remaining.val == 0
+                next(v)
+                if done {
+                  stopped.val = true
+                  // 取够：先通知下游完成
+                  complete()
+                  if !source_done.val {
+                    // 同步源（source_fn 尚未返回）：抛内部信号中断其同步循环
+                    raise TakeInterrupt::TakeInterrupt
+                  } else {
+                    // 异步源：正常取消上游，避免热流继续泄漏
+                    (source_sub.val).dispose()
+                  }
+                }
               }
             }
-          }
-        },
-        error: fn(e : E) {
-          if !stopped.val {
+          },
+          error: fn(e : E) {
+            if !stopped.val {
+              stopped.val = true
+              error(e)
+            }
+          },
+          complete: fn() {
+            if !stopped.val {
+              stopped.val = true
+              complete()
+            }
+          },
+        })
+        source_done.val = true
+        Subscription::new(fn() {
+          stopped.val = true
+          (source_sub.val).dispose()
+        })
+      } catch {
+        TakeInterrupt::TakeInterrupt => {
+          // 同步无限源被中断：返回空订阅（上游已被异常打断，无需 dispose）
+          Subscription::new(fn() {
             stopped.val = true
-            error(e)
-          }
-        },
-        complete: fn() {
-          if !stopped.val {
-            stopped.val = true
-            complete()
-          }
-        },
-      })
-      Subscription::new(fn() {
-        stopped.val = true
-        (source_sub.val).dispose()
-      })
+            (source_sub.val).dispose()
+          })
+        }
+      }
+      result
     }
   }
   Observable::new(subscribe_fn)

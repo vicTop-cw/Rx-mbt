@@ -48,9 +48,22 @@ pub fn[T, E] Observable::iterate(
 ) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
     let stopped = Ref::Ref(false)
+    // 下游完成信号：take 取够后调用 complete() 可中断同步循环（修复死循环 bug）
+    let finished = Ref::Ref(false)
+    let wrapped : Observer[T, E] = {
+      next: observer.next,
+      error: fn(e : E) {
+        finished.val = true
+        observer.on_error(e)
+      },
+      complete: fn() {
+        finished.val = true
+        observer.on_completed()
+      },
+    }
     let mut cur = seed
-    while !stopped.val {
-      observer.on_next(cur)
+    while !stopped.val && !finished.val {
+      wrapped.on_next(cur)
       cur = f(cur)
     }
     Subscription::new(fn() { stopped.val = true })
@@ -63,8 +76,20 @@ pub fn[T, E] Observable::iterate(
 pub fn[T, E] Observable::repeat_infinite(value : T) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
     let stopped = Ref::Ref(false)
-    while !stopped.val {
-      observer.on_next(value)
+    let finished = Ref::Ref(false)
+    let wrapped : Observer[T, E] = {
+      next: observer.next,
+      error: fn(e : E) {
+        finished.val = true
+        observer.on_error(e)
+      },
+      complete: fn() {
+        finished.val = true
+        observer.on_completed()
+      },
+    }
+    while !stopped.val && !finished.val {
+      wrapped.on_next(value)
     }
     Subscription::new(fn() { stopped.val = true })
   }
@@ -76,12 +101,24 @@ pub fn[T, E] Observable::repeat_infinite(value : T) -> Observable[T, E] {
 pub fn[T, E] Observable::cycle(values : Array[T]) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
     let stopped = Ref::Ref(false)
-    while !stopped.val {
+    let finished = Ref::Ref(false)
+    let wrapped : Observer[T, E] = {
+      next: observer.next,
+      error: fn(e : E) {
+        finished.val = true
+        observer.on_error(e)
+      },
+      complete: fn() {
+        finished.val = true
+        observer.on_completed()
+      },
+    }
+    while !stopped.val && !finished.val {
       for v in values {
-        if stopped.val {
+        if stopped.val || finished.val {
           break
         }
-        observer.on_next(v)
+        wrapped.on_next(v)
       }
     }
     Subscription::new(fn() { stopped.val = true })
