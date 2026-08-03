@@ -18,7 +18,7 @@ pub fn[T, E] Observable::tap(
     source_fn({
       next: fn(v : T) { f(v); next(v) },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -42,7 +42,7 @@ pub fn[T, E] Observable::timestamp(self : Observable[T, E]) -> Observable[(T, In
     source_fn({
       next: fn(v : T) { next((v, default_clock.now())) },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -67,7 +67,7 @@ pub fn[T, E] Observable::default_if_empty(
           next(default_value)
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -82,7 +82,7 @@ pub fn[T, E] Observable::ignore_elements(self : Observable[T, E]) -> Observable[
     source_fn({
       next: fn(_ : T) {},
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -106,7 +106,7 @@ pub fn[T, E] Observable::pairwise(self : Observable[T, E]) -> Observable[(T, T),
         prev.val = Some(v)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -142,7 +142,7 @@ pub fn[T, E] Observable::pairwise_with_buffer(
           }
         },
         error: error,
-        complete: complete,
+        complete: complete, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -174,7 +174,7 @@ pub fn[T, E] Observable::buffer_count(
           next(buf.val)
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -224,7 +224,7 @@ pub fn[T, E] Observable::buffer_time_on(
           next(buf.val)
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -280,7 +280,7 @@ pub fn[T, E] Observable::window_on(
             next(Observable::from_iter(buf.val))
           }
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
       Subscription::new(fn() {
         stopped.val = true
@@ -315,7 +315,7 @@ pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E
           let sub = inner.subscribe({
             next: next,
             error: error,
-            complete: fn() {},
+            complete: fn() {}, interrupt: Ref::Ref(None),
           })
           current.val = Some(sub)
         }
@@ -333,7 +333,7 @@ pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E
           dispose_current()
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -376,7 +376,7 @@ pub fn[T, E] sample_first(source : Observable[T, E]) -> Observable[T, E] {
           stopped.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -409,7 +409,7 @@ pub fn[T, E] Observable::skip_until_data(
         next(v)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -450,7 +450,7 @@ pub fn[T, E] Observable::take_until_data(
           stopped.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -495,7 +495,7 @@ pub fn[T, E] Observable::debug(
       complete: fn() {
         println("\{prefix} on_completed")
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)

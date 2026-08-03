@@ -16,7 +16,7 @@ pub fn[T, E, U] Observable::map(
     source_fn({
       next: fn(v : T) { next(mapper(v)) },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -40,7 +40,7 @@ pub fn[T, E, U] Observable::filter_map(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -66,7 +66,7 @@ pub fn[T, E, U] Observable::flat_map(
           let sub = inner.subscribe({
             next: next,
             error: error,
-            complete: fn() {},
+            complete: fn() {}, interrupt: Ref::Ref(None),
           })
           inner_subs.val.push(sub)
         }
@@ -77,7 +77,7 @@ pub fn[T, E, U] Observable::flat_map(
           stopped.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -111,7 +111,7 @@ pub fn[T, E, Acc] Observable::scan(
         next(nxt)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -153,7 +153,7 @@ pub fn[T, E, U] Observable::switch_map(
           let inner_sub = inner.subscribe({
             next: next,
             error: error,
-            complete: fn() {},
+            complete: fn() {}, interrupt: Ref::Ref(None),
           })
           current.val = Some(inner_sub)
         }
@@ -171,7 +171,7 @@ pub fn[T, E, U] Observable::switch_map(
           dispose_current()
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -217,7 +217,7 @@ pub fn[T, E, K : Hash + Eq] Observable::group_by(
             next((k, Observable::from_iter(arr)))
           })
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)

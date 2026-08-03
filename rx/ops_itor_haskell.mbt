@@ -1967,3 +1967,543 @@ pub fn[T, U, V] Itor::unzip3(
   }
   (col_t, col_u, col_v)
 }
+
+// ============================================================================
+// Haskell Data.List 语义对照补全（第三批）
+// 补齐以下缺失语义操作：
+//   集合：union_by / intersect_by（自定义相等的并集 / 交集）
+//   序列：append（(++) 语义）/ take_while_end / drop_while_end（Data.List 4.8+）
+//   多元 zip：zip4~zip7 / zip_with4~zip7 / unzip4~unzip7
+//   字符串：lines / words / unlines / unwords（Data.List 的 String 操作）
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 集合操作补全（按自定义相等的 union / intersect）
+// ----------------------------------------------------------------------------
+
+/// union_by：并集，按自定义相等谓词 eq 判定重复。
+/// 语义同 Haskell `unionBy eq xs ys`（保持 xs 顺序，ys 去重后补充）。消费式。
+pub fn[T] Itor::union_by(
+  self : Itor[T],
+  ys : Array[T],
+  eq : (T, T) -> Bool,
+) -> Array[T] {
+  let result = self.to_array()
+  for y in ys {
+    let mut seen = false
+    for r in result {
+      if eq(r, y) {
+        seen = true
+        break
+      }
+    }
+    if !seen {
+      result.push(y)
+    }
+  }
+  result
+}
+
+/// intersect_by：交集，按自定义相等谓词 eq 判定匹配。
+/// 语义同 Haskell `intersectBy eq xs ys`。消费式，返回数组。
+pub fn[T] Itor::intersect_by(
+  self : Itor[T],
+  ys : Array[T],
+  eq : (T, T) -> Bool,
+) -> Array[T] {
+  let result = Array::new()
+  while true {
+    match self.next() {
+      Some(v) => {
+        let mut found = false
+        for y in ys {
+          if eq(y, v) {
+            found = true
+            break
+          }
+        }
+        if found {
+          result.push(v)
+        }
+      }
+      None => break
+    }
+  }
+  result
+}
+
+// ----------------------------------------------------------------------------
+// 序列连接（(++) 语义）
+// ----------------------------------------------------------------------------
+
+/// append：把两个迭代器首尾相接（先耗尽 self，再产出 other）。
+/// 语义同 Haskell `(++)`。惰性返回新迭代器。
+pub fn[T] Itor::append(self : Itor[T], other : Itor[T]) -> Itor[T] {
+  let src_a = self
+  let src_b = other
+  let stage = Ref::Ref(0)
+  Itor::new(fn() {
+    Iter::new(fn() -> T? {
+      if stage.val == 0 {
+        match src_a.next() {
+          Some(v) => return Some(v)
+          None => stage.val = 1
+        }
+      }
+      src_b.next()
+    })
+  })
+}
+
+// ----------------------------------------------------------------------------
+// 尾部条件操作（Data.List 4.8+ 的 takeWhileEnd / dropWhileEnd）
+// ----------------------------------------------------------------------------
+
+/// take_while_end：返回从尾部起连续满足 pred 的最长后缀。
+/// 语义同 Haskell `takeWhileEnd p xs`：
+/// takeWhileEnd even [1,2,3,4,6] = [4,6]。惰性返回新迭代器。
+pub fn[T] Itor::take_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
+  let src = self
+  Itor::new(fn() {
+    let buf = Ref::Ref(Array::new())
+    let idx = Ref::Ref(0)
+    let loaded = Ref::Ref(false)
+    Iter::new(fn() -> T? {
+      if !loaded.val {
+        let arr = Array::new()
+        while true {
+          match src.next() {
+            Some(v) => arr.push(v)
+            None => break
+          }
+        }
+        // 从尾部向前找最长连续满足 pred 的后缀起点
+        let mut start = arr.length()
+        let mut i = arr.length() - 1
+        while i >= 0 && pred(arr[i]) {
+          start = i
+          i = i - 1
+        }
+        let keep = Array::new()
+        let mut j = start
+        while j < arr.length() {
+          keep.push(arr[j])
+          j = j + 1
+        }
+        buf.val = keep
+        loaded.val = true
+      }
+      if idx.val < buf.val.length() {
+        let v = buf.val[idx.val]
+        idx.val = idx.val + 1
+        Some(v)
+      } else {
+        None
+      }
+    })
+  })
+}
+
+/// drop_while_end：删除从尾部起连续满足 pred 的最长后缀，保留前缀。
+/// 语义同 Haskell `dropWhileEnd p xs`：
+/// dropWhileEnd even [1,2,3,4,6] = [1,2,3]。惰性返回新迭代器。
+pub fn[T] Itor::drop_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
+  let src = self
+  Itor::new(fn() {
+    let buf = Ref::Ref(Array::new())
+    let idx = Ref::Ref(0)
+    let loaded = Ref::Ref(false)
+    Iter::new(fn() -> T? {
+      if !loaded.val {
+        let arr = Array::new()
+        while true {
+          match src.next() {
+            Some(v) => arr.push(v)
+            None => break
+          }
+        }
+        // 从尾部删掉连续满足 pred 的元素
+        let mut n = arr.length()
+        while n > 0 && pred(arr[n - 1]) {
+          n = n - 1
+        }
+        let keep = Array::new()
+        let mut j = 0
+        while j < n {
+          keep.push(arr[j])
+          j = j + 1
+        }
+        buf.val = keep
+        loaded.val = true
+      }
+      if idx.val < buf.val.length() {
+        let v = buf.val[idx.val]
+        idx.val = idx.val + 1
+        Some(v)
+      } else {
+        None
+      }
+    })
+  })
+}
+
+// ----------------------------------------------------------------------------
+// 多元 zip 家族扩展（zip4~zip7 / zip_with4~zip_with7 / unzip4~unzip7）
+// 语义同 Haskell `zip4..zip7`、`zipWith4..zipWith7`、`unzip4..unzip7`：
+// 任一方耗尽即结束。
+// ----------------------------------------------------------------------------
+
+/// zip4：四路 zip，任一方耗尽即结束。
+pub fn[T, U, V, W] Itor::zip4(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+) -> Itor[(T, U, V, W)] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  Itor::new(fn() {
+    Iter::new(fn() -> (T, U, V, W)? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next()) {
+        (Some(x), Some(y), Some(z), Some(w)) => Some((x, y, z, w))
+        _ => None
+      }
+    })
+  })
+}
+
+/// zip_with4：四路合并，任一方耗尽即结束。
+pub fn[T, U, V, W, R] Itor::zip_with4(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  f : (T, U, V, W) -> R,
+) -> Itor[R] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  Itor::new(fn() {
+    Iter::new(fn() -> R? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next()) {
+        (Some(x), Some(y), Some(z), Some(w)) => Some(f(x, y, z, w))
+        _ => None
+      }
+    })
+  })
+}
+
+/// unzip4：四元组流拆分为四个数组。消费式。
+pub fn[T, U, V, W] Itor::unzip4(
+  self : Itor[(T, U, V, W)],
+) -> (Array[T], Array[U], Array[V], Array[W]) {
+  let col_t = Array::new()
+  let col_u = Array::new()
+  let col_v = Array::new()
+  let col_w = Array::new()
+  while true {
+    match self.next() {
+      Some((a, b, c, d)) => {
+        col_t.push(a)
+        col_u.push(b)
+        col_v.push(c)
+        col_w.push(d)
+      }
+      None => break
+    }
+  }
+  (col_t, col_u, col_v, col_w)
+}
+
+/// zip5：五路 zip，任一方耗尽即结束。
+pub fn[T, U, V, W, X] Itor::zip5(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  e : Itor[X],
+) -> Itor[(T, U, V, W, X)] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  let src_e = e
+  Itor::new(fn() {
+    Iter::new(fn() -> (T, U, V, W, X)? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next(), src_e.next()) {
+        (Some(x), Some(y), Some(z), Some(w), Some(v)) => Some((x, y, z, w, v))
+        _ => None
+      }
+    })
+  })
+}
+
+/// zip_with5：五路合并，任一方耗尽即结束。
+pub fn[T, U, V, W, X, R] Itor::zip_with5(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  e : Itor[X],
+  f : (T, U, V, W, X) -> R,
+) -> Itor[R] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  let src_e = e
+  Itor::new(fn() {
+    Iter::new(fn() -> R? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next(), src_e.next()) {
+        (Some(x), Some(y), Some(z), Some(w), Some(v)) => Some(f(x, y, z, w, v))
+        _ => None
+      }
+    })
+  })
+}
+
+/// unzip5：五元组流拆分为五个数组。消费式。
+pub fn[T, U, V, W, X] Itor::unzip5(
+  self : Itor[(T, U, V, W, X)],
+) -> (Array[T], Array[U], Array[V], Array[W], Array[X]) {
+  let col_t = Array::new()
+  let col_u = Array::new()
+  let col_v = Array::new()
+  let col_w = Array::new()
+  let col_x = Array::new()
+  while true {
+    match self.next() {
+      Some((a, b, c, d, e)) => {
+        col_t.push(a)
+        col_u.push(b)
+        col_v.push(c)
+        col_w.push(d)
+        col_x.push(e)
+      }
+      None => break
+    }
+  }
+  (col_t, col_u, col_v, col_w, col_x)
+}
+
+/// zip6：六路 zip，任一方耗尽即结束。
+pub fn[T, U, V, W, X, Y] Itor::zip6(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  e : Itor[X],
+  f : Itor[Y],
+) -> Itor[(T, U, V, W, X, Y)] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  let src_e = e
+  let src_f = f
+  Itor::new(fn() {
+    Iter::new(fn() -> (T, U, V, W, X, Y)? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next(), src_e.next(), src_f.next()) {
+        (Some(x), Some(y), Some(z), Some(w), Some(v), Some(u)) => Some((x, y, z, w, v, u))
+        _ => None
+      }
+    })
+  })
+}
+
+/// zip_with6：六路合并，任一方耗尽即结束。
+pub fn[T, U, V, W, X, Y, R] Itor::zip_with6(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  e : Itor[X],
+  f : Itor[Y],
+  g : (T, U, V, W, X, Y) -> R,
+) -> Itor[R] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  let src_e = e
+  let src_f = f
+  Itor::new(fn() {
+    Iter::new(fn() -> R? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next(), src_e.next(), src_f.next()) {
+        (Some(x), Some(y), Some(z), Some(w), Some(v), Some(u)) => Some(g(x, y, z, w, v, u))
+        _ => None
+      }
+    })
+  })
+}
+
+/// unzip6：六元组流拆分为六个数组。消费式。
+pub fn[T, U, V, W, X, Y] Itor::unzip6(
+  self : Itor[(T, U, V, W, X, Y)],
+) -> (Array[T], Array[U], Array[V], Array[W], Array[X], Array[Y]) {
+  let col_t = Array::new()
+  let col_u = Array::new()
+  let col_v = Array::new()
+  let col_w = Array::new()
+  let col_x = Array::new()
+  let col_y = Array::new()
+  while true {
+    match self.next() {
+      Some((a, b, c, d, e, f)) => {
+        col_t.push(a)
+        col_u.push(b)
+        col_v.push(c)
+        col_w.push(d)
+        col_x.push(e)
+        col_y.push(f)
+      }
+      None => break
+    }
+  }
+  (col_t, col_u, col_v, col_w, col_x, col_y)
+}
+
+/// zip7：七路 zip，任一方耗尽即结束。
+pub fn[T, U, V, W, X, Y, Z] Itor::zip7(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  e : Itor[X],
+  f : Itor[Y],
+  g : Itor[Z],
+) -> Itor[(T, U, V, W, X, Y, Z)] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  let src_e = e
+  let src_f = f
+  let src_g = g
+  Itor::new(fn() {
+    Iter::new(fn() -> (T, U, V, W, X, Y, Z)? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next(), src_e.next(), src_f.next(), src_g.next()) {
+        (Some(x), Some(y), Some(z), Some(w), Some(v), Some(u), Some(t)) => Some((x, y, z, w, v, u, t))
+        _ => None
+      }
+    })
+  })
+}
+
+/// zip_with7：七路合并，任一方耗尽即结束。
+pub fn[T, U, V, W, X, Y, Z, R] Itor::zip_with7(
+  self : Itor[T],
+  b : Itor[U],
+  c : Itor[V],
+  d : Itor[W],
+  e : Itor[X],
+  f : Itor[Y],
+  g : Itor[Z],
+  h : (T, U, V, W, X, Y, Z) -> R,
+) -> Itor[R] {
+  let src_a = self
+  let src_b = b
+  let src_c = c
+  let src_d = d
+  let src_e = e
+  let src_f = f
+  let src_g = g
+  Itor::new(fn() {
+    Iter::new(fn() -> R? {
+      match (src_a.next(), src_b.next(), src_c.next(), src_d.next(), src_e.next(), src_f.next(), src_g.next()) {
+        (Some(x), Some(y), Some(z), Some(w), Some(v), Some(u), Some(t)) => Some(h(x, y, z, w, v, u, t))
+        _ => None
+      }
+    })
+  })
+}
+
+/// unzip7：七元组流拆分为七个数组。消费式。
+pub fn[T, U, V, W, X, Y, Z] Itor::unzip7(
+  self : Itor[(T, U, V, W, X, Y, Z)],
+) -> (Array[T], Array[U], Array[V], Array[W], Array[X], Array[Y], Array[Z]) {
+  let col_t = Array::new()
+  let col_u = Array::new()
+  let col_v = Array::new()
+  let col_w = Array::new()
+  let col_x = Array::new()
+  let col_y = Array::new()
+  let col_z = Array::new()
+  while true {
+    match self.next() {
+      Some((a, b, c, d, e, f, g)) => {
+        col_t.push(a)
+        col_u.push(b)
+        col_v.push(c)
+        col_w.push(d)
+        col_x.push(e)
+        col_y.push(f)
+        col_z.push(g)
+      }
+      None => break
+    }
+  }
+  (col_t, col_u, col_v, col_w, col_x, col_y, col_z)
+}
+
+// ----------------------------------------------------------------------------
+// 字符串语义操作（Data.List 的 lines / words / unlines / unwords）
+// ----------------------------------------------------------------------------
+
+/// lines：按换行符 \n 把字符串切分为行迭代器。
+/// 语义同 Haskell `lines`：
+/// lines "a\nb\n" = ["a","b"]；lines "\n" = [""]；lines "" = []。
+/// 末尾换行符不产生多余空行。
+pub fn Itor::lines(s : String) -> Itor[String] {
+  let arr = Array::new()
+  for sv in s.split("\n") {
+    arr.push(sv.to_owned())
+  }
+  // 原串以 \n 结尾（或为空）时，split 会产生末尾空段，按 Haskell 语义丢弃
+  if !arr.is_empty() && arr[arr.length() - 1] == "" {
+    ignore(arr.pop())
+  }
+  Itor::from_array(arr)
+}
+
+/// words：按空白（空格 / 制表符 / 换行 / 回车）把字符串切分为词迭代器，
+/// 连续空白合并、首尾空白忽略。
+/// 语义同 Haskell `words`：
+/// words " a  b\nc " = ["a","b","c"]；words "" = []。
+pub fn Itor::words(s : String) -> Itor[String] {
+  let arr = Array::new()
+  let cur : Array[Char] = Array::new()
+  for c in s.iter() {
+    if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+      if !cur.is_empty() {
+        arr.push(String::from_iter(cur.iter()))
+        cur.clear()
+      }
+    } else {
+      cur.push(c)
+    }
+  }
+  if !cur.is_empty() {
+    arr.push(String::from_iter(cur.iter()))
+  }
+  Itor::from_array(arr)
+}
+
+/// unlines：行迭代器用 \n 连接，末尾补一个 \n；空迭代器返回空串。
+/// 语义同 Haskell `unlines`：unlines ["a","b"] = "a\nb\n"。
+pub fn Itor::unlines(self : Itor[String]) -> String {
+  let arr = self.to_array()
+  if arr.is_empty() {
+    return ""
+  }
+  arr.iter().join("\n") + "\n"
+}
+
+/// unwords：词迭代器用空格连接（末尾无空格）；空迭代器返回空串。
+/// 语义同 Haskell `unwords`：unwords ["a","b"] = "a b"。
+pub fn Itor::unwords(self : Itor[String]) -> String {
+  self.to_array().iter().join(" ")
+}

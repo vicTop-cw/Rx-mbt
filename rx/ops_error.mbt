@@ -37,7 +37,7 @@ pub fn[T, E] Observable::retry(self : Observable[T, E], times : Int) -> Observab
             done.val = true
             complete()
           }
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
     try_ref.val = try_subscribe
@@ -76,7 +76,7 @@ pub fn[T, E] Observable::retry_indefinitely(self : Observable[T, E]) -> Observab
             done.val = true
             complete()
           }
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
     try_ref.val = try_subscribe
@@ -123,7 +123,7 @@ pub fn[T, E] Observable::retry_when(
             done.val = true
             complete()
           }
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
     try_ref.val = try_subscribe
@@ -179,7 +179,7 @@ pub fn[T, E] Observable::retry_with_backoff_on(
             done.val = true
             complete()
           }
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
     try_ref.val = try_subscribe
@@ -214,7 +214,7 @@ pub fn[T, E] Observable::catch_error(
           let sub = handler(e).subscribe({
             next: next,
             error: error,
-            complete: complete,
+            complete: complete, interrupt: Ref::Ref(None),
           })
           fallback_sub.val = sub
         }
@@ -224,7 +224,7 @@ pub fn[T, E] Observable::catch_error(
           done.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
@@ -259,7 +259,7 @@ pub fn[T, E] Observable::on_error_return(
           done.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
@@ -290,7 +290,7 @@ pub fn[T, E] Observable::on_error_resume_next(
           let sub = other_fn({
             next: next,
             error: error,
-            complete: complete,
+            complete: complete, interrupt: Ref::Ref(None),
           })
           resume_sub.val = sub
         }
@@ -300,7 +300,7 @@ pub fn[T, E] Observable::on_error_resume_next(
           done.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
@@ -388,7 +388,7 @@ pub fn[T, E] Observable::circuit_breaker_on(
           }
         }
       },
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)

@@ -1,0 +1,4 @@
+pub fn from_array(chars : ArrayView[Char]) -> String {
+pub fn from_iter(iter : Iter[Char]) -> String {
+pub fn from_iterator(iter : Iter[Char]) -> String {
+pub fn default() -> String {

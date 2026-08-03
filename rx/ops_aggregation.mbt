@@ -19,7 +19,7 @@ pub fn[T, E] Observable::count(self : Observable[T, E]) -> Observable[Int, E] {
       complete: fn() {
         next(counter.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -45,7 +45,7 @@ pub fn[T, E] count_events(source : Observable[T, E], n : Int) -> Observable[Int,
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -69,7 +69,7 @@ pub fn[T, E, Acc] Observable::reduce(
       complete: fn() {
         next(acc.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -101,7 +101,7 @@ pub fn[T, E] Observable::reduce_no_seed(
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -121,7 +121,7 @@ pub fn[T, E] Observable::collect(self : Observable[T, E]) -> Observable[Array[T]
       complete: fn() {
         next(buf.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -147,7 +147,7 @@ pub fn[T : Add + Default, E] Observable::sum(self : Observable[T, E]) -> Observa
       complete: fn() {
         next(acc.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -170,7 +170,7 @@ pub fn[T : Add, E] Observable::sum_direct(
       complete: fn() {
         next(acc.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -193,7 +193,7 @@ pub fn[T, E] Observable::sum_by(
       complete: fn() {
         next(acc.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -219,7 +219,7 @@ pub fn[E] Observable::average(self : Observable[Double, E]) -> Observable[Double
           next(sum.val / Double::from_int(cnt.val))
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -253,7 +253,7 @@ pub fn[T, E] Observable::average_by(
           next(sum.val / Double::from_int(cnt.val))
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -282,7 +282,7 @@ pub fn[T : Compare, E] Observable::minimum(self : Observable[T, E]) -> Observabl
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -314,7 +314,7 @@ pub fn[T, E] Observable::minimum_by(
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -341,7 +341,7 @@ pub fn[T : Compare, E] Observable::maximum(self : Observable[T, E]) -> Observabl
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -378,7 +378,7 @@ pub fn[T, E] Observable::maximum_by(
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -428,7 +428,7 @@ pub fn[E] median(source : Observable[Double, E]) -> Observable[Double, E] {
           }
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -462,7 +462,7 @@ pub fn[E] variance(source : Observable[Double, E]) -> Observable[Double, E] {
           next(acc / Double::from_int(n))
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -496,7 +496,7 @@ pub fn[E] std(source : Observable[Double, E]) -> Observable[Double, E] {
           next((acc / Double::from_int(n)).sqrt())
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -524,7 +524,7 @@ pub fn[E] quantile(source : Observable[Double, E], q : Double) -> Observable[Dou
           next(arr[idx])
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -544,7 +544,7 @@ pub fn[T : Hash + Eq, E] n_unique(source : Observable[T, E]) -> Observable[Int, 
       complete: fn() {
         next(set.val.length())
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -573,7 +573,7 @@ pub fn[T : Compare, E] arg_min(source : Observable[T, E]) -> Observable[Int, E] 
       complete: fn() {
         next(best_idx.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -602,7 +602,7 @@ pub fn[T : Compare, E] arg_max(source : Observable[T, E]) -> Observable[Int, E] 
       complete: fn() {
         next(best_idx.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -632,7 +632,7 @@ pub fn[T : Mul, E] Observable::cum_prod(self : Observable[T, E]) -> Observable[T
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -654,7 +654,7 @@ pub fn[E] Observable::cum_mean(self : Observable[Double, E]) -> Observable[Doubl
         next(sum.val / Double::from_int(cnt.val))
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -675,7 +675,7 @@ pub fn[T : Add + Default, E] Observable::cum_sum(self : Observable[T, E]) -> Obs
         next(acc.val)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -702,7 +702,7 @@ pub fn[T : Compare, E] Observable::cum_min(self : Observable[T, E]) -> Observabl
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -729,7 +729,7 @@ pub fn[T : Compare, E] Observable::cum_max(self : Observable[T, E]) -> Observabl
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -759,7 +759,7 @@ pub fn[E] Observable::rolling_sum(
         next(sum.val)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -789,7 +789,7 @@ pub fn[E] Observable::rolling_mean(
         next(sum.val / Double::from_int(buf.val.length()))
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -827,7 +827,7 @@ pub fn[T : Compare, E] Observable::rolling_min(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -865,7 +865,7 @@ pub fn[T : Compare, E] Observable::rolling_max(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -892,7 +892,7 @@ pub fn[T, E] Observable::rolling_count(
         next(buf.val.length())
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -917,7 +917,7 @@ pub fn[T, E, K : Hash + Eq, V] Observable::to_map(
         complete: fn() {
           next(map.val)
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -940,7 +940,7 @@ pub fn[T : Hash + Eq, E] Observable::to_set(
         complete: fn() {
           next(set.val)
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)

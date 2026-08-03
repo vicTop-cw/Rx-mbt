@@ -179,7 +179,7 @@ pub fn[T, E] Observable::delay_on(
           })
           timers.val.push(handle)
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -247,7 +247,7 @@ pub fn[T, E] Observable::debounce_on(
           flush()
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -284,7 +284,7 @@ pub fn[T, E] Observable::throttle_on(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -365,7 +365,7 @@ pub fn[T, E : Default] Observable::timeout_on(
         // 取消挂起的超时 timer，避免时钟队列残留空转定时器
         (timer_handle.val).dispose()
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -418,7 +418,7 @@ pub fn[T, E] Observable::sample_on(
         // 取消采样 timer，避免时钟队列残留空转定时器
         (timer_handle.val).dispose()
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true

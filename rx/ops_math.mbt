@@ -18,7 +18,7 @@ pub fn[T : Compare, E] Observable::sort(self : Observable[T, E]) -> Observable[A
         arr.sort()
         next(arr)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -50,7 +50,7 @@ pub fn[T : Compare, E] Observable::top_k(
         }
         next(arr)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -81,7 +81,7 @@ pub fn[T : Compare, E] Observable::bottom_k(
         }
         next(arr)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -102,7 +102,7 @@ pub fn[T, E] Observable::drop_none(self : Observable[T?, E]) -> Observable[T, E]
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -126,7 +126,7 @@ pub fn[T, E] Observable::fill_none(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -154,7 +154,7 @@ pub fn[T : Compare, E] Observable::clamp(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -176,7 +176,7 @@ pub fn[E] Observable::abs(self : Observable[Double, E]) -> Observable[Double, E]
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)

@@ -19,7 +19,7 @@ pub fn[T, E] Observable::start_with(
     source_fn({
       next: next,
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -48,10 +48,10 @@ pub fn[T, E] Observable::concat(
           other_sub.val = other_fn({
             next: next,
             error: error,
-            complete: complete,
+            complete: complete, interrupt: Ref::Ref(None),
           })
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -134,7 +134,7 @@ pub fn[T, E, U] zip(
       complete: fn() {
         done_a.val = true
         try_emit()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : U) {
@@ -147,7 +147,7 @@ pub fn[T, E, U] zip(
       complete: fn() {
         done_b.val = true
         try_emit()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     try_emit()
     Subscription::new(fn() {
@@ -216,7 +216,7 @@ pub fn[T, E, U] combine_latest(
         }
       },
       error: fail,
-      complete: fn() { done_a.val = true; maybe_complete() },
+      complete: fn() { done_a.val = true; maybe_complete() }, interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : U) {
@@ -226,7 +226,7 @@ pub fn[T, E, U] combine_latest(
         }
       },
       error: fail,
-      complete: fn() { done_b.val = true; maybe_complete() },
+      complete: fn() { done_b.val = true; maybe_complete() }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       failed.val = true
@@ -264,7 +264,7 @@ pub fn[T, E, U] with_latest_from(
     b_sub.val = b_fn({
       next: fn(v : U) { last_b.val = Some(v) },
       error: fail,
-      complete: fn() {},
+      complete: fn() {}, interrupt: Ref::Ref(None),
     })
     a_sub.val = a_fn({
       next: fn(v : T) {
@@ -283,7 +283,7 @@ pub fn[T, E, U] with_latest_from(
           (b_sub.val).dispose()
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
@@ -335,7 +335,7 @@ pub fn[T, E] amb(
           (b_sub.val).dispose()
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : T) {
@@ -363,7 +363,7 @@ pub fn[T, E] amb(
           (b_sub.val).dispose()
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
@@ -396,7 +396,7 @@ pub fn[T, E] Observable::end_with(
           }
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -468,14 +468,14 @@ pub fn[T : Eq, E] sequence_equal(
         if !emitted.val { buf_a.val.push(v) }
       },
       error: fail,
-      complete: fn() { done_a.val = true; try_emit() },
+      complete: fn() { done_a.val = true; try_emit() }, interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : T) {
         if !emitted.val { buf_b.val.push(v) }
       },
       error: fail,
-      complete: fn() { done_b.val = true; try_emit() },
+      complete: fn() { done_b.val = true; try_emit() }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stop_all()

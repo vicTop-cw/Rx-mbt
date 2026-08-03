@@ -3,12 +3,6 @@
 // skip_last / take_last / element_at / distinct 系列 / skip_until / take_until
 // ============================================================================
 
-/// 内部信号：take 取够后抛异常中断同步无限源（iterate / repeat_infinite / cycle）
-/// 的同步循环。仅用于同步订阅路径；异步源走 dispose 分支，不会触发。
-priv suberror TakeInterrupt {
-  TakeInterrupt
-}
-
 /// 过滤：只放行满足 predicate 的值
 pub fn[T, E] Observable::filter(
   self : Observable[T, E],
@@ -22,7 +16,7 @@ pub fn[T, E] Observable::filter(
     source_fn({
       next: fn(v : T) { if predicate(v) { next(v) } },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -38,66 +32,54 @@ pub fn[T, E] Observable::take(self : Observable[T, E], n : Int) -> Observable[T,
     let remaining = Ref::Ref(n)
     let stopped = Ref::Ref(false)
     let source_sub = Ref::Ref(Subscription::empty())
-    // 标记 source_fn 是否已返回：同步源取够时尚未返回（可 raise 中断）；
-    // 异步源返回后触发 next（只能 dispose）
-    let source_done = Ref::Ref(false)
+    // 中断通道：同步无限源（iterate / repeat_infinite / cycle / unfoldr）
+    // 订阅时把"停止函数"写入 interrupt，取够后调用它中断同步循环；
+    // 异步源没有该通道，改为 dispose 取消上游订阅。
+    let interrupt = Ref::Ref(None)
     if n <= 0 {
       // Rx 语义：take(0) / take(负数) 不取任何值，立即完成
       stopped.val = true
       complete()
       Subscription::empty()
     } else {
-      let result = try {
-        source_sub.val = source_fn({
-          next: fn(v : T) {
-            if !stopped.val {
-              if remaining.val > 0 {
-                remaining.val = remaining.val - 1
-                let done = remaining.val == 0
-                next(v)
-                if done {
-                  stopped.val = true
-                  // 取够：先通知下游完成
-                  complete()
-                  if !source_done.val {
-                    // 同步源（source_fn 尚未返回）：抛内部信号中断其同步循环
-                    raise TakeInterrupt::TakeInterrupt
-                  } else {
-                    // 异步源：正常取消上游，避免热流继续泄漏
-                    (source_sub.val).dispose()
-                  }
+      let observer = {
+        next: fn(v : T) {
+          if !stopped.val {
+            if remaining.val > 0 {
+              remaining.val = remaining.val - 1
+              let done = remaining.val == 0
+              next(v)
+              if done {
+                stopped.val = true
+                // 取够：先通知下游完成
+                complete()
+                match interrupt.val {
+                  Some(interrupt_fn) => interrupt_fn()
+                  None => (source_sub.val).dispose()
                 }
               }
             }
-          },
-          error: fn(e : E) {
-            if !stopped.val {
-              stopped.val = true
-              error(e)
-            }
-          },
-          complete: fn() {
-            if !stopped.val {
-              stopped.val = true
-              complete()
-            }
-          },
-        })
-        source_done.val = true
-        Subscription::new(fn() {
-          stopped.val = true
-          (source_sub.val).dispose()
-        })
-      } catch {
-        TakeInterrupt::TakeInterrupt => {
-          // 同步无限源被中断：返回空订阅（上游已被异常打断，无需 dispose）
-          Subscription::new(fn() {
+          }
+        },
+        error: fn(e : E) {
+          if !stopped.val {
             stopped.val = true
-            (source_sub.val).dispose()
-          })
-        }
+            error(e)
+          }
+        },
+        complete: fn() {
+          if !stopped.val {
+            stopped.val = true
+            complete()
+          }
+        },
+        interrupt: interrupt,
       }
-      result
+      source_sub.val = source_fn(observer)
+      Subscription::new(fn() {
+        stopped.val = true
+        (source_sub.val).dispose()
+      })
     }
   }
   Observable::new(subscribe_fn)
@@ -120,7 +102,7 @@ pub fn[T, E] Observable::skip(self : Observable[T, E], n : Int) -> Observable[T,
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -170,7 +152,7 @@ pub fn[T, E] first(source : Observable[T, E], predicate : (T) -> Bool) -> Observ
           stopped.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -198,7 +180,7 @@ pub fn[T, E] Observable::last(self : Observable[T, E]) -> Observable[T, E] {
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -231,7 +213,7 @@ pub fn[T, E] last(source : Observable[T, E], predicate : (T) -> Bool) -> Observa
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -249,16 +231,21 @@ pub fn[T, E] Observable::take_while(
     let complete = downstream.complete
     let stopped = Ref::Ref(false)
     let source_sub = Ref::Ref(Subscription::empty())
-    source_sub.val = source_fn({
+    // 中断通道：谓词首次为假时中断同步无限源（iterate / repeat_infinite / cycle / unfoldr）
+    let interrupt = Ref::Ref(None)
+    let observer = {
       next: fn(v : T) {
         if !stopped.val {
           if predicate(v) {
             next(v)
           } else {
             stopped.val = true
-            // 谓词不满足即终止，取消上游避免热流继续泄漏
-            (source_sub.val).dispose()
+            // 谓词不满足即终止；同步源走 interrupt，异步源 dispose 取消上游
             complete()
+            match interrupt.val {
+              Some(interrupt_fn) => interrupt_fn()
+              None => (source_sub.val).dispose()
+            }
           }
         }
       },
@@ -274,7 +261,9 @@ pub fn[T, E] Observable::take_while(
           complete()
         }
       },
-    })
+      interrupt: interrupt,
+    }
+    source_sub.val = source_fn(observer)
     Subscription::new(fn() {
       stopped.val = true
       (source_sub.val).dispose()
@@ -306,7 +295,7 @@ pub fn[T, E] Observable::skip_while(
         next(v)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -339,7 +328,7 @@ pub fn[T, E] Observable::skip_last(self : Observable[T, E], n : Int) -> Observab
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -366,7 +355,7 @@ pub fn[T, E] Observable::take_last(self : Observable[T, E], n : Int) -> Observab
           next(x)
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -415,7 +404,7 @@ pub fn[T, E : Default] Observable::element_at(
             error(E::default())
           }
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -441,7 +430,7 @@ pub fn[T : Hash + Eq, E] Observable::distinct(self : Observable[T, E]) -> Observ
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -467,7 +456,7 @@ pub fn[T, E, K : Hash + Eq] Observable::distinct_by(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -496,7 +485,7 @@ pub fn[T : Eq, E] Observable::distinct_until_changed(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -527,7 +516,7 @@ pub fn[T, E, K : Eq] Observable::distinct_until_changed_by(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -557,12 +546,12 @@ pub fn[T, E] Observable::skip_until(
         }
       },
       error: fn(_ : E) {},
-      complete: fn() {},
+      complete: fn() {}, interrupt: Ref::Ref(None),
     })
     source_sub.val = source_fn({
       next: fn(v : T) { if triggered.val { next(v) } },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       triggered.val = true
@@ -598,7 +587,7 @@ pub fn[T, E] Observable::take_until(
         }
       },
       error: fn(_ : E) {},
-      complete: fn() {},
+      complete: fn() {}, interrupt: Ref::Ref(None),
     })
     source_sub.val = source_fn({
       next: fn(v : T) {
@@ -616,7 +605,7 @@ pub fn[T, E] Observable::take_until(
           stopped.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -667,7 +656,7 @@ pub fn[T : Eq, E] Observable::contains(
           }
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true

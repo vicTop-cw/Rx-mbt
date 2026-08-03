@@ -48,8 +48,10 @@ pub fn[T, E] Observable::iterate(
 ) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
     let stopped = Ref::Ref(false)
-    // 下游完成信号：take 取够后调用 complete() 可中断同步循环（修复死循环 bug）
+    // 下游完成信号：take 取够后通过 interrupt 通道中断同步循环（修复死循环 bug）
     let finished = Ref::Ref(false)
+    // 下游（take / take_while）可通过 interrupt 通道请求停止同步循环
+    observer.interrupt.val = Some(fn() { finished.val = true })
     let wrapped : Observer[T, E] = {
       next: observer.next,
       error: fn(e : E) {
@@ -60,6 +62,7 @@ pub fn[T, E] Observable::iterate(
         finished.val = true
         observer.on_completed()
       },
+      interrupt: observer.interrupt,
     }
     let mut cur = seed
     while !stopped.val && !finished.val {
@@ -77,6 +80,7 @@ pub fn[T, E] Observable::repeat_infinite(value : T) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
     let stopped = Ref::Ref(false)
     let finished = Ref::Ref(false)
+    observer.interrupt.val = Some(fn() { finished.val = true })
     let wrapped : Observer[T, E] = {
       next: observer.next,
       error: fn(e : E) {
@@ -87,6 +91,7 @@ pub fn[T, E] Observable::repeat_infinite(value : T) -> Observable[T, E] {
         finished.val = true
         observer.on_completed()
       },
+      interrupt: observer.interrupt,
     }
     while !stopped.val && !finished.val {
       wrapped.on_next(value)
@@ -102,6 +107,7 @@ pub fn[T, E] Observable::cycle(values : Array[T]) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
     let stopped = Ref::Ref(false)
     let finished = Ref::Ref(false)
+    observer.interrupt.val = Some(fn() { finished.val = true })
     let wrapped : Observer[T, E] = {
       next: observer.next,
       error: fn(e : E) {
@@ -112,6 +118,7 @@ pub fn[T, E] Observable::cycle(values : Array[T]) -> Observable[T, E] {
         finished.val = true
         observer.on_completed()
       },
+      interrupt: observer.interrupt,
     }
     while !stopped.val && !finished.val {
       for v in values {
@@ -134,18 +141,34 @@ pub fn[T, E, S] Observable::unfoldr(
   seed : S,
 ) -> Observable[T, E] {
   let subscribe_fn : (Observer[T, E]) -> Subscription = fn(observer : Observer[T, E]) {
+    let stopped = Ref::Ref(false)
+    // 下游（take / take_while）可通过 interrupt 通道请求停止同步循环
+    let finished = Ref::Ref(false)
+    observer.interrupt.val = Some(fn() { finished.val = true })
+    let wrapped : Observer[T, E] = {
+      next: observer.next,
+      error: fn(e : E) {
+        finished.val = true
+        observer.on_error(e)
+      },
+      complete: fn() {
+        finished.val = true
+        observer.on_completed()
+      },
+      interrupt: observer.interrupt,
+    }
     let mut state = seed
-    while true {
+    while !stopped.val && !finished.val {
       match f(state) {
         Some((value, next_state)) => {
-          observer.on_next(value)
+          wrapped.on_next(value)
           state = next_state
         }
         None => break
       }
     }
     observer.on_completed()
-    Subscription::empty()
+    Subscription::new(fn() { stopped.val = true })
   }
   Observable::new(subscribe_fn)
 }
@@ -171,7 +194,7 @@ pub fn[T, E] Observable::reverse(self : Observable[T, E]) -> Observable[Array[T]
         arr.rev_in_place()
         next(arr)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -198,7 +221,7 @@ pub fn[T, E] Observable::intersperse(
         next(v)
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -230,7 +253,7 @@ pub fn[T, E] Observable::intercalate(
         }
       },
       error: error,
-      complete: complete,
+      complete: complete, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -290,7 +313,7 @@ pub fn[T, E, U, R] Observable::zip_with(
       complete: fn() {
         done_a.val = true
         try_emit()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     b_sub.val = other_fn({
       next: fn(v : U) {
@@ -303,7 +326,7 @@ pub fn[T, E, U, R] Observable::zip_with(
       complete: fn() {
         done_b.val = true
         try_emit()
-      },
+      }, interrupt: Ref::Ref(None),
     })
     try_emit()
     Subscription::new(fn() {
@@ -379,7 +402,7 @@ pub fn[T, E, U, V] Observable::zip3(
         complete: fn() {
           done_a.val = true
           try_emit()
-        },
+        }, interrupt: Ref::Ref(None),
       })
       b_sub.val = b_fn({
         next: fn(v : U) {
@@ -392,7 +415,7 @@ pub fn[T, E, U, V] Observable::zip3(
         complete: fn() {
           done_b.val = true
           try_emit()
-        },
+        }, interrupt: Ref::Ref(None),
       })
       c_sub.val = c_fn({
         next: fn(v : V) {
@@ -405,7 +428,7 @@ pub fn[T, E, U, V] Observable::zip3(
         complete: fn() {
           done_c.val = true
           try_emit()
-        },
+        }, interrupt: Ref::Ref(None),
       })
       try_emit()
       Subscription::new(fn() {
@@ -440,7 +463,7 @@ pub fn[T, E, U] Observable::unzip(
         complete: fn() {
           next((col_a.val, col_b.val))
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -484,7 +507,7 @@ pub fn[T, E] Observable::transpose(
           }
           next(result)
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -525,7 +548,7 @@ pub fn[T, E] Observable::span(
           }
           next((prefix, rest))
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -574,7 +597,7 @@ pub fn[T, E] Observable::split_at(
           }
           next((left, right))
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -606,7 +629,7 @@ pub fn[T, E] Observable::partition(
         complete: fn() {
           next((yes.val, no.val))
           complete()
-        },
+        }, interrupt: Ref::Ref(None),
       })
     }
   Observable::new(subscribe_fn)
@@ -648,7 +671,7 @@ pub fn[T : Eq, E] Observable::not_elem(
           next(true)
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -686,7 +709,7 @@ pub fn[T : Eq, E] Observable::delete_first(
         }
         next(result)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -740,7 +763,7 @@ pub fn[T, E] Observable::group_adjacent_by(
       complete: fn() {
         flush()
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -852,7 +875,7 @@ pub fn[T, E, Acc] Observable::foldr(
         }
         next(acc)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -888,7 +911,7 @@ pub fn[T, E, Acc] Observable::scanr(
         results.push(seed)
         next(results)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -918,7 +941,7 @@ pub fn[T : Mul, E] Observable::product(self : Observable[T, E]) -> Observable[T,
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -944,7 +967,7 @@ pub fn[T, E, R] Observable::fold_map(
       complete: fn() {
         next(acc.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -970,7 +993,7 @@ pub fn[T, E] Observable::sort_by(
         insertion_sort(arr, cmp)
         next(arr)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -1034,7 +1057,7 @@ fn[T, E] Observable::extreme_by_cmp(
           None => ()
         }
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -1064,7 +1087,7 @@ pub fn[T, E] Observable::find_indices(
       complete: fn() {
         next(idxs.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
@@ -1129,7 +1152,7 @@ pub fn[T, E, K : Eq, V] Observable::lookup(
           next(None)
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true

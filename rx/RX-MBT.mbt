@@ -4,10 +4,14 @@
 // ============================================================================
 
 /// 观察者：承载三个回调（on_next / on_error / on_completed）
+/// `interrupt` 是同步源与下游之间的中断通道（Ref 引用共享）：
+/// 同步无限源（iterate / repeat_infinite / cycle / unfoldr）在订阅时
+/// 把"停止函数"写入 interrupt，take / take_while 取够后调用它中断同步循环。
 pub struct Observer[T, E] {
   next : (T) -> Unit
   error : (E) -> Unit
   complete : () -> Unit
+  interrupt : Ref[(() -> Unit)?]
 }
 
 /// 构造一个 Observer
@@ -16,7 +20,12 @@ pub fn[T, E] Observer::new(
   error : (E) -> Unit,
   complete : () -> Unit,
 ) -> Observer[T, E] {
-  { next: next, error: error, complete: complete }
+  {
+    next: next,
+    error: error,
+    complete: complete,
+    interrupt: Ref::Ref(None),
+  }
 }
 
 /// 发射一个值
@@ -36,7 +45,12 @@ pub fn[T, E] Observer::on_completed(self : Observer[T, E]) -> Unit {
 
 /// 只关心 on_next 的便捷构造（其余回调为空操作）
 pub fn[T, E] Observer::on_next_only(next : (T) -> Unit) -> Observer[T, E] {
-  { next: next, error: fn(_err : E) {}, complete: fn() {} }
+  {
+    next: next,
+    error: fn(_err : E) {},
+    complete: fn() {},
+    interrupt: Ref::Ref(None),
+  }
 }
 
 // ============================================================================
@@ -110,7 +124,7 @@ pub fn[T, E] Observable::subscribe_on_error(
   self.subscribe({
     next: fn(_value : T) {},
     error: error,
-    complete: fn() {},
+    complete: fn() {}, interrupt: Ref::Ref(None),
   })
 }
 
@@ -122,7 +136,7 @@ pub fn[T, E] Observable::subscribe_on_completed(
   self.subscribe({
     next: fn(_value : T) {},
     error: fn(_err : E) {},
-    complete: complete,
+    complete: complete, interrupt: Ref::Ref(None),
   })
 }
 
@@ -278,7 +292,7 @@ test "of 发射单值并完成" {
   let _ = obs.subscribe({
     next: fn(x : Int) { values.val.push(x) },
     error: fn(_ : Unit) {  },
-    complete: fn() { done.val = true },
+    complete: fn() { done.val = true }, interrupt: Ref::Ref(None),
   })
   assert_eq(values.val, [42])
   assert_true(done.val)
@@ -306,7 +320,7 @@ test "empty 立即完成" {
   let _ = obs.subscribe({
     next: fn(_ : Int) {  },
     error: fn(_ : Unit) {  },
-    complete: fn() { done.val = true },
+    complete: fn() { done.val = true }, interrupt: Ref::Ref(None),
   })
   assert_true(done.val)
 }
@@ -317,7 +331,7 @@ test "error 发射错误不发射值" {
   let _ = obs.subscribe({
     next: fn(_ : Int) {},
     error: fn(err : String) { got_err.val = Some(err) },
-    complete: fn() {},
+    complete: fn() {}, interrupt: Ref::Ref(None),
   })
   assert_eq(got_err.val, Some("boom"))
 }

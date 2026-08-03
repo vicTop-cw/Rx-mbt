@@ -42,7 +42,7 @@ pub fn[T, E] Observable::every(
           }
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -92,7 +92,7 @@ pub fn[T, E] Observable::some(
           }
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -139,7 +139,7 @@ pub fn[T, E] Observable::find(
           stopped.val = true
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -192,7 +192,7 @@ pub fn[T, E] Observable::find_index(
           }
           complete()
         }
-      },
+      }, interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -216,7 +216,7 @@ pub fn[T, E] Observable::is_empty(self : Observable[T, E]) -> Observable[Bool, E
       complete: fn() {
         next(empty.val)
         complete()
-      },
+      }, interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
