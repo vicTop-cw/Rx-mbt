@@ -1,7 +1,7 @@
 import @rx
 
 ///|
-/// 依赖验证入口：通过外部依赖声明（git 源）引入 vicTop/RX-MBT，
+/// 依赖验证入口：通过外部依赖声明（git 源）引入 vicTop-cw/RX-MBT，
 /// 运行一组 rx 核心 API 并打印结果，确认依赖拉取、编译、运行全链路可用。
 fn main {
   // 1. 创建 + 转换：of / map / filter

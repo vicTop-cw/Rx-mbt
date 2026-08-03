@@ -17,22 +17,22 @@
 
 | Package | Tests |
 |---|---|
-| vicTop/RX-MBT/rx | 7 |
-| vicTop/RX-MBT/test-suit/aggregation | 37 |
-| vicTop/RX-MBT/test-suit/composite | 22 |
-| vicTop/RX-MBT/test-suit/core | 17 |
-| vicTop/RX-MBT/test-suit/create | 10 |
-| vicTop/RX-MBT/test-suit/filter | 26 |
-| vicTop/RX-MBT/test-suit/haskell | 81 |
-| vicTop/RX-MBT/test-suit/itor | 136 |
-| vicTop/RX-MBT/test-suit/math_conditions | 21 |
-| vicTop/RX-MBT/test-suit/stress | 10 |
-| vicTop/RX-MBT/test-suit/transform | 10 |
+| vicTop-cw/RX-MBT/rx | 7 |
+| vicTop-cw/RX-MBT/test-suit/aggregation | 37 |
+| vicTop-cw/RX-MBT/test-suit/composite | 22 |
+| vicTop-cw/RX-MBT/test-suit/core | 17 |
+| vicTop-cw/RX-MBT/test-suit/create | 10 |
+| vicTop-cw/RX-MBT/test-suit/filter | 26 |
+| vicTop-cw/RX-MBT/test-suit/haskell | 81 |
+| vicTop-cw/RX-MBT/test-suit/itor | 136 |
+| vicTop-cw/RX-MBT/test-suit/math_conditions | 21 |
+| vicTop-cw/RX-MBT/test-suit/stress | 10 |
+| vicTop-cw/RX-MBT/test-suit/transform | 10 |
 | **Total** | **377** |
 
 ## Test listing
 
-### vicTop/RX-MBT/rx
+### vicTop-cw/RX-MBT/rx
 
 | # | Test name |
 |---|---|
@@ -44,7 +44,7 @@
 | 6 | repeat 重复发射 |
 | 7 | 订阅可取消（幂等） |
 
-### vicTop/RX-MBT/test-suit/aggregation
+### vicTop-cw/RX-MBT/test-suit/aggregation
 
 | # | Test name |
 |---|---|
@@ -86,7 +86,7 @@
 | 36 | aggregation: maximum_by 按 key_mapper 求最大值 |
 | 37 | aggregation: reduce_no_seed 首元素作初始值 |
 
-### vicTop/RX-MBT/test-suit/composite
+### vicTop-cw/RX-MBT/test-suit/composite
 
 | # | Test name |
 |---|---|
@@ -113,7 +113,7 @@
 | 21 | composite: concat 进入第二段后 dispose 可取消第二段订阅（回归） |
 | 22 | composite: with_latest_from a 完成后 b 订阅被取消（回归） |
 
-### vicTop/RX-MBT/test-suit/core
+### vicTop-cw/RX-MBT/test-suit/core
 
 | # | Test name |
 |---|---|
@@ -135,7 +135,7 @@
 | 16 | timer_on 延迟触发一次并完成 |
 | 17 | interval_on 按周期发射递增计数 |
 
-### vicTop/RX-MBT/test-suit/create
+### vicTop-cw/RX-MBT/test-suit/create
 
 | # | Test name |
 |---|---|
@@ -150,7 +150,7 @@
 | 9 | create: from_callable 调用函数并发射结果 |
 | 10 | create: start 等价 from_callable |
 
-### vicTop/RX-MBT/test-suit/filter
+### vicTop-cw/RX-MBT/test-suit/filter
 
 | # | Test name |
 |---|---|
@@ -181,7 +181,7 @@
 | 25 | filter: skip_until 触发后 trigger 订阅被取消（回归） |
 | 26 | filter: take_until 触发后源流被取消（回归） |
 
-### vicTop/RX-MBT/test-suit/haskell
+### vicTop-cw/RX-MBT/test-suit/haskell
 
 | # | Test name |
 |---|---|
@@ -267,7 +267,7 @@
 | 80 | haskell: unlines 行连接 |
 | 81 | haskell: unwords 词连接 |
 
-### vicTop/RX-MBT/test-suit/itor
+### vicTop-cw/RX-MBT/test-suit/itor
 
 | # | Test name |
 |---|---|
@@ -408,7 +408,7 @@
 | 135 | haskell-itor2: unzip3 拆分三元组 |
 | 136 | haskell-itor2: 新增变换操作链式组合 |
 
-### vicTop/RX-MBT/test-suit/math_conditions
+### vicTop-cw/RX-MBT/test-suit/math_conditions
 
 | # | Test name |
 |---|---|
@@ -434,7 +434,7 @@
 | 20 | error: on_error_return 出错时发射兜底值 |
 | 21 | error: retry 出错重试后成功 |
 
-### vicTop/RX-MBT/test-suit/stress
+### vicTop-cw/RX-MBT/test-suit/stress
 
 | # | Test name |
 |---|---|
@@ -449,7 +449,7 @@
 | 9 | stress: 嵌套 flat_map 展开 1 万条 |
 | 10 | stress: 递归重试 + catch_error 错误路径不泄漏 |
 
-### vicTop/RX-MBT/test-suit/transform
+### vicTop-cw/RX-MBT/test-suit/transform
 
 | # | Test name |
 |---|---|

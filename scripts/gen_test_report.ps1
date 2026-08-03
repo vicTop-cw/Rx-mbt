@@ -23,7 +23,7 @@ $target = "wasm"
 $outline = moon test --outline 2>&1
 $tests = @()
 foreach ($line in $outline) {
-  # format:  1. vicTop/RX-MBT/rx RX-MBT.mbt:274 index=0 name="of ..."
+  # format:  1. vicTop-cw/RX-MBT/rx RX-MBT.mbt:274 index=0 name="of ..."
   if ($line -match '^\s*\d+\.\s+(\S+)\s+(\S+\.mbt):(\d+)\s+index=(\d+)\s+name="(.*)"\s*$') {
     $tests += [PSCustomObject]@{
       Package = $matches[1]

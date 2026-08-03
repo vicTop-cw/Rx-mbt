@@ -9,7 +9,7 @@
                 },
     "packages":  [
                      {
-                         "package":  "vicTop/RX-MBT/rx",
+                         "package":  "vicTop-cw/RX-MBT/rx",
                          "count":  7,
                          "tests":  [
                                        "of 发射单值并完成",
@@ -22,7 +22,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/aggregation",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/aggregation",
                          "count":  37,
                          "tests":  [
                                        "aggregation: count 统计个数",
@@ -65,7 +65,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/composite",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/composite",
                          "count":  22,
                          "tests":  [
                                        "composite: start_with 前置发射前缀",
@@ -93,7 +93,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/core",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/core",
                          "count":  17,
                          "tests":  [
                                        "run 立即消费并原样返回",
@@ -116,7 +116,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/create",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/create",
                          "count":  10,
                          "tests":  [
                                        "create: of 发射单值并完成",
@@ -132,7 +132,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/filter",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/filter",
                          "count":  26,
                          "tests":  [
                                        "filter: 只放行满足谓词的值",
@@ -164,7 +164,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/haskell",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/haskell",
                          "count":  81,
                          "tests":  [
                                        "haskell: iterate 无限迭代配合 take 截断",
@@ -251,7 +251,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/itor",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/itor",
                          "count":  136,
                          "tests":  [
                                        "Node: 值读写与 next 链",
@@ -393,7 +393,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/math_conditions",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/math_conditions",
                          "count":  21,
                          "tests":  [
                                        "math: drop_none 丢弃 None",
@@ -420,7 +420,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/stress",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/stress",
                          "count":  10,
                          "tests":  [
                                        "stress: 10 万元素 map+filter+reduce 链",
@@ -436,7 +436,7 @@
                                    ]
                      },
                      {
-                         "package":  "vicTop/RX-MBT/test-suit/transform",
+                         "package":  "vicTop-cw/RX-MBT/test-suit/transform",
                          "count":  10,
                          "tests":  [
                                        "transform: map 对每个值应用映射",

@@ -17,7 +17,7 @@ moon add git+https://<你的仓库地址>.git
 
 ```toml
 import {
-  "vicTop/RX-MBT/rx" @rx,
+  "vicTop-cw/RX-MBT/rx" @rx,
 }
 ```
 
@@ -26,13 +26,13 @@ import {
 ```bash
 moon publish
 # 之后任何项目可用：
-moon add vicTop/RX-MBT
+moon add vicTop-cw/RX-MBT
 ```
 
 ### 使用示例（外部项目视角）
 
 ```moonbit
-// moon.pkg 中已 import "vicTop/RX-MBT/rx" @rx
+// moon.pkg 中已 import "vicTop-cw/RX-MBT/rx" @rx
 fn main {
   // 链式调用：map -> filter -> collect
   let result = @rx.Observable::from_iter([1, 2, 3, 4, 5])
@@ -69,7 +69,7 @@ moon test       # 运行全部测试
 | 操作系统 | Windows 11（PowerShell 7 / Windows PowerShell 5.1 均可运行脚本） |
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端 |
-| 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
+| 库版本 | `vicTop-cw/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
 | 测试数量 | 377（基本 + 高压 + Haskell API 回归，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 

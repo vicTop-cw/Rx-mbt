@@ -9,7 +9,7 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "vicTop/RX-MBT"
+name = "vicTop-cw/RX-MBT"
 
 version = "0.1.0"
 

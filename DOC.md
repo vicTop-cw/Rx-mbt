@@ -1,7 +1,7 @@
 # RX-MBT API 文档
 
 > 本文档由 `rx/pkg.generated.mbti`（`moon info` 生成）与源码注释整理，列出全部公开 API 的签名与语义说明。
-> 库版本：`vicTop/RX-MBT@0.1.0`　工具链：`moon 0.1.20260724`　编译目标：`wasm`
+> 库版本：`vicTop-cw/RX-MBT@0.1.0`　工具链：`moon 0.1.20260724`　编译目标：`wasm`
 
 ## 目录
 

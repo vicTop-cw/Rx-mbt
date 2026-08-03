@@ -1,5 +1,5 @@
 import {
-  "vicTop/RX-MBT/rx" @rx,
+  "vicTop-cw/RX-MBT/rx" @rx,
   "moonbitlang/core/debug",
 }
 

@@ -1,5 +1,5 @@
 ///|
-/// RX-MBT 库使用示例：以三方依赖方式引用 `vicTop/RX-MBT/rx`（别名 @rx）
+/// RX-MBT 库使用示例：以三方依赖方式引用 `vicTop-cw/RX-MBT/rx`（别名 @rx）
 /// 运行：`moon run cmd/main`
 
 fn main {
