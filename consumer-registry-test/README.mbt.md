@@ -1,1 +1,0 @@
-# vicTop-cw/consumer-registry-test

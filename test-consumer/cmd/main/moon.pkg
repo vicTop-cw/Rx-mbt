@@ -1,5 +1,0 @@
-import {
-  "vicTop-cw/RX-MBT/rx" @rx,
-}
-
-pkgtype(kind: "executable")
