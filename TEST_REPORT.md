@@ -4,7 +4,7 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-03 10:33:07 |
+| Generated at | 2026-08-03 10:40:21 |
 | moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
 | Test target | wasm |
 | Total tests | 377 |
