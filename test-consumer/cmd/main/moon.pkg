@@ -1,0 +1,5 @@
+// import {
+//   "vicTop-cw/rx-mbt-consumer" @lib,
+// }
+
+pkgtype(kind: "executable")
