@@ -1,4 +1,5 @@
 .DS_Store
+competition/
 _build/
 target/
 target
