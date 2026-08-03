@@ -21,6 +21,7 @@
 - [调度器](#调度器)
 - [自由函数操作符](#自由函数操作符)
 - [Itor / Node（可控制迭代器）](#itor--node可控制迭代器)
+- [Haskell 迭代器 API 对照](#haskell-迭代器-api-对照)
 - [行为约定](#行为约定)
 
 ---
@@ -431,6 +432,106 @@
 ### `ItorState`
 
 `Pending` / `Iterring` / `Paused` / `Stopped`（derive `Eq`、`Debug`）。
+
+---
+
+## Haskell 迭代器 API 对照
+
+> 语义对照 Haskell `Prelude` / `Data.List` / `Data.Foldable` 的常用迭代器操作。
+> 命名说明：`break` / `group` / `delete` 等与语言关键字或既有语义冲突，映射为
+> `break_pred` / `group_adjacent` / `delete_first`。`Observable` 层为异步流版本，
+> `Itor` 层为可控制同步迭代器版本。
+
+### Observable 层（流式/收集式操作符）
+
+| Haskell | rx-mbt Observable | 语义 |
+|---|---|---|
+| `iterate f x` | `iterate(f, x)` | 无限发射 `x, f(x), f(f(x))...`，配合 `take` 截断 |
+| `repeat x` | `repeat_infinite(x)` | 无限重复同一值 |
+| `cycle xs` | `cycle(xs)` | 无限循环数组 |
+| `unfoldr f z` | `unfoldr(f, z)` | 用 `f : (S) -> (T, S)?` 逐步展开 |
+| `replicate n x` | `repeat(x, n)` | 发射同一值 n 次 |
+| `tail xs` | `tail()` | 丢弃首元素（空流安全） |
+| `init xs` | `init()` | 丢弃末元素（空流安全） |
+| `scanl f z xs` | `scan(z, f)` | 带种子左扫描，逐值发累积 |
+| `scanl1 f xs` | `scanl1(f)` | 无种子左扫描，首元素作初始累积 |
+| `scanr f z xs` | `scanr(z, f)` | 右扫描，收集后发全部中间结果数组 |
+| `scanr1 f xs` | `scanr1(f)` | 无种子右扫描，收集后发全部中间结果数组 |
+| `foldl f z xs` | `reduce(z, f)` | 左折叠，完成时发最终结果 |
+| `foldl1 f xs` | `reduce_no_seed(f)` | 无种子左折叠 |
+| `foldr f z xs` | `foldr(z, f)` | 右折叠，完成时发最终结果 |
+| `foldr1 f xs` | `foldr1(f)` | 无种子右折叠（空流不发值） |
+| `foldMap f xs` | `fold_map(f)` | 映射后幺半群累积 |
+| `mapAccumL f z xs` | `map_accum_l(z, f)` | 带状态左遍历，逐值发 `(新累积, 输出)` |
+| `mapAccumR f z xs` | `map_accum_r(z, f)` | 带状态右遍历，输出保持原顺序 |
+| `takeWhile p xs` | `take_while(p)` | 谓词为真放行，为假即完成 |
+| `dropWhile p xs` | `skip_while(p)` | 跳过满足谓词的前缀 |
+| `takeWhileEnd p xs` | `take_while_end(p)` | 从尾部取连续满足谓词的最长后缀 |
+| `dropWhileEnd p xs` | `drop_while_end(p)` | 去掉尾部连续满足谓词的段 |
+| `zipWith f xs ys` | `zip_with(other, f)` | 双流合并映射 |
+| `zip3 xs ys zs` | `zip3(other1, other2)` | 三流拉链 |
+| `unzip3 xyzs` | `unzip3()` | 三元组流拆三列 |
+| `transpose xss` | `transpose()` | 矩阵转置（收集后发二维数组） |
+| `intersperse sep xs` | `intersperse(sep)` | 元素间插入分隔符 |
+| `intercalate sep xss` | `intercalate(sep)` | 数组流用分隔数组连接 |
+| `span p xs` | `span(p)` | 发 `(满足谓词的最长前缀, 剩余)` |
+| `break p xs` | `break_pred(p)` | 发 `(前缀不满足谓词, 剩余)` |
+| `splitAt n xs` | `split_at(n)` | 发 `(前 n 个, 剩余)` |
+| `partition p xs` | `partition(p)` | 发 `(满足的, 不满足的)` |
+| `group xs` | `group_adjacent()` | 相邻相等分组 |
+| `groupBy f xs` | `group_adjacent_by(f)` | 相邻满足谓词分组 |
+| `sort xs` | `sort()` | 收集排序 |
+| `sortBy cmp xs` | `sort_by(cmp)` | 按比较函数排序 |
+| `sortOn key xs` | `sort_on(key_fn)` | 按键投影排序 |
+| `nub xs` | `distinct()` | 去重（Hash） |
+| `nubBy eq xs` | `nub_by(eq)` | 两两比较去重（无 Hash 约束） |
+| `delete x xs` | `delete_first(x)` | 删除第一个匹配值 |
+| `deleteBy eq x xs` | `delete_first_by(x, eq)` | 按谓词删除第一个 |
+| `union xs ys` | `union(ys)` | 并集（源流全保留，ys 补充） |
+| `intersect xs ys` | `intersect(ys)` | 交集（源流顺序） |
+| `xs \\ ys` | `difference(ys)` | 列表差集（按出现次数逐个删除） |
+| `insert x xs` | `insert(x)` | 插入已排序流保持升序 |
+| `insertBy cmp x xs` | `insert_by(cmp, x)` | 按比较函数插入 |
+| `inits xs` | `inits()` | 全部前缀（含空与全量） |
+| `tails xs` | `tails()` | 全部后缀（含全量与空） |
+| `isPrefixOf xs ys` | `is_prefix_of(xs)` | 是否前缀 |
+| `isSuffixOf xs ys` | `is_suffix_of(xs)` | 是否后缀 |
+| `isInfixOf xs ys` | `is_infix_of(xs)` | 是否连续子序列 |
+| `isSubsequenceOf xs ys` | `is_subsequence_of(xs)` | 是否可跳跃子序列 |
+| `stripPrefix xs ys` | `strip_prefix(xs)` | 匹配前缀则发剩余数组，否则 `None` |
+| `stripSuffix xs ys` | `strip_suffix(xs)` | 匹配后缀则发剩余数组，否则 `None` |
+| `elem x xs` | `contains(x)` | 是否包含 |
+| `notElem x xs` | `not_elem(x)` | 是否不包含 |
+| `lookup k kvs` | `lookup(k, key_fn, val_fn)` | 按键查值，发 `V?` |
+| `find p xs` | `find(p)` | 发第一个满足谓词的值 |
+| `findIndex p xs` | `find_index(p)` | 发第一个满足谓词的索引 |
+| `findIndices p xs` | `find_indices(p)` | 发全部满足谓词的索引数组 |
+| `elemIndex x xs` | `elem_index(x)` | 发等值索引（找不到发 -1） |
+| `elemIndices x xs` | `elem_indices(x)` | 发全部等值索引数组 |
+| `and xs` | `all_true()` | Bool 流全真 |
+| `or xs` | `any_true()` | Bool 流任一真 |
+| `all p xs` | `all(p)` | 全部满足谓词 |
+| `any p xs` | `some(p)` | 任一满足谓词 |
+| `sum xs` | `sum()` | 累加 |
+| `product xs` | `product()` | 累乘 |
+| `maximum xs` | `maximum()` | 最大值 |
+| `minimum xs` | `minimum()` | 最小值 |
+| `maximumBy cmp xs` | `maximum_by_cmp(cmp)` | 按比较函数求最大 |
+| `minimumBy cmp xs` | `minimum_by_cmp(cmp)` | 按比较函数求最小 |
+| `length xs` | `count()` | 计数 |
+| `null xs` | `is_empty()` | 判空 |
+| `reverse xs` | `reverse()` | 收集后反转 |
+| `lines s` | `lines(s)`（自由函数） | 按换行切分行流 |
+| `words s` | `words(s)`（自由函数） | 按空白切分词流 |
+| `unlines xs` | `unlines()` | 行流用 `\n` 连接（末尾补 `\n`） |
+| `unwords xs` | `unwords()` | 词流用空格连接 |
+
+### Itor 层（可控制迭代器）
+
+`Itor` 层除上述语义外，还提供：`Node` 链表构造、`send/send_value` 插队、
+`restart` 重放、`history_len` 历史、`zip4-7 / zip_with4-7 / unzip4-7` 多路拉链、
+`chunks_of` 分块、`subsequences / permutations` 子序列与排列、`at` 索引访问、
+`take_while_end / drop_while_end` 尾部条件等（详见源码 `rx/ops_itor_haskell.mbt`）。
 
 ---
 

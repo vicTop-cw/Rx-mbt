@@ -70,7 +70,7 @@ moon test       # 运行全部测试
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端 |
 | 库版本 | `vicTop/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | 195（基本 + 高压 + 回归，全部通过，见 `TEST_REPORT.md`） |
+| 测试数量 | 377（基本 + 高压 + Haskell API 回归，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。
@@ -104,6 +104,7 @@ powershell -ExecutionPolicy Bypass -File scripts/gen_test_report.ps1
 | `test-suit/math_conditions` | drop_none / fill_none / clamp / abs / every / some / all / find / is_empty |
 | `test-suit/core` | run / debug / Subject / Scheduler / cum_* 等基础行为 |
 | `test-suit/itor` | Itor / Node 可控制迭代器：send 插队 / set_pause / resume_iter / restart 重放 / stop / history 策略 |
+| `test-suit/haskell` | Haskell 迭代器 API（Data.List / Data.Foldable 语义）：iterate / scanl1 / foldr1 / map_accum_l / inits / tails / union / insert / lines / words 等 |
 | `test-suit/stress` | 高压测试：10 万元素链、多订阅者、Subject 高压、递归重试 |
 | `test-suit/bench` | 基准测试（`#skip` 默认跳过，`moon test -g bench` 运行） |
 

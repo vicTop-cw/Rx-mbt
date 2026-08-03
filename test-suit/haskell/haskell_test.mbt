@@ -463,3 +463,357 @@ test "haskell: Itor::fold 空迭代器返回 seed" {
   let total = itor.fold(100, fn(acc : Int, v : Int) { acc + v })
   assert_eq(total, 100)
 }
+
+// ============================================================================
+// 第二批 / 第三批补全 API：tail / init / scanl1 / scanr1 / foldr1 /
+// map_accum_l / map_accum_r / all_true / any_true / take_while_end /
+// drop_while_end / inits / tails / strip_prefix / strip_suffix /
+// delete_first_by / is_subsequence_of / nub_by / unzip3 / union / intersect /
+// difference / insert / insert_by / lines / words / unlines / unwords
+// ============================================================================
+
+///|
+test "haskell: tail 丢弃首元素" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).tail()
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [2, 3])
+}
+
+///|
+test "haskell: tail 空流不发值" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([]).tail()
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [])
+}
+
+///|
+test "haskell: init 丢弃末元素" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).init()
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [1, 2])
+}
+
+///|
+test "haskell: scanl1 无种子左扫描" {
+  // Haskell: scanl1 (+) [1,2,3] = [1,3,6]
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).scanl1(fn(a : Int, b : Int) { a + b })
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [1, 3, 6])
+}
+
+///|
+test "haskell: scanl1 减法验证累积方向" {
+  // Haskell: scanl1 (-) [1,2,3] = [1, -1, -4]
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).scanl1(fn(a : Int, b : Int) { a - b })
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [1, -1, -4])
+}
+
+///|
+test "haskell: scanr1 无种子右扫描" {
+  // Haskell: scanr1 (-) [1,2,3] = [1-(2-3), 2-3, 3] = [2, -1, 3]
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter([1, 2, 3]).scanr1(fn(a : Int, b : Int) { a - b })
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[2, -1, 3]])
+}
+
+///|
+test "haskell: foldr1 无种子右折叠" {
+  // Haskell: foldr1 (-) [1,2,3] = 1-(2-3) = 2
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).foldr1(fn(a : Int, b : Int) { a - b })
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [2])
+}
+
+///|
+test "haskell: foldr1 单元素直接发该元素" {
+  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([42]).foldr1(fn(a : Int, b : Int) { a + b })
+  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  assert_eq(values.val, [42])
+}
+
+///|
+test "haskell: map_accum_l 带状态左映射" {
+  // Haskell: mapAccumL (\acc x -> (acc+x, acc+x)) 0 [1,2,3] = (6, [1,3,6])
+  let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[(Int, Int), Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).map_accum_l(0, fn(acc : Int, x : Int) -> (Int, Int) { (acc + x, acc + x) })
+  let _ = obs.subscribe_on_next(fn(v : (Int, Int)) { values.val.push(v) })
+  assert_eq(values.val, [(1, 1), (3, 3), (6, 6)])
+}
+
+///|
+test "haskell: map_accum_r 带状态右映射" {
+  // Haskell: mapAccumR (\acc x -> (acc+x, acc+x)) 0 [1,2,3]
+  // 从右往左：先处理 3 -> (3,3)，再 2 -> (5,5)，再 1 -> (6,6)，输出保持原顺序
+  let values : Ref[Array[(Int, Int)]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[(Int, Int), Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).map_accum_r(0, fn(acc : Int, x : Int) -> (Int, Int) { (acc + x, acc + x) })
+  let _ = obs.subscribe_on_next(fn(v : (Int, Int)) { values.val.push(v) })
+  assert_eq(values.val, [(6, 6), (5, 5), (3, 3)])
+}
+
+///|
+test "haskell: all_true 全真发 true" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([true, true, true]).all_true()
+  let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  assert_eq(values.val, [true])
+}
+
+///|
+test "haskell: all_true 遇 false 早停发 false" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([true, false, true]).all_true()
+  let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  assert_eq(values.val, [false])
+}
+
+///|
+test "haskell: any_true 任一真发 true" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([false, true, false]).any_true()
+  let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  assert_eq(values.val, [true])
+}
+
+///|
+test "haskell: any_true 全假发 false" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([false, false]).any_true()
+  let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  assert_eq(values.val, [false])
+}
+
+///|
+test "haskell: take_while_end 尾部连续满足的最长后缀" {
+  // Haskell: takeWhileEnd even [1,2,3,4,6] = [4,6]
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 4, 6],
+  ).take_while_end(fn(v : Int) { v % 2 == 0 })
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[4, 6]])
+}
+
+///|
+test "haskell: drop_while_end 去掉尾部满足段" {
+  // Haskell: dropWhileEnd even [1,2,3,4,6] = [1,2,3]
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 4, 6],
+  ).drop_while_end(fn(v : Int) { v % 2 == 0 })
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 2, 3]])
+}
+
+///|
+test "haskell: inits 全部前缀" {
+  let values : Ref[Array[Array[Array[Int]]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Array[Int]], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).inits()
+  let _ = obs.subscribe_on_next(fn(v : Array[Array[Int]]) { values.val.push(v) })
+  assert_eq(values.val, [[[], [1], [1, 2], [1, 2, 3]]])
+}
+
+///|
+test "haskell: tails 全部后缀" {
+  let values : Ref[Array[Array[Array[Int]]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Array[Int]], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).tails()
+  let _ = obs.subscribe_on_next(fn(v : Array[Array[Int]]) { values.val.push(v) })
+  assert_eq(values.val, [[[1, 2, 3], [2, 3], [3], []]])
+}
+
+///|
+test "haskell: strip_prefix 匹配发剩余" {
+  let values : Ref[Array[Array[Int]?]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int]?, Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).strip_prefix([1, 2])
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]?) { values.val.push(v) })
+  assert_eq(values.val, [Some([3])])
+}
+
+///|
+test "haskell: strip_prefix 不匹配发 None" {
+  let values : Ref[Array[Array[Int]?]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int]?, Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).strip_prefix([2, 3])
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]?) { values.val.push(v) })
+  assert_eq(values.val, [None])
+}
+
+///|
+test "haskell: strip_suffix 匹配发剩余" {
+  let values : Ref[Array[Array[Int]?]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int]?, Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).strip_suffix([2, 3])
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]?) { values.val.push(v) })
+  assert_eq(values.val, [Some([1])])
+}
+
+///|
+test "haskell: delete_first_by 按谓词删除第一个" {
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 4],
+  ).delete_first_by(2, fn(a : Int, b : Int) { a == b })
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 3, 4]])
+}
+
+///|
+test "haskell: is_subsequence_of 是子序列" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 4],
+  ).is_subsequence_of([1, 3])
+  let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  assert_eq(values.val, [true])
+}
+
+///|
+test "haskell: is_subsequence_of 非子序列" {
+  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 4],
+  ).is_subsequence_of([3, 1])
+  let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
+  assert_eq(values.val, [false])
+}
+
+///|
+test "haskell: nub_by 两两比较去重" {
+  // 按绝对值去重，无 Hash 约束
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, -1, 2, -2, 1],
+  ).nub_by(fn(a : Int, b : Int) { a.abs() == b.abs() })
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 2]])
+}
+
+///|
+test "haskell: unzip3 拆分三元组" {
+  let values : Ref[Array[(Array[Int], Array[String], Array[Bool])]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[(Array[Int], Array[String], Array[Bool]), Unit] =
+    @rx.Observable::from_iter([(1, "a", true), (2, "b", false)]).unzip3()
+  let _ = obs.subscribe_on_next(fn(v : (Array[Int], Array[String], Array[Bool])) { values.val.push(v) })
+  assert_eq(values.val, [([1, 2], ["a", "b"], [true, false])])
+}
+
+///|
+test "haskell: union 并集" {
+  // Haskell: union [1,2,3] [2,3,4,4] = [1,2,3,4]
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3],
+  ).union([2, 3, 4, 4])
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 2, 3, 4]])
+}
+
+///|
+test "haskell: intersect 交集" {
+  // Haskell: intersect [1,2,3,4] [2,4,6] = [2,4]（保持源流顺序）
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 4],
+  ).intersect([2, 4, 6])
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[2, 4]])
+}
+
+///|
+test "haskell: difference 差集" {
+  // Haskell: [1,2,3,2,4] \\ [2,4] = [1,3,2]（按出现次数逐个删除）
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 3, 2, 4],
+  ).difference([2, 4])
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 3, 2]])
+}
+
+///|
+test "haskell: insert 有序插入" {
+  // Haskell: insert 3 [1,2,4,5] = [1,2,3,4,5]
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [1, 2, 4, 5],
+  ).insert(3)
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 2, 3, 4, 5]])
+}
+
+///|
+test "haskell: insert 插入开头与末尾" {
+  let values : Ref[Array[Array[Int]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[Int], Unit] = @rx.Observable::from_iter(
+    [2, 3],
+  ).insert(1)
+  let _ = obs.subscribe_on_next(fn(v : Array[Int]) { values.val.push(v) })
+  assert_eq(values.val, [[1, 2, 3]])
+}
+
+///|
+test "haskell: insert_by 自定义比较插入" {
+  // 按长度插入字符串（短 -> 长）
+  let values : Ref[Array[Array[String]]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[Array[String], Unit] = @rx.Observable::from_iter(
+    ["a", "ccc"],
+  ).insert_by(fn(a : String, b : String) { a.length().compare(b.length()) }, "bb")
+  let _ = obs.subscribe_on_next(fn(v : Array[String]) { values.val.push(v) })
+  assert_eq(values.val, [["a", "bb", "ccc"]])
+}
+
+///|
+test "haskell: lines 按换行切分" {
+  // Haskell: lines "a\nb\n" = ["a","b"]；lines "\n" = [""]；lines "" = []
+  let values : Ref[Array[String]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[String, Unit] = @rx.lines("a\nb\n")
+  let _ = obs.subscribe_on_next(fn(v : String) { values.val.push(v) })
+  assert_eq(values.val, ["a", "b"])
+}
+
+///|
+test "haskell: words 按空白切分" {
+  // Haskell: words " a  b\nc " = ["a","b","c"]
+  let values : Ref[Array[String]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[String, Unit] = @rx.words(" a  b\nc ")
+  let _ = obs.subscribe_on_next(fn(v : String) { values.val.push(v) })
+  assert_eq(values.val, ["a", "b", "c"])
+}
+
+///|
+test "haskell: unlines 行连接" {
+  // Haskell: unlines ["a","b"] = "a\nb\n"
+  let values : Ref[Array[String]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[String, Unit] = @rx.Observable::from_iter(["a", "b"]).unlines()
+  let _ = obs.subscribe_on_next(fn(v : String) { values.val.push(v) })
+  assert_eq(values.val, ["a\nb\n"])
+}
+
+///|
+test "haskell: unwords 词连接" {
+  // Haskell: unwords ["a","b"] = "a b"
+  let values : Ref[Array[String]] = Ref::Ref(Array::new())
+  let obs : @rx.Observable[String, Unit] = @rx.Observable::from_iter(["a", "b"]).unwords()
+  let _ = obs.subscribe_on_next(fn(v : String) { values.val.push(v) })
+  assert_eq(values.val, ["a b"])
+}

@@ -4,11 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-01 22:14:21 |
+| Generated at | 2026-08-03 10:33:07 |
 | moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
 | Test target | wasm |
-| Total tests | 195 |
-| Passed | 195 |
+| Total tests | 377 |
+| Passed | 377 |
 | Failed | 0 |
 
 **Result: PASS (all green)**
@@ -23,11 +23,12 @@
 | vicTop/RX-MBT/test-suit/core | 17 |
 | vicTop/RX-MBT/test-suit/create | 10 |
 | vicTop/RX-MBT/test-suit/filter | 26 |
-| vicTop/RX-MBT/test-suit/itor | 35 |
+| vicTop/RX-MBT/test-suit/haskell | 81 |
+| vicTop/RX-MBT/test-suit/itor | 136 |
 | vicTop/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop/RX-MBT/test-suit/stress | 10 |
 | vicTop/RX-MBT/test-suit/transform | 10 |
-| **Total** | **195** |
+| **Total** | **377** |
 
 ## Test listing
 
@@ -180,6 +181,92 @@
 | 25 | filter: skip_until 触发后 trigger 订阅被取消（回归） |
 | 26 | filter: take_until 触发后源流被取消（回归） |
 
+### vicTop/RX-MBT/test-suit/haskell
+
+| # | Test name |
+|---|---|
+| 1 | haskell: iterate 无限迭代配合 take 截断 |
+| 2 | haskell: repeat_infinite 无限重复配合 take 截断 |
+| 3 | haskell: cycle 无限循环数组配合 take 截断 |
+| 4 | haskell: unfoldr 展开（递减到 0 结束） |
+| 5 | haskell: unfoldr 立即结束（空流） |
+| 6 | haskell: reverse 收集后反转 |
+| 7 | haskell: intersperse 元素间插入分隔符 |
+| 8 | haskell: intersperse 单元素流不插分隔符 |
+| 9 | haskell: intercalate 数组流用分隔数组连接 |
+| 10 | haskell: zip_with 双流合并映射 |
+| 11 | haskell: zip_with 一方完成后提前终止 |
+| 12 | haskell: zip3 三流拉链 |
+| 13 | haskell: unzip 拆分为两列 |
+| 14 | haskell: transpose 矩阵转置 |
+| 15 | haskell: span 满足谓词的最长前缀与剩余 |
+| 16 | haskell: break_pred 前缀不满足谓词 |
+| 17 | haskell: split_at 前 n 个与剩余 |
+| 18 | haskell: partition 满足与不满足两路 |
+| 19 | haskell: not_elem 不含目标发 true |
+| 20 | haskell: not_elem 含目标发 false |
+| 21 | haskell: delete_first 删除第一个匹配 |
+| 22 | haskell: group_adjacent 相邻相等分组 |
+| 23 | haskell: group_adjacent_by 相邻满足谓词分组 |
+| 24 | haskell: is_prefix_of 是前缀 |
+| 25 | haskell: is_prefix_of 非前缀 |
+| 26 | haskell: is_suffix_of 是后缀 |
+| 27 | haskell: is_infix_of 包含子序列 |
+| 28 | haskell: is_infix_of 不含子序列 |
+| 29 | haskell: foldr 右折叠（减法验证方向） |
+| 30 | haskell: scanr 右扫描结果列表 |
+| 31 | haskell: product 累乘 |
+| 32 | haskell: product 空流不发值 |
+| 33 | haskell: fold_map 映射后累积 |
+| 34 | haskell: sort_by 按比较函数排序（自定义规则） |
+| 35 | haskell: sort_on 按键投影排序 |
+| 36 | haskell: maximum_by_cmp 按比较函数求最大 |
+| 37 | haskell: minimum_by_cmp 按比较函数求最小 |
+| 38 | haskell: find_indices 收集所有满足索引 |
+| 39 | haskell: elem_index 等值查找索引 |
+| 40 | haskell: elem_index 找不到发 -1 |
+| 41 | haskell: elem_indices 收集所有等值索引 |
+| 42 | haskell: lookup 按键查找发值 |
+| 43 | haskell: lookup 找不到发 None |
+| 44 | haskell: Itor::fold 消费迭代器累加 |
+| 45 | haskell: Itor::fold 空迭代器返回 seed |
+| 46 | haskell: tail 丢弃首元素 |
+| 47 | haskell: tail 空流不发值 |
+| 48 | haskell: init 丢弃末元素 |
+| 49 | haskell: scanl1 无种子左扫描 |
+| 50 | haskell: scanl1 减法验证累积方向 |
+| 51 | haskell: scanr1 无种子右扫描 |
+| 52 | haskell: foldr1 无种子右折叠 |
+| 53 | haskell: foldr1 单元素直接发该元素 |
+| 54 | haskell: map_accum_l 带状态左映射 |
+| 55 | haskell: map_accum_r 带状态右映射 |
+| 56 | haskell: all_true 全真发 true |
+| 57 | haskell: all_true 遇 false 早停发 false |
+| 58 | haskell: any_true 任一真发 true |
+| 59 | haskell: any_true 全假发 false |
+| 60 | haskell: take_while_end 尾部连续满足的最长后缀 |
+| 61 | haskell: drop_while_end 去掉尾部满足段 |
+| 62 | haskell: inits 全部前缀 |
+| 63 | haskell: tails 全部后缀 |
+| 64 | haskell: strip_prefix 匹配发剩余 |
+| 65 | haskell: strip_prefix 不匹配发 None |
+| 66 | haskell: strip_suffix 匹配发剩余 |
+| 67 | haskell: delete_first_by 按谓词删除第一个 |
+| 68 | haskell: is_subsequence_of 是子序列 |
+| 69 | haskell: is_subsequence_of 非子序列 |
+| 70 | haskell: nub_by 两两比较去重 |
+| 71 | haskell: unzip3 拆分三元组 |
+| 72 | haskell: union 并集 |
+| 73 | haskell: intersect 交集 |
+| 74 | haskell: difference 差集 |
+| 75 | haskell: insert 有序插入 |
+| 76 | haskell: insert 插入开头与末尾 |
+| 77 | haskell: insert_by 自定义比较插入 |
+| 78 | haskell: lines 按换行切分 |
+| 79 | haskell: words 按空白切分 |
+| 80 | haskell: unlines 行连接 |
+| 81 | haskell: unwords 词连接 |
+
 ### vicTop/RX-MBT/test-suit/itor
 
 | # | Test name |
@@ -219,6 +306,107 @@
 | 33 | Itor: 插队链保留后续源（懒加载链） |
 | 34 | Itor: 多副本独立迭代 from_array |
 | 35 | Itor: restart 后新插队立即生效 |
+| 36 | haskell-itor: iterate 无限迭代配合 take 截断 |
+| 37 | haskell-itor: repeat 无限重复配合 take 截断 |
+| 38 | haskell-itor: cycle 无限循环数组配合 take 截断 |
+| 39 | haskell-itor: cycle 空数组立即结束 |
+| 40 | haskell-itor: unfoldr 展开递减到 0 结束 |
+| 41 | haskell-itor: unfoldr 立即结束 |
+| 42 | haskell-itor: replicate 重复 n 次 |
+| 43 | haskell-itor: replicate 0 次为空 |
+| 44 | haskell-itor: map 逐元素变换 |
+| 45 | haskell-itor: filter 保留偶数 |
+| 46 | haskell-itor: filter 全不满足为空 |
+| 47 | haskell-itor: take 前 n 个 |
+| 48 | haskell-itor: take 超过长度取全部 |
+| 49 | haskell-itor: take n<=0 为空 |
+| 50 | haskell-itor: drop 跳过前 n 个 |
+| 51 | haskell-itor: drop 超过长度为空 |
+| 52 | haskell-itor: drop n<=0 原样透传 |
+| 53 | haskell-itor: take_while 取满足前缀 |
+| 54 | haskell-itor: drop_while 跳过满足前缀 |
+| 55 | haskell-itor: scan 含初始 seed 的累积 |
+| 56 | haskell-itor: scan 空迭代器只发 seed |
+| 57 | haskell-itor: reverse 反转 |
+| 58 | haskell-itor: reverse 空迭代器为空 |
+| 59 | haskell-itor: intersperse 元素间插入分隔 |
+| 60 | haskell-itor: intersperse 单元素不插 |
+| 61 | haskell-itor: concat_map 展平 |
+| 62 | haskell-itor: zip_with 双迭代器合并 |
+| 63 | haskell-itor: zip_with 一方耗尽提前结束 |
+| 64 | haskell-itor: zip 配对元组 |
+| 65 | haskell-itor: tail 去掉首元素 |
+| 66 | haskell-itor: tail 单元素为空 |
+| 67 | haskell-itor: init 去掉尾元素 |
+| 68 | haskell-itor: nub 去重保序 |
+| 69 | haskell-itor: sort_by 按比较函数排序 |
+| 70 | haskell-itor: sort_on 按键投影排序 |
+| 71 | haskell-itor: foldr 右折叠（减法验证方向） |
+| 72 | haskell-itor: length 计数 |
+| 73 | haskell-itor: null 空与非空 |
+| 74 | haskell-itor: sum 累加 |
+| 75 | haskell-itor: sum 空迭代器为默认值 |
+| 76 | haskell-itor: product 累乘 |
+| 77 | haskell-itor: product 空迭代器为 None |
+| 78 | haskell-itor: any / all 判定 |
+| 79 | haskell-itor: elem / not_elem 包含判定 |
+| 80 | haskell-itor: find 找到与找不到 |
+| 81 | haskell-itor: find_index 下标 |
+| 82 | haskell-itor: maximum / minimum 极值 |
+| 83 | haskell-itor: head / last 首尾 |
+| 84 | haskell-itor: to_array 收集 |
+| 85 | haskell-itor: lookup 关联查找 |
+| 86 | haskell-itor: lookup 找不到返回 None |
+| 87 | haskell-itor: elem_index / elem_indices |
+| 88 | haskell-itor: find_indices 满足谓词下标 |
+| 89 | haskell-itor: map_accum_l 左累积映射 |
+| 90 | haskell-itor: map_accum_r 右累积映射 |
+| 91 | haskell-itor: partition 满足与不满足两路 |
+| 92 | haskell-itor: span 前缀与剩余 |
+| 93 | haskell-itor: break_pred 前缀不满足谓词 |
+| 94 | haskell-itor: split_at 前 n 与剩余 |
+| 95 | haskell-itor: group_adjacent 相邻相等分组 |
+| 96 | haskell-itor: is_prefix_of / is_suffix_of / is_infix_of |
+| 97 | haskell-itor: inits 全部前缀 |
+| 98 | haskell-itor: tails 全部后缀 |
+| 99 | haskell-itor: concat 展平 Itor[Itor] |
+| 100 | haskell-itor: intercalate 数组流插入分隔 |
+| 101 | haskell-itor: 变换链组合 map -> filter -> take |
+| 102 | haskell-itor: 变换后仍可 stop 终止 |
+| 103 | haskell-itor: 变换后仍可 restart 重放 |
+| 104 | haskell-itor2: foldl1 无种子左折叠 |
+| 105 | haskell-itor2: foldl1 空迭代器返回 None |
+| 106 | haskell-itor2: foldr1 无种子右折叠 |
+| 107 | haskell-itor2: foldr1 空迭代器返回 None |
+| 108 | haskell-itor2: all_true / any_true 短路判定 |
+| 109 | haskell-itor2: maximum_by / minimum_by 自定义比较 |
+| 110 | haskell-itor2: maximum_by / minimum_by 空迭代器返回 None |
+| 111 | haskell-itor2: sort 默认自然序 |
+| 112 | haskell-itor2: scanl1 无种子左扫描 |
+| 113 | haskell-itor2: scanr 右扫描 |
+| 114 | haskell-itor2: scanr1 无种子右扫描 |
+| 115 | haskell-itor2: strip_prefix / strip_suffix 剥离前后缀 |
+| 116 | haskell-itor2: is_subsequence_of 子序列判定 |
+| 117 | haskell-itor2: at 按下标取元素 |
+| 118 | haskell-itor2: nub_by 自定义谓词去重 |
+| 119 | haskell-itor2: delete_first 删除首个匹配 |
+| 120 | haskell-itor2: delete_first_by 自定义谓词删除 |
+| 121 | haskell-itor2: difference 列表差集 |
+| 122 | haskell-itor2: union 并集 |
+| 123 | haskell-itor2: intersect 交集 |
+| 124 | haskell-itor2: insert 有序插入 |
+| 125 | haskell-itor2: insert_by 自定义比较插入 |
+| 126 | haskell-itor2: group_adjacent_by 自定义谓词分组 |
+| 127 | haskell-itor2: transpose 转置 |
+| 128 | haskell-itor2: subsequences 子序列枚举 |
+| 129 | haskell-itor2: permutations 排列枚举 |
+| 130 | haskell-itor2: chunks_of 按大小分块 |
+| 131 | haskell-itor2: fold_map 映射折叠 |
+| 132 | haskell-itor2: zip3 三路配对 |
+| 133 | haskell-itor2: zip_with3 三路合并 |
+| 134 | haskell-itor2: unzip 拆分二元组 |
+| 135 | haskell-itor2: unzip3 拆分三元组 |
+| 136 | haskell-itor2: 新增变换操作链式组合 |
 
 ### vicTop/RX-MBT/test-suit/math_conditions
 

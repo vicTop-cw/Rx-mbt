@@ -1163,6 +1163,912 @@ pub fn[T, E, K : Eq, V] Observable::lookup(
 }
 
 // ----------------------------------------------------------------------------
+// Haskell 缺失 API 补全（第一批：流式操作）
+// 对照 Data.List 语义逐项补齐，参考 Itor 层已有实现的语义。
+// ----------------------------------------------------------------------------
+
+/// tail：丢弃第一个元素。
+/// 语义同 Haskell `tail xs`：tail [1,2,3] = [2,3]。
+/// 空流安全（Rx 惯例：空流不发值，Haskell 中 tail [] 为 error）。
+pub fn[T, E] Observable::tail(self : Observable[T, E]) -> Observable[T, E] {
+  self.skip(1)
+}
+
+/// init：丢弃最后一个元素。
+/// 语义同 Haskell `init xs`：init [1,2,3] = [1,2]。
+/// 空流安全。
+pub fn[T, E] Observable::init(self : Observable[T, E]) -> Observable[T, E] {
+  self.skip_last(1)
+}
+
+/// scanl1：无种子左扫描。首元素直接发射并作为初始累积值。
+/// 语义同 Haskell `scanl1 f xs`：scanl1 (+) [1,2,3] = [1,3,6]。
+/// 空流不发值。
+pub fn[T, E] Observable::scanl1(
+  self : Observable[T, E],
+  f : (T, T) -> T,
+) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init : T? = None
+    let acc = Ref::Ref(init)
+    source_fn({
+      next: fn(v : T) {
+        match acc.val {
+          Some(cur) => {
+            let nxt = f(cur, v)
+            acc.val = Some(nxt)
+            next(nxt)
+          }
+          None => {
+            acc.val = Some(v)
+            next(v)
+          }
+        }
+      },
+      error: error,
+      complete: complete, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// scanr1：无种子右扫描。收集后从右往左累积，发出全部中间结果数组。
+/// 语义同 Haskell `scanr1 f xs`：
+/// scanr1 (-) [1,2,3] = [1-(2-3), 2-3, 3] = [2,-1,3]。
+/// 空流发空数组。
+pub fn[T, E] Observable::scanr1(
+  self : Observable[T, E],
+  f : (T, T) -> T,
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let n = arr.length()
+        let results = Array::new()
+        if n > 0 {
+          let mut acc = arr[n - 1]
+          results.push(acc)
+          let mut i = n - 2
+          while i >= 0 {
+            acc = f(arr[i], acc)
+            results.push(acc)
+            i = i - 1
+          }
+          results.rev_in_place()
+        }
+        next(results)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// foldr1：无种子右折叠。收集后从右往左折叠，流结束时发结果。
+/// 语义同 Haskell `foldr1 f xs`：foldr1 (-) [1,2,3] = 1-(2-3) = 2。
+/// 空流不发值；单元素流直接发该元素。
+pub fn[T, E] Observable::foldr1(
+  self : Observable[T, E],
+  f : (T, T) -> T,
+) -> Observable[T, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let n = arr.length()
+        if n > 0 {
+          let mut acc = arr[n - 1]
+          let mut i = n - 2
+          while i >= 0 {
+            acc = f(arr[i], acc)
+            i = i - 1
+          }
+          next(acc)
+        }
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// map_accum_l：带累积状态的左映射。
+/// 语义同 Haskell `mapAccumL f z xs`：f 接收 (累积, 元素) 返回 (新累积, 输出值)。
+/// 每个元素到达时立即计算并发射 (新累积, 输出值)。
+pub fn[T, E, Acc, U] Observable::map_accum_l(
+  self : Observable[T, E],
+  seed : Acc,
+  f : (Acc, T) -> (Acc, U),
+) -> Observable[(Acc, U), E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[(Acc, U), E]) -> Subscription = fn(downstream : Observer[(Acc, U), E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let acc = Ref::Ref(seed)
+    source_fn({
+      next: fn(v : T) {
+        let (new_acc, u) = f(acc.val, v)
+        acc.val = new_acc
+        next((new_acc, u))
+      },
+      error: error,
+      complete: complete, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// map_accum_r：带累积状态的右映射。
+/// 语义同 Haskell `mapAccumR f z xs`：从右往左遍历，输出序列保持原顺序。
+/// 每个元素发射 (新累积, 输出值)。
+pub fn[T, E, Acc, U] Observable::map_accum_r(
+  self : Observable[T, E],
+  seed : Acc,
+  f : (Acc, T) -> (Acc, U),
+) -> Observable[(Acc, U), E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[(Acc, U), E]) -> Subscription = fn(downstream : Observer[(Acc, U), E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let mut acc = seed
+        let results = Array::new()
+        let mut i = arr.length() - 1
+        while i >= 0 {
+          let (new_acc, u) = f(acc, arr[i])
+          acc = new_acc
+          results.push((new_acc, u))
+          i = i - 1
+        }
+        results.rev_in_place()
+        for r in results {
+          next(r)
+        }
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// all_true：Bool 流全为 true 时发 true。
+/// 语义同 Haskell `and`（and [True,True] = True）。任一 false 立即发 false 并完成。
+pub fn[E] Observable::all_true(self : Observable[Bool, E]) -> Observable[Bool, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Bool, E]) -> Subscription = fn(downstream : Observer[Bool, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let done = Ref::Ref(false)
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
+      next: fn(v : Bool) {
+        if !stopped.val {
+          if !v {
+            stopped.val = true
+            done.val = true
+            next(false)
+            (source_sub.val).dispose()
+            complete()
+          }
+        }
+      },
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          if !done.val {
+            next(true)
+          }
+          complete()
+        }
+      }, interrupt: Ref::Ref(None),
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// any_true：Bool 流任一为 true 时发 true（立即完成）。
+/// 语义同 Haskell `or`（or [False,True] = True）。全 false 时流结束发 false。
+pub fn[E] Observable::any_true(self : Observable[Bool, E]) -> Observable[Bool, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Bool, E]) -> Subscription = fn(downstream : Observer[Bool, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let done = Ref::Ref(false)
+    let stopped = Ref::Ref(false)
+    let source_sub = Ref::Ref(Subscription::empty())
+    source_sub.val = source_fn({
+      next: fn(v : Bool) {
+        if !stopped.val {
+          if v {
+            stopped.val = true
+            done.val = true
+            next(true)
+            (source_sub.val).dispose()
+            complete()
+          }
+        }
+      },
+      error: fn(e : E) {
+        if !stopped.val {
+          stopped.val = true
+          error(e)
+        }
+      },
+      complete: fn() {
+        if !stopped.val {
+          stopped.val = true
+          if !done.val {
+            next(false)
+          }
+          complete()
+        }
+      }, interrupt: Ref::Ref(None),
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      (source_sub.val).dispose()
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// take_while_end：从尾部起连续满足 pred 的最长后缀。
+/// 语义同 Haskell `takeWhileEnd p xs`：
+/// takeWhileEnd even [1,2,3,4,6] = [4,6]。收集后发结果数组。
+pub fn[T, E] Observable::take_while_end(
+  self : Observable[T, E],
+  pred : (T) -> Bool,
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        let mut i = arr.length() - 1
+        while i >= 0 && pred(arr[i]) {
+          result.push(arr[i])
+          i = i - 1
+        }
+        result.rev_in_place()
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// drop_while_end：去掉尾部连续满足 pred 的最长后缀。
+/// 语义同 Haskell `dropWhileEnd p xs`：
+/// dropWhileEnd even [1,2,3,4,6] = [1,2,3]。收集后发剩余数组。
+pub fn[T, E] Observable::drop_while_end(
+  self : Observable[T, E],
+  pred : (T) -> Bool,
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let mut i = arr.length() - 1
+        while i >= 0 && pred(arr[i]) {
+          i = i - 1
+        }
+        let result = Array::new()
+        let mut j = 0
+        while j <= i {
+          result.push(arr[j])
+          j = j + 1
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+// ----------------------------------------------------------------------------
+// Haskell 缺失 API 补全（第二批：收集类操作）
+// 对照 Data.List 语义逐项补齐，参考 Itor 层已有实现的语义。
+// ----------------------------------------------------------------------------
+
+/// inits：收集全部前缀（含空前缀与全量）。
+/// 语义同 Haskell `inits`：inits [1,2,3] = [[],[1],[1,2],[1,2,3]]。
+/// 流结束时发前缀数组的数组。
+pub fn[T, E] Observable::inits(self : Observable[T, E]) -> Observable[Array[Array[T]], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[Array[T]], E]) -> Subscription = fn(downstream : Observer[Array[Array[T]], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        result.push(Array::new())
+        let prefix = Array::new()
+        for v in arr {
+          prefix.push(v)
+          let copy = prefix.copy()
+          result.push(copy)
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// tails：收集全部后缀（含全量与空后缀）。
+/// 语义同 Haskell `tails`：tails [1,2,3] = [[1,2,3],[2,3],[3],[]]。
+/// 流结束时发后缀数组的数组。
+pub fn[T, E] Observable::tails(self : Observable[T, E]) -> Observable[Array[Array[T]], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[Array[T]], E]) -> Subscription = fn(downstream : Observer[Array[Array[T]], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        let mut i = 0
+        while i <= arr.length() {
+          let suffix = Array::new()
+          let mut j = i
+          while j < arr.length() {
+            suffix.push(arr[j])
+            j = j + 1
+          }
+          result.push(suffix)
+          i = i + 1
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// strip_prefix：若源流以 xs 为前缀，发剥离后的剩余数组；否则发 None。
+/// 语义同 Haskell `stripPrefix xs ys`。
+pub fn[T : Eq, E] Observable::strip_prefix(
+  self : Observable[T, E],
+  xs : Array[T],
+) -> Observable[Array[T]?, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T]?, E]) -> Subscription = fn(downstream : Observer[Array[T]?, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let mut rest : Array[T]? = None
+        if xs.length() <= arr.length() {
+          let mut ok = true
+          let mut i = 0
+          while i < xs.length() {
+            if arr[i] != xs[i] {
+              ok = false
+              break
+            }
+            i = i + 1
+          }
+          if ok {
+            let r = Array::new()
+            let mut j = xs.length()
+            while j < arr.length() {
+              r.push(arr[j])
+              j = j + 1
+            }
+            rest = Some(r)
+          }
+        }
+        next(rest)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// strip_suffix：若源流以 xs 为后缀，发剥离后的剩余数组；否则发 None。
+/// 语义同 Haskell `stripSuffix xs ys`。
+pub fn[T : Eq, E] Observable::strip_suffix(
+  self : Observable[T, E],
+  xs : Array[T],
+) -> Observable[Array[T]?, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T]?, E]) -> Subscription = fn(downstream : Observer[Array[T]?, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let mut rest : Array[T]? = None
+        if xs.length() <= arr.length() {
+          let mut ok = true
+          let base = arr.length() - xs.length()
+          let mut i = 0
+          while i < xs.length() {
+            if arr[base + i] != xs[i] {
+              ok = false
+              break
+            }
+            i = i + 1
+          }
+          if ok {
+            let r = Array::new()
+            let mut j = 0
+            while j < base {
+              r.push(arr[j])
+              j = j + 1
+            }
+            rest = Some(r)
+          }
+        }
+        next(rest)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// delete_first_by：按自定义相等谓词删除第一个匹配 target 的元素。
+/// 语义同 Haskell `deleteBy eq target xs`。流结束时发剩余数组。
+pub fn[T, E] Observable::delete_first_by(
+  self : Observable[T, E],
+  target : T,
+  eq : (T, T) -> Bool,
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        let removed = Ref::Ref(false)
+        for v in arr {
+          if !removed.val && eq(target, v) {
+            removed.val = true
+          } else {
+            result.push(v)
+          }
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// is_subsequence_of：判断 sub 是否为源流的子序列（可跳跃匹配）。
+/// 语义同 Haskell `isSubsequenceOf xs ys`。流结束时发 Bool。
+pub fn[T : Eq, E] Observable::is_subsequence_of(
+  self : Observable[T, E],
+  sub : Array[T],
+) -> Observable[Bool, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Bool, E]) -> Subscription = fn(downstream : Observer[Bool, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let mut i = 0
+        let mut j = 0
+        while i < sub.length() && j < arr.length() {
+          if sub[i] == arr[j] {
+            i = i + 1
+          }
+          j = j + 1
+        }
+        next(i == sub.length())
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// nub_by：按自定义相等谓词去重，保留首次出现顺序。
+/// 语义同 Haskell `nubBy eq xs`（两两比较，O(n²)，无 Hash 约束）。
+/// 流结束时发去重后的数组。
+pub fn[T, E] Observable::nub_by(
+  self : Observable[T, E],
+  eq : (T, T) -> Bool,
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        for v in arr {
+          let mut dup = false
+          for r in result {
+            if eq(r, v) {
+              dup = true
+              break
+            }
+          }
+          if !dup {
+            result.push(v)
+          }
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// unzip3：把 (T, U, V) 流拆成三列，流结束时发三元组数组。
+/// 语义同 Haskell `unzip3`。对应 zip3 的逆操作。
+pub fn[T, E, U, V] Observable::unzip3(
+  self : Observable[(T, U, V), E],
+) -> Observable[(Array[T], Array[U], Array[V]), E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[(Array[T], Array[U], Array[V]), E]) -> Subscription =
+    fn(downstream : Observer[(Array[T], Array[U], Array[V]), E]) {
+      let next = downstream.next
+      let error = downstream.error
+      let complete = downstream.complete
+      let col_t = Ref::Ref(Array::new())
+      let col_u = Ref::Ref(Array::new())
+      let col_v = Ref::Ref(Array::new())
+      source_fn({
+        next: fn(v : (T, U, V)) {
+          col_t.val.push(v.0)
+          col_u.val.push(v.1)
+          col_v.val.push(v.2)
+        },
+        error: error,
+        complete: fn() {
+          next((col_t.val, col_u.val, col_v.val))
+          complete()
+        }, interrupt: Ref::Ref(None),
+      })
+    }
+  Observable::new(subscribe_fn)
+}
+
+/// union：并集。源流全部保留，ys 中未在结果中出现过的元素按序追加。
+/// 语义同 Haskell `union xs ys`（保持源流顺序）。流结束时发结果数组。
+pub fn[T : Eq, E] Observable::union(
+  self : Observable[T, E],
+  ys : Array[T],
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let result = buf.val
+        for y in ys {
+          let mut seen = false
+          for r in result {
+            if r == y {
+              seen = true
+              break
+            }
+          }
+          if !seen {
+            result.push(y)
+          }
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// intersect：交集。源流中出现在 ys 里的元素按原顺序保留。
+/// 语义同 Haskell `intersect xs ys`。流结束时发结果数组。
+pub fn[T : Eq, E] Observable::intersect(
+  self : Observable[T, E],
+  ys : Array[T],
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        for v in arr {
+          let mut found = false
+          for y in ys {
+            if y == v {
+              found = true
+              break
+            }
+          }
+          if found {
+            result.push(v)
+          }
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// difference：列表差集。对 ys 中每个元素，依次删除源流中第一个相等的出现。
+/// 语义同 Haskell `(\\)`：xs \\ ys。流结束时发剩余数组。
+pub fn[T : Eq, E] Observable::difference(
+  self : Observable[T, E],
+  ys : Array[T],
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let remaining = ys.copy()
+        let result = Array::new()
+        for v in arr {
+          let mut found_idx : Int? = None
+          let mut i = 0
+          while i < remaining.length() {
+            if remaining[i] == v {
+              found_idx = Some(i)
+              break
+            }
+            i = i + 1
+          }
+          match found_idx {
+            Some(idx) => { ignore(remaining.remove(idx)) }
+            None => result.push(v)
+          }
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// insert：把 x 插入已排序流中的正确位置（保持升序）。
+/// 语义同 Haskell `insert x xs`（T : Compare）。流结束时发新数组。
+pub fn[T : Compare, E] Observable::insert(
+  self : Observable[T, E],
+  x : T,
+) -> Observable[Array[T], E] {
+  self.insert_by(fn(a : T, b : T) { a.compare(b) }, x)
+}
+
+/// insert_by：按自定义比较函数把 x 插入已排序流中的正确位置。
+/// 语义同 Haskell `insertBy cmp x xs`。流结束时发新数组。
+pub fn[T, E] Observable::insert_by(
+  self : Observable[T, E],
+  cmp : (T, T) -> Int,
+  x : T,
+) -> Observable[Array[T], E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        let result = Array::new()
+        let inserted = Ref::Ref(false)
+        for v in arr {
+          if !inserted.val && cmp(x, v) <= 0 {
+            result.push(x)
+            inserted.val = true
+          }
+          result.push(v)
+        }
+        if !inserted.val {
+          result.push(x)
+        }
+        next(result)
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// lines：按换行符 \n 把字符串切分为行流。
+/// 语义同 Haskell `lines`：lines "a\nb\n" = ["a","b"]；lines "\n" = [""]；lines "" = []。
+/// 末尾换行符不产生多余空行。
+pub fn[E] lines(s : String) -> Observable[String, E] {
+  let arr = Array::new()
+  for sv in s.split("\n") {
+    arr.push(sv.to_owned())
+  }
+  if !arr.is_empty() && arr[arr.length() - 1] == "" {
+    ignore(arr.pop())
+  }
+  Observable::from_iter(arr)
+}
+
+/// words：按空白（空格 / 制表符 / 换行 / 回车）把字符串切分为词流，
+/// 连续空白合并、首尾空白忽略。
+/// 语义同 Haskell `words`：words " a  b\nc " = ["a","b","c"]；words "" = []。
+pub fn[E] words(s : String) -> Observable[String, E] {
+  let arr = Array::new()
+  let cur : Array[Char] = Array::new()
+  for c in s.iter() {
+    if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+      if !cur.is_empty() {
+        arr.push(String::from_iter(cur.iter()))
+        cur.clear()
+      }
+    } else {
+      cur.push(c)
+    }
+  }
+  if !cur.is_empty() {
+    arr.push(String::from_iter(cur.iter()))
+  }
+  Observable::from_iter(arr)
+}
+
+/// unlines：字符串流用 \n 连接，末尾补一个 \n；空流发空串。
+/// 语义同 Haskell `unlines`：unlines ["a","b"] = "a\nb\n"。
+pub fn[E] Observable::unlines(self : Observable[String, E]) -> Observable[String, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[String, E]) -> Subscription = fn(downstream : Observer[String, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : String) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        let arr = buf.val
+        if arr.is_empty() {
+          next("")
+        } else {
+          next(arr.iter().join("\n") + "\n")
+        }
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+/// unwords：字符串流用空格连接（末尾无空格）；空流发空串。
+/// 语义同 Haskell `unwords`：unwords ["a","b"] = "a b"。
+pub fn[E] Observable::unwords(self : Observable[String, E]) -> Observable[String, E] {
+  let source_fn = self.subscribe_fn
+  let subscribe_fn : (Observer[String, E]) -> Subscription = fn(downstream : Observer[String, E]) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let buf = Ref::Ref(Array::new())
+    source_fn({
+      next: fn(v : String) { buf.val.push(v) },
+      error: error,
+      complete: fn() {
+        next(buf.val.iter().join(" "))
+        complete()
+      }, interrupt: Ref::Ref(None),
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+// ----------------------------------------------------------------------------
 // 内部辅助
 // ----------------------------------------------------------------------------
 
