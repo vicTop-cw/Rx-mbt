@@ -1,5 +1,14 @@
 .DS_Store
 competition/
+test-consumer/
+consumer-registry-test/
+registry-import-test/
+scripts/
+cmd/
+AGENTS.md
+_fix_interrupt.py
+_old_ops_filter.txt
+_str_api.txt
 _build/
 target/
 target
