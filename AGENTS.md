@@ -5,6 +5,9 @@ This is a [MoonBit](https://docs.moonbitlang.com) project.
 You can browse and install extra skills here:
 <https://github.com/moonbitlang/skills>
 
+本地已克隆 MoonBit skills 仓库，技能可直接从本地读取：
+`E:\IDEProjects\moonbit-skills`（结构：`skills/<name>/SKILL.md`，进入项目会话时按需加载其中的技能）。
+
 ## Project Structure
 
 - MoonBit packages are organized per directory; each directory contains a
