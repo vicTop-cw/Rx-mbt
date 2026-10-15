@@ -14,7 +14,7 @@ struct SubjectState[T, E] {
 
 fn[T, E] SubjectState::new() -> SubjectState[T, E] {
   {
-    observers: Ref::Ref(Array::new()),
+    observers: Ref::Ref(Array(capacity=0)),
     next_id: Ref::Ref(0),
     stopped: Ref::Ref(false),
     terminal_error: Ref::Ref(None),
@@ -38,7 +38,7 @@ fn[T, E] SubjectState::subscribe(
   self.observers.val.push((id, observer))
   Subscription::new(fn() {
     let arr = self.observers.val
-    let keep = Array::new()
+    let keep = Array(capacity=0)
     for entry in arr {
       if entry.0 != id {
         keep.push(entry)
@@ -65,7 +65,7 @@ fn[T, E] SubjectState::on_error(self : SubjectState[T, E], err : E) -> Unit {
   self.stopped.val = true
   self.terminal_error.val = Some(err)
   let snapshot = self.observers.val.copy()
-  self.observers.val = Array::new()
+  self.observers.val = Array(capacity=0)
   for entry in snapshot {
     (entry.1).on_error(err)
   }
@@ -78,7 +78,7 @@ fn[T, E] SubjectState::on_completed(self : SubjectState[T, E]) -> Unit {
   self.stopped.val = true
   self.terminal_error.val = None
   let snapshot = self.observers.val.copy()
-  self.observers.val = Array::new()
+  self.observers.val = Array(capacity=0)
   for entry in snapshot {
     (entry.1).on_completed()
   }
@@ -209,14 +209,14 @@ pub struct ReplaySubject[T, E] {
 
 /// 创建 ReplaySubject（无限缓冲）
 pub fn[T, E] ReplaySubject::new() -> ReplaySubject[T, E] {
-  { state: SubjectState::new(), buffer: Ref::Ref(Array::new()), buffer_size: 0 }
+  { state: SubjectState::new(), buffer: Ref::Ref(Array(capacity=0)), buffer_size: 0 }
 }
 
 /// 创建 ReplaySubject 并限制缓冲大小（只重放最近 buffer_size 个值）
 pub fn[T, E] ReplaySubject::with_buffer_size(size : Int) -> ReplaySubject[T, E] {
   {
     state: SubjectState::new(),
-    buffer: Ref::Ref(Array::new()),
+    buffer: Ref::Ref(Array(capacity=0)),
     buffer_size: if size < 0 { 0 } else { size },
   }
 }
@@ -240,7 +240,7 @@ pub fn[T, E] ReplaySubject::on_next(self : ReplaySubject[T, E], value : T) -> Un
   }
   let arr = self.buffer.val
   if self.buffer_size > 0 && arr.length() >= self.buffer_size {
-    let keep = Array::new()
+    let keep = Array(capacity=0)
     for i = 1; i < arr.length(); i = i + 1 {
       keep.push(arr[i])
     }

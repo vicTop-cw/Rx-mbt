@@ -5,7 +5,7 @@
 
 ///|
 test "filter: 只放行满足谓词的值" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4]).filter(
     fn(v : Int) { v % 2 == 0 },
   )
@@ -15,7 +15,7 @@ test "filter: 只放行满足谓词的值" {
 
 ///|
 test "filter: take 取前 n 个后完成" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let _ = @rx.Observable::from_iter([1, 2, 3, 4, 5]).take(3).subscribe(
     @rx.Observer::new(
@@ -30,7 +30,7 @@ test "filter: take 取前 n 个后完成" {
 
 ///|
 test "filter: skip 跳过前 n 个" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4]).skip(2)
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [3, 4])
@@ -38,7 +38,7 @@ test "filter: skip 跳过前 n 个" {
 
 ///|
 test "filter: first 取第一个值" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([5, 6, 7]).first()
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [5])
@@ -46,7 +46,7 @@ test "filter: first 取第一个值" {
 
 ///|
 test "filter: last 取最后一个值" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([5, 6, 7]).last()
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [7])
@@ -54,7 +54,7 @@ test "filter: last 取最后一个值" {
 
 ///|
 test "filter: take_while 谓词为假即停" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 1]).take_while(
     fn(v : Int) { v < 3 },
   )
@@ -64,7 +64,7 @@ test "filter: take_while 谓词为假即停" {
 
 ///|
 test "filter: skip_while 跳过满足谓词的前缀" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 1]).skip_while(
     fn(v : Int) { v < 3 },
   )
@@ -74,7 +74,7 @@ test "filter: skip_while 跳过满足谓词的前缀" {
 
 ///|
 test "filter: skip_last 跳过最后 n 个" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4, 5]).skip_last(2)
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [1, 2, 3])
@@ -82,7 +82,7 @@ test "filter: skip_last 跳过最后 n 个" {
 
 ///|
 test "filter: take_last 只取最后 n 个" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4, 5]).take_last(2)
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [4, 5])
@@ -90,7 +90,7 @@ test "filter: take_last 只取最后 n 个" {
 
 ///|
 test "filter: element_at 取第 index 个" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([10, 20, 30]).element_at(1)
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [20])
@@ -98,7 +98,7 @@ test "filter: element_at 取第 index 个" {
 
 ///|
 test "filter: distinct 全局去重" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 1, 3, 2]).distinct()
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [1, 2, 3])
@@ -106,7 +106,7 @@ test "filter: distinct 全局去重" {
 
 ///|
 test "filter: distinct_by 按键去重" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([2, 4, 3, 5]).distinct_by(
     fn(v : Int) { v % 2 },
   )
@@ -116,7 +116,7 @@ test "filter: distinct_by 按键去重" {
 
 ///|
 test "filter: distinct_until_changed 去连续重复" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(
     [1, 1, 2, 2, 1],
   ).distinct_until_changed()
@@ -126,7 +126,7 @@ test "filter: distinct_until_changed 去连续重复" {
 
 ///|
 test "filter: distinct_until_changed_by 按键去连续重复" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 3, 2, 4]).distinct_until_changed_by(
     fn(v : Int) { v % 2 },
   )
@@ -136,7 +136,7 @@ test "filter: distinct_until_changed_by 按键去连续重复" {
 
 ///|
 test "filter: skip_until 触发前不放行" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let trigger : @rx.Observable[Unit, Unit] = @rx.Observable::of(())
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).skip_until(trigger)
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
@@ -145,7 +145,7 @@ test "filter: skip_until 触发前不放行" {
 
 ///|
 test "filter: take_until 触发后即停" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let trigger : @rx.Observable[Unit, Unit] = @rx.Observable::of(())
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).take_until(trigger)
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
@@ -154,7 +154,7 @@ test "filter: take_until 触发后即停" {
 
 ///|
 test "filter: contains 命中返回 true" {
-  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Bool]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([1, 2, 3]).contains(2)
   let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
   assert_eq(values.val, [true])
@@ -162,7 +162,7 @@ test "filter: contains 命中返回 true" {
 
 ///|
 test "filter: contains 未命中返回 false" {
-  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Bool]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([1, 2, 3]).contains(9)
   let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
   assert_eq(values.val, [false])
@@ -170,7 +170,7 @@ test "filter: contains 未命中返回 false" {
 
 ///|
 test "filter: includes 命中返回 true" {
-  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Bool]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([1, 2, 3]).includes(3)
   let _ = obs.subscribe_on_next(fn(v : Bool) { values.val.push(v) })
   assert_eq(values.val, [true])
@@ -178,7 +178,7 @@ test "filter: includes 命中返回 true" {
 
 ///|
 test "filter: element_at 命中后不发错误（回归）" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let got_err : Ref[Bool] = Ref::Ref(false)
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([10, 20, 30]).element_at(1)
   let _ = obs.subscribe(
@@ -208,7 +208,7 @@ test "filter: element_at 越界发错误" {
 
 ///|
 test "filter: take 取够后上游被取消，热流后续值不转发（回归）" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let s : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
   let _ = s.as_observable().take(2).subscribe_on_next(fn(v : Int) { values.val.push(v) })
   s.on_next(1)
@@ -219,7 +219,7 @@ test "filter: take 取够后上游被取消，热流后续值不转发（回归�
 
 ///|
 test "filter: contains 命中后上游被取消，后续值不转发（回归）" {
-  let values : Ref[Array[Bool]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Bool]] = Ref::Ref(Array(capacity=0))
   let s : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
   let _ = s.as_observable().contains(2).subscribe_on_next(fn(v : Bool) { values.val.push(v) })
   s.on_next(1) // 未命中：不发射
@@ -230,7 +230,7 @@ test "filter: contains 命中后上游被取消，后续值不转发（回归）
 
 ///|
 test "filter: element_at 命中后上游被取消，后续值不转发（回归）" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let s : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
   let _ = s.as_observable().element_at(1).subscribe_on_next(fn(v : Int) { values.val.push(v) })
   s.on_next(10)
@@ -241,7 +241,7 @@ test "filter: element_at 命中后上游被取消，后续值不转发（回归�
 
 ///|
 test "filter: skip_until 触发后 trigger 订阅被取消（回归）" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let src : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
   let trigger : @rx.PublishSubject[Unit, Unit] = @rx.PublishSubject::new()
   let _ = src.as_observable().skip_until(trigger.as_observable()).subscribe_on_next(
@@ -257,7 +257,7 @@ test "filter: skip_until 触发后 trigger 订阅被取消（回归）" {
 
 ///|
 test "filter: take_until 触发后源流被取消（回归）" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let src : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
   let trigger : @rx.PublishSubject[Unit, Unit] = @rx.PublishSubject::new()
   let _ = src.as_observable().take_until(trigger.as_observable()).subscribe_on_next(

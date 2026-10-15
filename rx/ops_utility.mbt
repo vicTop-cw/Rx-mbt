@@ -125,13 +125,13 @@ pub fn[T, E] Observable::pairwise_with_buffer(
       let complete = downstream.complete
       let init_buf : (Array[T])? = None
       let prev = Ref::Ref(init_buf)
-      let buf = Ref::Ref(Array::new())
+      let buf = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(v : T) {
           buf.val.push(v)
           if buf.val.length() >= buffer_size {
             let chunk = buf.val
-            buf.val = Array::new()
+            buf.val = Array(capacity=0)
             match prev.val {
               Some(p) => {
                 prev.val = Some(chunk)
@@ -158,13 +158,13 @@ pub fn[T, E] Observable::buffer_count(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
         if buf.val.length() >= buffer_size {
           let chunk = buf.val
-          buf.val = Array::new()
+          buf.val = Array(capacity=0)
           next(chunk)
         }
       },
@@ -199,14 +199,14 @@ pub fn[T, E] Observable::buffer_time_on(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let stopped = Ref::Ref(false)
     let timer_handle = Ref::Ref(Subscription::empty())
     let timer_ref = Ref::Ref(fn() {})
     let tick : () -> Unit = fn() {
       if !stopped.val {
         let chunk = buf.val
-        buf.val = Array::new()
+        buf.val = Array(capacity=0)
         if !chunk.is_empty() {
           next(chunk)
         }
@@ -255,14 +255,14 @@ pub fn[T, E] Observable::window_on(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let buf = Ref::Ref(Array::new())
+      let buf = Ref::Ref(Array(capacity=0))
       let stopped = Ref::Ref(false)
       let timer_handle = Ref::Ref(Subscription::empty())
       let timer_ref = Ref::Ref(fn() {})
       let tick : () -> Unit = fn() {
         if !stopped.val {
           let chunk = buf.val
-          buf.val = Array::new()
+          buf.val = Array(capacity=0)
           if !chunk.is_empty() {
             next(Observable::from_iter(chunk))
           }

@@ -318,7 +318,7 @@ pub fn[T, E] Observable::skip_last(self : Observable[T, E], n : Int) -> Observab
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
@@ -341,7 +341,7 @@ pub fn[T, E] Observable::take_last(self : Observable[T, E], n : Int) -> Observab
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)

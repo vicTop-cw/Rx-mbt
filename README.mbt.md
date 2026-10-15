@@ -70,7 +70,7 @@ moon test       # 运行全部测试
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端 |
 | 库版本 | `vicTop-cw/RX-MBT@0.1.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | 377（基本 + 高压 + Haskell API 回归，全部通过，见 `TEST_REPORT.md`） |
+| 测试数量 | 394（基本 + 高压 + Haskell API 回归 + 触发机制，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。
@@ -124,6 +124,9 @@ moon test -p test-suit/bench --include-skipped > moon_bench.json
 | `Clock` | 虚拟时钟，时间类操作符基于它实现，`advance_time(ms)` 推进 |
 | `Node[T]` | 惰性链表节点：持有值 + 懒加载源 + fallback，`from_iter` 构建 |
 | `Itor[T]` | 可控制迭代器（vools 风格）：支持 send 插队 / 暂停 / 重放 / 停止 / 历史策略 |
+| `TriggerEvent[T]` | 触发事件：事件名 + 载荷 + 自增序号 + 发生时刻（虚拟时钟毫秒） |
+| `Trigger[T]` | 触发器：事件名（支持通配）+ 条件 + once + 优先级 + 处理器 |
+| `TriggerRegistry[T]` | 触发器注册表：集中管理 + 通配匹配 + 优先级分发 + once 自动注销 + 幂等去重 |
 
 ## Itor / Node（可控制迭代器）
 
@@ -167,6 +170,44 @@ moon test -p test-suit/bench --include-skipped > moon_bench.json
 **时间类**（基于虚拟时钟）：`delay` / `debounce` / `throttle` / `throttle_first` / `rate_limit` / `timeout` / `sample` / `timestamp`（均提供 `_on(clock)` 变体）
 
 **工具类**：`tap` / `tap_on_next` / `default_if_empty` / `ignore_elements` / `pairwise` / `pairwise_with_buffer` / `buffer_count` / `buffer_time` / `window` / `switch` / `sample_first` / `skip_until_data` / `take_until_data` / `run` / `debug`
+
+## 触发机制（Trigger）
+
+事件驱动的非定时任务触发：`事件名精确 / 通配匹配 → 条件过滤 → 优先级排序 → 分发执行`。`once` 触发器自动注销；`fire_with_key` 提供幂等去重；触发与执行解耦。
+
+| API | 说明 |
+|---|---|
+| `TriggerRegistry::new()` | 创建空注册表 |
+| `register(event_name, handler)` | 注册简单触发器（无条件、非一次性、优先级 0） |
+| `register_with(event_name, handler, condition?, once?, priority?)` | 注册可配置触发器，返回 trigger_id |
+| `unregister(trigger_id)` | 注销触发器（存在返回 true，否则 false） |
+| `fire(name, payload)` | 分发事件，时刻取默认虚拟时钟当前时间 |
+| `fire_at(name, payload, at)` | 分发事件（指定时刻） |
+| `fire_with_key(name, payload, key)` | 幂等触发：key 已存在则整体跳过 |
+| `has_trigger(event_name)` | 是否存在匹配该事件名（含通配）的触发器 |
+| `trigger_count()` | 当前注册的触发器数量 |
+| `clear()` | 清空所有触发器与幂等键（事件序号继续递增） |
+
+**事件名匹配规则**（按 `.` 分段比较，不引入正则）：
+
+| 模式 | 含义 | 示例 |
+|---|---|---|
+| 精确 | 逐段相等 | `task.done` 匹配 `task.done` |
+| `*` | 单段通配（不跨段边界） | `task.*` 匹配 `task.done`，不匹配 `task.a.b` 或 `task` |
+| `**` | 多段通配（匹配零段或多段，可出现在任意位置） | `a.**.b` 匹配 `a.b` / `a.x.b` / `a.c.d.b`，不匹配 `a.x`；纯 `**` 匹配任意事件名 |
+
+**分发顺序**：命中事件名后按 `priority` 降序执行（同优先级保持注册序）；`condition` 不满足则跳过且不递增 `fired_count`；`once=true` 的触发器触发一次后自动注销。
+
+```moonbit
+let reg : TriggerRegistry[Int] = TriggerRegistry::new()
+let _ = reg.register_with(
+  "task.*",
+  fn(ev : TriggerEvent[Int]) { println("收到: \{ev.name}") },
+  priority=10,
+  once=true,
+)
+reg.fire("task.done", 42) // 触发一次后自动注销
+```
 
 ## Subject（多播主题）
 

@@ -114,7 +114,7 @@ pub fn[T, E] Observable::collect(self : Observable[T, E]) -> Observable[Array[T]
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -411,7 +411,7 @@ pub fn[E] median(source : Observable[Double, E]) -> Observable[Double, E] {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : Double) { buf.val.push(v) },
       error: error,
@@ -441,7 +441,7 @@ pub fn[E] variance(source : Observable[Double, E]) -> Observable[Double, E] {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : Double) { buf.val.push(v) },
       error: error,
@@ -475,7 +475,7 @@ pub fn[E] std(source : Observable[Double, E]) -> Observable[Double, E] {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : Double) { buf.val.push(v) },
       error: error,
@@ -509,7 +509,7 @@ pub fn[E] quantile(source : Observable[Double, E], q : Double) -> Observable[Dou
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : Double) { buf.val.push(v) },
       error: error,
@@ -745,7 +745,7 @@ pub fn[E] Observable::rolling_sum(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let sum = Ref::Ref(0.0)
     source_fn({
       next: fn(v : Double) {
@@ -775,7 +775,7 @@ pub fn[E] Observable::rolling_mean(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let sum = Ref::Ref(0.0)
     source_fn({
       next: fn(v : Double) {
@@ -805,7 +805,7 @@ pub fn[T : Compare, E] Observable::rolling_min(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
@@ -843,7 +843,7 @@ pub fn[T : Compare, E] Observable::rolling_max(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)
@@ -881,7 +881,7 @@ pub fn[T, E] Observable::rolling_count(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) {
         buf.val.push(v)

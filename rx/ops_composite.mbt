@@ -91,8 +91,8 @@ pub fn[T, E, U] zip(
     let error = downstream.error
     let complete = downstream.complete
     // 每个源一个 FIFO 缓冲：值到达后立即尝试与对方配对，符合 Rx zip 语义
-    let buf_a = Ref::Ref(Array::new())
-    let buf_b = Ref::Ref(Array::new())
+    let buf_a = Ref::Ref(Array(capacity=0))
+    let buf_b = Ref::Ref(Array(capacity=0))
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
     let completed = Ref::Ref(false)
@@ -422,8 +422,8 @@ pub fn[T : Eq, E] sequence_equal(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf_a = Ref::Ref(Array::new())
-    let buf_b = Ref::Ref(Array::new())
+    let buf_a = Ref::Ref(Array(capacity=0))
+    let buf_b = Ref::Ref(Array(capacity=0))
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
     let emitted = Ref::Ref(false)

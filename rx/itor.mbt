@@ -123,6 +123,10 @@ pub enum ItorState {
   Stopped
 } derive(Eq, Debug)
 
+/// 将派生的 Eq/Debug 方法显式提升为普通方法，消除 implicit_impl_as_method 警告
+pub extend ItorState with Eq::{not_equal, equal}
+pub extend ItorState with @moonbitlang/core/debug.Debug::{to_repr}
+
 // ============================================================================
 // Itor —— 可控制迭代器
 // ============================================================================

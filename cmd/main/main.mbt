@@ -6,7 +6,7 @@ fn main {
   // 创建冷流并链式操作：map -> filter -> collect
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4, 5])
   let doubled = obs.map(fn(x) { x * 2 }).filter(fn(x) { x > 4 })
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let _sub = doubled.subscribe_on_next(fn(v) { values.val.push(v) })
   println("结果: \{@debug.to_string(values.val)}") // 结果: [6, 8, 10]
 

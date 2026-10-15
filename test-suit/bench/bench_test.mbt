@@ -14,7 +14,7 @@ test "bench: map 10 万元素" {
   let summary = @bench_core.single_bench(
     name="mbt_map_100k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
       let _ = src.map(fn(x : Int) { x * 2 }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
@@ -39,7 +39,7 @@ test "bench: filter 10 万元素" {
   let summary = @bench_core.single_bench(
     name="mbt_filter_100k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
       let _ = src.filter(fn(x : Int) { x % 2 == 0 }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
@@ -64,7 +64,7 @@ test "bench: reduce 10 万元素" {
   let summary = @bench_core.single_bench(
     name="mbt_reduce_100k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
       let _ = src.reduce(0, fn(acc : Int, v : Int) { acc + v }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
@@ -89,7 +89,7 @@ test "bench: scan 10 万元素" {
   let summary = @bench_core.single_bench(
     name="mbt_scan_100k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
       let _ = src.scan(0, fn(acc : Int, v : Int) { acc + v }).subscribe_on_next(
         fn(v : Int) { values.val.push(v) },
@@ -114,7 +114,7 @@ test "bench: map+filter+take 链" {
   let summary = @bench_core.single_bench(
     name="mbt_chain_100k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
       let _ = src
         .map(fn(x : Int) { x * 2 })
@@ -143,7 +143,7 @@ test "bench: zip 2x5 万元素" {
   let summary = @bench_core.single_bench(
     name="mbt_zip_50k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let a_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(a)
       let b_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(b)
       let src = @rx.Observable::zip(a_obs, b_obs)
@@ -170,7 +170,7 @@ test "bench: merge 2x5 万元素" {
   let summary = @bench_core.single_bench(
     name="mbt_merge_50k",
     fn() {
-      let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+      let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
       let a_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(a)
       let b_obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(b)
       let src = @rx.Observable::merge(a_obs, b_obs)

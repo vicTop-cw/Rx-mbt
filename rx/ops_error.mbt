@@ -158,7 +158,7 @@ pub fn[T, E] Observable::retry_with_backoff_on(
     let attempts = Ref::Ref(0)
     let try_ref = Ref::Ref(fn() {})
     // 收集退避 timer，dispose 时统一取消，避免残留定时器继续触发重试
-    let timers = Ref::Ref(Array::new())
+    let timers = Ref::Ref(Array(capacity=0))
     // 保存当前源订阅句柄，dispose 时取消，避免重试中的源流泄漏
     let current_sub = Ref::Ref(Subscription::empty())
     let try_subscribe : () -> Unit = fn() {

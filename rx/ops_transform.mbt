@@ -57,7 +57,7 @@ pub fn[T, E, U] Observable::flat_map(
     let error = downstream.error
     let complete = downstream.complete
     // 收集所有内层订阅，dispose 时统一释放，避免资源泄漏
-    let inner_subs = Ref::Ref(Array::new())
+    let inner_subs = Ref::Ref(Array(capacity=0))
     let stopped = Ref::Ref(false)
     let source_sub = source_fn({
       next: fn(v : T) {

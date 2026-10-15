@@ -9,7 +9,7 @@ pub fn[T : Compare, E] Observable::sort(self : Observable[T, E]) -> Observable[A
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -34,7 +34,7 @@ pub fn[T : Compare, E] Observable::top_k(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -66,7 +66,7 @@ pub fn[T : Compare, E] Observable::bottom_k(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,

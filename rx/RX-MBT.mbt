@@ -286,7 +286,7 @@ fn init_none() -> String? {
 
 ///|
 test "of 发射单值并完成" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let done = Ref::Ref(false)
   let obs : Observable[Int, Unit] = Observable::of(42)
   let _ = obs.subscribe({
@@ -300,14 +300,14 @@ test "of 发射单值并完成" {
 
 ///|
 test "from_iter 发射全部值" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : Observable[Int, Unit] = Observable::from_iter([1, 2, 3, 4, 5])
   let _ = obs.subscribe_on_next(fn(x) { values.val.push(x) })
   assert_eq(values.val, [1, 2, 3, 4, 5])
 }
 
 test "range 发射正确序列" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : Observable[Int64, Unit] = Observable::range(10L, 3L)
   let _ = obs.subscribe_on_next(fn(x) { values.val.push(x) })
   assert_eq(values.val, [10L, 11L, 12L])
@@ -337,7 +337,7 @@ test "error 发射错误不发射值" {
 }
 
 test "repeat 重复发射" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : Observable[Int, Unit] = Observable::repeat(7, 3)
   let _ = obs.subscribe_on_next(fn(x) { values.val.push(x) })
   assert_eq(values.val, [7, 7, 7])

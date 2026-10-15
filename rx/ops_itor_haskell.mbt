@@ -242,7 +242,7 @@ pub fn[T, Acc] Itor::scan(
 /// 语义同 Haskell `reverse`（需要完整消费源后才开始产出）。
 pub fn[T] Itor::reverse(self : Itor[T]) -> Itor[T] {
   let src = self
-  let buf = Ref::Ref(Array::new())
+  let buf = Ref::Ref(Array(capacity=0))
   let idx = Ref::Ref(0)
   let loaded = Ref::Ref(false)
   Itor::new(fn() {
@@ -574,7 +574,7 @@ pub fn[T : Compare] Itor::minimum(self : Itor[T]) -> T? {
 /// to_array：收集全部值到数组。
 /// 语义同 Haskell `toList`。
 pub fn[T] Itor::to_array(self : Itor[T]) -> Array[T] {
-  let arr = Array::new()
+  let arr = Array(capacity=0)
   while true {
     match self.next() {
       Some(v) => arr.push(v)
@@ -594,8 +594,8 @@ pub fn[T] Itor::partition(
   self : Itor[T],
   pred : (T) -> Bool,
 ) -> (Array[T], Array[T]) {
-  let yes = Array::new()
-  let no = Array::new()
+  let yes = Array(capacity=0)
+  let no = Array(capacity=0)
   while true {
     match self.next() {
       Some(v) => {
@@ -617,8 +617,8 @@ pub fn[T] Itor::span(
   self : Itor[T],
   pred : (T) -> Bool,
 ) -> (Array[T], Array[T]) {
-  let prefix = Array::new()
-  let rest = Array::new()
+  let prefix = Array(capacity=0)
+  let rest = Array(capacity=0)
   let mut passed = true
   while true {
     match self.next() {
@@ -648,8 +648,8 @@ pub fn[T] Itor::break_pred(
 /// split_at：按前 n 个元素切分为 (前 n 个, 剩余)。
 /// 语义同 Haskell `splitAt n xs`。
 pub fn[T] Itor::split_at(self : Itor[T], n : Int) -> (Array[T], Array[T]) {
-  let left = Array::new()
-  let right = Array::new()
+  let left = Array(capacity=0)
+  let right = Array(capacity=0)
   let mut i = 0
   while true {
     match self.next() {
@@ -670,14 +670,14 @@ pub fn[T] Itor::split_at(self : Itor[T], n : Int) -> (Array[T], Array[T]) {
 /// group_adjacent：把相邻且相等的元素分成组，返回组数组。
 /// 语义同 Haskell `group xs`。
 pub fn[T : Eq] Itor::group_adjacent(self : Itor[T]) -> Array[Array[T]] {
-  let groups = Array::new()
+  let groups = Array(capacity=0)
   let init : T? = None
   let prev = Ref::Ref(init)
-  let cur = Ref::Ref(Array::new())
+  let cur = Ref::Ref(Array(capacity=0))
   let flush : () -> Unit = fn() {
     if !cur.val.is_empty() {
       groups.push(cur.val)
-      cur.val = Array::new()
+      cur.val = Array(capacity=0)
     }
   }
   while true {
@@ -821,7 +821,7 @@ pub fn[T] Itor::tail(self : Itor[T]) -> Itor[T] {
 pub fn[T] Itor::init(self : Itor[T]) -> Itor[T] {
   let src = self
   Itor::new(fn() {
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     Iter::new(fn() -> T? {
       if buf.val.is_empty() {
         while true {
@@ -875,7 +875,7 @@ pub fn[T : Hash + Eq] Itor::nub(self : Itor[T]) -> Itor[T] {
 pub fn[T] Itor::sort_by(self : Itor[T], cmp : (T, T) -> Int) -> Itor[T] {
   let src = self
   Itor::new(fn() {
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let idx = Ref::Ref(0)
     let loaded = Ref::Ref(false)
     Iter::new(fn() -> T? {
@@ -946,7 +946,7 @@ pub fn[T : Eq] Itor::elem_indices(self : Itor[T], target : T) -> Array[Int] {
 /// find_indices：收集所有满足 pred 的元素下标。
 /// 语义同 Haskell `findIndices p xs`。
 pub fn[T] Itor::find_indices(self : Itor[T], pred : (T) -> Bool) -> Array[Int] {
-  let idxs = Array::new()
+  let idxs = Array(capacity=0)
   let mut i = 0
   while true {
     match self.next() {
@@ -970,7 +970,7 @@ pub fn[T, Acc, U] Itor::map_accum_l(
   f : (Acc, T) -> (Acc, U),
 ) -> (Acc, Array[U]) {
   let acc = Ref::Ref(seed)
-  let out = Array::new()
+  let out = Array(capacity=0)
   while true {
     match self.next() {
       Some(v) => {
@@ -993,7 +993,7 @@ pub fn[T, Acc, U] Itor::map_accum_r(
 ) -> (Acc, Array[U]) {
   let arr = self.to_array()
   let acc = Ref::Ref(seed)
-  let out = Array::new()
+  let out = Array(capacity=0)
   let mut i = arr.length() - 1
   while i >= 0 {
     let (u, new_acc) = f(arr[i], acc.val)
@@ -1025,9 +1025,9 @@ pub fn[T] Itor::replicate(n : Int, value : T) -> Itor[T] {
 /// 语义同 Haskell `inits`：inits [1,2,3] = [[],[1],[1,2],[1,2,3]]。
 pub fn[T] Itor::inits(self : Itor[T]) -> Array[Array[T]] {
   let arr = self.to_array()
-  let result = Array::new()
-  result.push(Array::new())
-  let prefix = Array::new()
+  let result = Array(capacity=0)
+  result.push(Array(capacity=0))
+  let prefix = Array(capacity=0)
   for v in arr {
     prefix.push(v)
     let copy = prefix.copy()
@@ -1040,10 +1040,10 @@ pub fn[T] Itor::inits(self : Itor[T]) -> Array[Array[T]] {
 /// 语义同 Haskell `tails`：tails [1,2,3] = [[1,2,3],[2,3],[3],[]]。
 pub fn[T] Itor::tails(self : Itor[T]) -> Array[Array[T]] {
   let arr = self.to_array()
-  let result = Array::new()
+  let result = Array(capacity=0)
   let mut i = 0
   while i <= arr.length() {
-    let suffix = Array::new()
+    let suffix = Array(capacity=0)
     let mut j = i
     while j < arr.length() {
       suffix.push(arr[j])
@@ -1066,8 +1066,8 @@ pub fn[T] Itor::concat(self : Itor[Itor[T]]) -> Itor[T] {
 pub fn[T] Itor::intercalate(self : Itor[Array[T]], sep : Array[T]) -> Itor[T] {
   let src = self
   let first = Ref::Ref(true)
-  let pending_sep = Ref::Ref(Array::new())
-  let inner : Ref[Array[T]] = Ref::Ref(Array::new())
+  let pending_sep = Ref::Ref(Array(capacity=0))
+  let inner : Ref[Array[T]] = Ref::Ref(Array(capacity=0))
   Itor::new(fn() {
     Iter::new(fn() -> T? {
       // 1. 组内值耗尽时尝试取下一组
@@ -1280,13 +1280,13 @@ pub fn[T] Itor::scanl1(self : Itor[T], f : (T, T) -> T) -> Itor[T] {
 pub fn[T, Acc] Itor::scanr(self : Itor[T], seed : Acc, f : (T, Acc) -> Acc) -> Itor[Acc] {
   let src = self
   Itor::new(fn() {
-    let results = Ref::Ref(Array::new())
+    let results = Ref::Ref(Array(capacity=0))
     let idx = Ref::Ref(0)
     let loaded = Ref::Ref(false)
     Iter::new(fn() -> Acc? {
       if !loaded.val {
         // 先收集全部（右折叠依赖右端）
-        let arr = Array::new()
+        let arr = Array(capacity=0)
         while true {
           match src.next() {
             Some(v) => arr.push(v)
@@ -1294,7 +1294,7 @@ pub fn[T, Acc] Itor::scanr(self : Itor[T], seed : Acc, f : (T, Acc) -> Acc) -> I
           }
         }
         // 从右往左累积：results[i] = f(arr[i], results[i+1])，最后补 seed
-        let out = Array::new()
+        let out = Array(capacity=0)
         let mut acc = seed
         let mut i = arr.length() - 1
         while i >= 0 {
@@ -1323,7 +1323,7 @@ pub fn[T, Acc] Itor::scanr(self : Itor[T], seed : Acc, f : (T, Acc) -> Acc) -> I
 pub fn[T] Itor::scanr1(self : Itor[T], f : (T, T) -> T) -> Itor[T] {
   let src = self
   Itor::new(fn() {
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let idx = Ref::Ref(0)
     let loaded = Ref::Ref(false)
     Iter::new(fn() -> T? {
@@ -1335,7 +1335,7 @@ pub fn[T] Itor::scanr1(self : Itor[T], f : (T, T) -> T) -> Itor[T] {
           }
         }
         let arr = buf.val
-        let results = Array::new()
+        let results = Array(capacity=0)
         if !arr.is_empty() {
           let mut acc = arr[arr.length() - 1]
           let mut i = arr.length() - 2
@@ -1389,7 +1389,7 @@ pub fn[T : Eq] Itor::strip_prefix(self : Itor[T], xs : Array[T]) -> Array[T]? {
     }
     i = i + 1
   }
-  let rest = Array::new()
+  let rest = Array(capacity=0)
   let mut j = xs.length()
   while j < arr.length() {
     rest.push(arr[j])
@@ -1413,7 +1413,7 @@ pub fn[T : Eq] Itor::strip_suffix(self : Itor[T], xs : Array[T]) -> Array[T]? {
     }
     i = i + 1
   }
-  let rest = Array::new()
+  let rest = Array(capacity=0)
   let mut j = 0
   while j < offset {
     rest.push(arr[j])
@@ -1481,7 +1481,7 @@ pub fn[T] Itor::at(self : Itor[T], index : Int) -> T? {
 /// 语义同 Haskell `nubBy eq xs`。O(n²) 线性查找，无 Hash 约束。
 pub fn[T] Itor::nub_by(self : Itor[T], eq : (T, T) -> Bool) -> Itor[T] {
   let src = self
-  let seen = Ref::Ref(Array::new())
+  let seen = Ref::Ref(Array(capacity=0))
   Itor::new(fn() {
     Iter::new(fn() -> T? {
       let mut result : T? = None
@@ -1570,7 +1570,7 @@ pub fn[T] Itor::delete_first_by(
 pub fn[T : Eq] Itor::difference(self : Itor[T], ys : Array[T]) -> Array[T] {
   let arr = self.to_array()
   let remaining = ys.copy()
-  let result = Array::new()
+  let result = Array(capacity=0)
   for v in arr {
     let mut found_idx : Int? = None
     let mut i = 0
@@ -1614,7 +1614,7 @@ pub fn[T : Eq] Itor::union(self : Itor[T], ys : Array[T]) -> Array[T] {
 /// intersect：交集。流中出现在 ys 里的元素按原顺序保留。
 /// 语义同 Haskell `intersect xs ys`。消费式，返回数组。
 pub fn[T : Eq] Itor::intersect(self : Itor[T], ys : Array[T]) -> Array[T] {
-  let result = Array::new()
+  let result = Array(capacity=0)
   while true {
     match self.next() {
       Some(v) => {
@@ -1721,14 +1721,14 @@ pub fn[T] Itor::insert_by(self : Itor[T], cmp : (T, T) -> Int, x : T) -> Itor[T]
 /// group_adjacent_by：把相邻且满足 f(a, b) 的元素分成组。
 /// 语义同 Haskell `groupBy f xs`。消费式，返回组数组。
 pub fn[T] Itor::group_adjacent_by(self : Itor[T], f : (T, T) -> Bool) -> Array[Array[T]] {
-  let groups = Array::new()
+  let groups = Array(capacity=0)
   let init : T? = None
   let prev = Ref::Ref(init)
-  let cur = Ref::Ref(Array::new())
+  let cur = Ref::Ref(Array(capacity=0))
   let flush : () -> Unit = fn() {
     if !cur.val.is_empty() {
       groups.push(cur.val)
-      cur.val = Array::new()
+      cur.val = Array(capacity=0)
     }
   }
   while true {
@@ -1768,10 +1768,10 @@ pub fn[T] Itor::transpose(self : Itor[Array[T]]) -> Array[Array[T]] {
       max_len = row.length()
     }
   }
-  let result = Array::new()
+  let result = Array(capacity=0)
   let mut i = 0
   while i < max_len {
-    let col = Array::new()
+    let col = Array(capacity=0)
     for row in rows {
       if i < row.length() {
         col.push(row[i])
@@ -1788,10 +1788,10 @@ pub fn[T] Itor::transpose(self : Itor[Array[T]]) -> Array[Array[T]] {
 pub fn[T] Itor::subsequences(self : Itor[T]) -> Array[Array[T]] {
   let arr = self.to_array()
   let n = arr.length()
-  let result = Array::new()
+  let result = Array(capacity=0)
   let mut mask = 0
   while mask < (1 << n) {
-    let sub = Array::new()
+    let sub = Array(capacity=0)
     let mut i = 0
     while i < n {
       if (mask & (1 << i)) != 0 {
@@ -1809,7 +1809,7 @@ pub fn[T] Itor::subsequences(self : Itor[T]) -> Array[Array[T]] {
 /// 语义同 Haskell `permutations`。消费式，返回排列数组。
 pub fn[T] Itor::permutations(self : Itor[T]) -> Array[Array[T]] {
   let arr = self.to_array()
-  let result = Array::new()
+  let result = Array(capacity=0)
   let n = arr.length()
   // 递归回溯生成全排列
   fn gen(idx : Int) -> Unit {
@@ -1847,7 +1847,7 @@ pub fn[T] Itor::chunks_of(self : Itor[T], n : Int) -> Itor[Array[T]] {
       if n <= 0 {
         return None
       }
-      let chunk = Array::new()
+      let chunk = Array(capacity=0)
       let mut i = 0
       while i < n {
         match src.next() {
@@ -1933,8 +1933,8 @@ pub fn[T, U, V, R] Itor::zip_with3(
 /// unzip：二元组流拆分为两个数组。
 /// 语义同 Haskell `unzip`。消费式。
 pub fn[T, U] Itor::unzip(self : Itor[(T, U)]) -> (Array[T], Array[U]) {
-  let col_t = Array::new()
-  let col_u = Array::new()
+  let col_t = Array(capacity=0)
+  let col_u = Array(capacity=0)
   while true {
     match self.next() {
       Some((a, b)) => {
@@ -1952,9 +1952,9 @@ pub fn[T, U] Itor::unzip(self : Itor[(T, U)]) -> (Array[T], Array[U]) {
 pub fn[T, U, V] Itor::unzip3(
   self : Itor[(T, U, V)],
 ) -> (Array[T], Array[U], Array[V]) {
-  let col_t = Array::new()
-  let col_u = Array::new()
-  let col_v = Array::new()
+  let col_t = Array(capacity=0)
+  let col_u = Array(capacity=0)
+  let col_v = Array(capacity=0)
   while true {
     match self.next() {
       Some((a, b, c)) => {
@@ -2011,7 +2011,7 @@ pub fn[T] Itor::intersect_by(
   ys : Array[T],
   eq : (T, T) -> Bool,
 ) -> Array[T] {
-  let result = Array::new()
+  let result = Array(capacity=0)
   while true {
     match self.next() {
       Some(v) => {
@@ -2065,12 +2065,12 @@ pub fn[T] Itor::append(self : Itor[T], other : Itor[T]) -> Itor[T] {
 pub fn[T] Itor::take_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
   let src = self
   Itor::new(fn() {
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let idx = Ref::Ref(0)
     let loaded = Ref::Ref(false)
     Iter::new(fn() -> T? {
       if !loaded.val {
-        let arr = Array::new()
+        let arr = Array(capacity=0)
         while true {
           match src.next() {
             Some(v) => arr.push(v)
@@ -2084,7 +2084,7 @@ pub fn[T] Itor::take_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
           start = i
           i = i - 1
         }
-        let keep = Array::new()
+        let keep = Array(capacity=0)
         let mut j = start
         while j < arr.length() {
           keep.push(arr[j])
@@ -2110,12 +2110,12 @@ pub fn[T] Itor::take_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
 pub fn[T] Itor::drop_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
   let src = self
   Itor::new(fn() {
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     let idx = Ref::Ref(0)
     let loaded = Ref::Ref(false)
     Iter::new(fn() -> T? {
       if !loaded.val {
-        let arr = Array::new()
+        let arr = Array(capacity=0)
         while true {
           match src.next() {
             Some(v) => arr.push(v)
@@ -2127,7 +2127,7 @@ pub fn[T] Itor::drop_while_end(self : Itor[T], pred : (T) -> Bool) -> Itor[T] {
         while n > 0 && pred(arr[n - 1]) {
           n = n - 1
         }
-        let keep = Array::new()
+        let keep = Array(capacity=0)
         let mut j = 0
         while j < n {
           keep.push(arr[j])
@@ -2200,10 +2200,10 @@ pub fn[T, U, V, W, R] Itor::zip_with4(
 pub fn[T, U, V, W] Itor::unzip4(
   self : Itor[(T, U, V, W)],
 ) -> (Array[T], Array[U], Array[V], Array[W]) {
-  let col_t = Array::new()
-  let col_u = Array::new()
-  let col_v = Array::new()
-  let col_w = Array::new()
+  let col_t = Array(capacity=0)
+  let col_u = Array(capacity=0)
+  let col_v = Array(capacity=0)
+  let col_w = Array(capacity=0)
   while true {
     match self.next() {
       Some((a, b, c, d)) => {
@@ -2269,11 +2269,11 @@ pub fn[T, U, V, W, X, R] Itor::zip_with5(
 pub fn[T, U, V, W, X] Itor::unzip5(
   self : Itor[(T, U, V, W, X)],
 ) -> (Array[T], Array[U], Array[V], Array[W], Array[X]) {
-  let col_t = Array::new()
-  let col_u = Array::new()
-  let col_v = Array::new()
-  let col_w = Array::new()
-  let col_x = Array::new()
+  let col_t = Array(capacity=0)
+  let col_u = Array(capacity=0)
+  let col_v = Array(capacity=0)
+  let col_w = Array(capacity=0)
+  let col_x = Array(capacity=0)
   while true {
     match self.next() {
       Some((a, b, c, d, e)) => {
@@ -2344,12 +2344,12 @@ pub fn[T, U, V, W, X, Y, R] Itor::zip_with6(
 pub fn[T, U, V, W, X, Y] Itor::unzip6(
   self : Itor[(T, U, V, W, X, Y)],
 ) -> (Array[T], Array[U], Array[V], Array[W], Array[X], Array[Y]) {
-  let col_t = Array::new()
-  let col_u = Array::new()
-  let col_v = Array::new()
-  let col_w = Array::new()
-  let col_x = Array::new()
-  let col_y = Array::new()
+  let col_t = Array(capacity=0)
+  let col_u = Array(capacity=0)
+  let col_v = Array(capacity=0)
+  let col_w = Array(capacity=0)
+  let col_x = Array(capacity=0)
+  let col_y = Array(capacity=0)
   while true {
     match self.next() {
       Some((a, b, c, d, e, f)) => {
@@ -2425,13 +2425,13 @@ pub fn[T, U, V, W, X, Y, Z, R] Itor::zip_with7(
 pub fn[T, U, V, W, X, Y, Z] Itor::unzip7(
   self : Itor[(T, U, V, W, X, Y, Z)],
 ) -> (Array[T], Array[U], Array[V], Array[W], Array[X], Array[Y], Array[Z]) {
-  let col_t = Array::new()
-  let col_u = Array::new()
-  let col_v = Array::new()
-  let col_w = Array::new()
-  let col_x = Array::new()
-  let col_y = Array::new()
-  let col_z = Array::new()
+  let col_t = Array(capacity=0)
+  let col_u = Array(capacity=0)
+  let col_v = Array(capacity=0)
+  let col_w = Array(capacity=0)
+  let col_x = Array(capacity=0)
+  let col_y = Array(capacity=0)
+  let col_z = Array(capacity=0)
   while true {
     match self.next() {
       Some((a, b, c, d, e, f, g)) => {
@@ -2458,7 +2458,7 @@ pub fn[T, U, V, W, X, Y, Z] Itor::unzip7(
 /// lines "a\nb\n" = ["a","b"]；lines "\n" = [""]；lines "" = []。
 /// 末尾换行符不产生多余空行。
 pub fn Itor::lines(s : String) -> Itor[String] {
-  let arr = Array::new()
+  let arr = Array(capacity=0)
   for sv in s.split("\n") {
     arr.push(sv.to_owned())
   }
@@ -2474,8 +2474,8 @@ pub fn Itor::lines(s : String) -> Itor[String] {
 /// 语义同 Haskell `words`：
 /// words " a  b\nc " = ["a","b","c"]；words "" = []。
 pub fn Itor::words(s : String) -> Itor[String] {
-  let arr = Array::new()
-  let cur : Array[Char] = Array::new()
+  let arr = Array(capacity=0)
+  let cur : Array[Char] = Array(capacity=0)
   for c in s.iter() {
     if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
       if !cur.is_empty() {

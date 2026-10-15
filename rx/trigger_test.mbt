@@ -9,7 +9,7 @@
 ///|
 test "精确匹配：仅命中同名事件" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
-  let fired = Ref::Ref(Array::new())
+  let fired = Ref::Ref(Array(capacity=0))
   let _ = reg.register("task.done", fn(ev : @rx.TriggerEvent[Int]) {
     fired.val.push(ev.payload)
   })
@@ -21,7 +21,7 @@ test "精确匹配：仅命中同名事件" {
 ///|
 test "单段通配：task.* 命中 task.done / task.fail，不命中多段 task.a.b" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
-  let fired = Ref::Ref(Array::new())
+  let fired = Ref::Ref(Array(capacity=0))
   let _ = reg.register("task.*", fn(ev : @rx.TriggerEvent[Int]) {
     fired.val.push(ev.name)
   })
@@ -34,7 +34,7 @@ test "单段通配：task.* 命中 task.done / task.fail，不命中多段 task.
 ///|
 test "多段通配：task.** 命中任意 task. 前缀的多段事件" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
-  let fired = Ref::Ref(Array::new())
+  let fired = Ref::Ref(Array(capacity=0))
   let _ = reg.register("task.**", fn(ev : @rx.TriggerEvent[Int]) {
     fired.val.push(ev.name)
   })
@@ -47,20 +47,20 @@ test "多段通配：task.** 命中任意 task. 前缀的多段事件" {
 ///|
 test "priority：高优先先执行，同优先按注册序" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
-  let order = Ref::Ref(Array::new())
+  let order = Ref::Ref(Array(capacity=0))
   let _ = reg.register_with(
     "evt",
-    fn(ev : @rx.TriggerEvent[Int]) { order.val.push(1) },
+    fn(_ : @rx.TriggerEvent[Int]) { order.val.push(1) },
     priority=10,
   )
   let _ = reg.register_with(
     "evt",
-    fn(ev : @rx.TriggerEvent[Int]) { order.val.push(2) },
+    fn(_ : @rx.TriggerEvent[Int]) { order.val.push(2) },
     priority=30,
   )
   let _ = reg.register_with(
     "evt",
-    fn(ev : @rx.TriggerEvent[Int]) { order.val.push(3) },
+    fn(_ : @rx.TriggerEvent[Int]) { order.val.push(3) },
     priority=20,
   )
   reg.fire("evt", 0)
@@ -73,7 +73,7 @@ test "once：触发一次后自动注销，再次 fire 不再执行" {
   let fired = Ref::Ref(0)
   let _ = reg.register_with(
     "once.evt",
-    fn(ev : @rx.TriggerEvent[Int]) { fired.val = fired.val + 1 },
+    fn(_ : @rx.TriggerEvent[Int]) { fired.val = fired.val + 1 },
     once=true,
   )
   reg.fire("once.evt", 1)
@@ -86,7 +86,7 @@ test "once：触发一次后自动注销，再次 fire 不再执行" {
 ///|
 test "condition：条件不满足则不执行" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
-  let fired = Ref::Ref(Array::new())
+  let fired = Ref::Ref(Array(capacity=0))
   let _ = reg.register_with(
     "data",
     fn(ev : @rx.TriggerEvent[Int]) { fired.val.push(ev.payload) },
@@ -102,7 +102,7 @@ test "condition：条件不满足则不执行" {
 test "fire_with_key：同 key 只触发一次，不同 key 各自触发" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
   let fired = Ref::Ref(0)
-  let _ = reg.register("dup", fn(ev : @rx.TriggerEvent[Int]) {
+  let _ = reg.register("dup", fn(_ : @rx.TriggerEvent[Int]) {
     fired.val = fired.val + 1
   })
   reg.fire_with_key("dup", 1, "k1")
@@ -115,7 +115,7 @@ test "fire_with_key：同 key 只触发一次，不同 key 各自触发" {
 test "unregister：注销后不再触发，重复注销返回 false" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
   let fired = Ref::Ref(0)
-  let id = reg.register("evt", fn(ev : @rx.TriggerEvent[Int]) {
+  let id = reg.register("evt", fn(_ : @rx.TriggerEvent[Int]) {
     fired.val = fired.val + 1
   })
   assert_true(reg.unregister(id))
@@ -129,7 +129,7 @@ test "unregister：注销后不再触发，重复注销返回 false" {
 test "clear：清空触发器与幂等键，后续 fire 无效果" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
   let fired = Ref::Ref(0)
-  let _ = reg.register("evt", fn(ev : @rx.TriggerEvent[Int]) {
+  let _ = reg.register("evt", fn(_ : @rx.TriggerEvent[Int]) {
     fired.val = fired.val + 1
   })
   reg.fire_with_key("evt", 1, "dup")
@@ -162,8 +162,8 @@ test "trigger_count / has_trigger：注册与注销后数量与匹配状态正�
 ///|
 test "fire_at：事件携带指定时刻与自增序号" {
   let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
-  let times = Ref::Ref(Array::new())
-  let ids = Ref::Ref(Array::new())
+  let times = Ref::Ref(Array(capacity=0))
+  let ids = Ref::Ref(Array(capacity=0))
   let _ = reg.register("ts", fn(ev : @rx.TriggerEvent[Int]) {
     times.val.push(ev.at)
     ids.val.push(ev.id)
@@ -172,4 +172,56 @@ test "fire_at：事件携带指定时刻与自增序号" {
   reg.fire_at("ts", 2, 200L)
   assert_eq(times.val, [100L, 200L])
   assert_eq(ids.val, [1L, 2L])
+}
+
+///|
+test "中间多段通配：a.**.b 匹配 a.x.b，不匹配 a.x（无 b 结尾）" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(Array(capacity=0))
+  let _ = reg.register("a.**.b", fn(ev : @rx.TriggerEvent[Int]) {
+    fired.val.push(ev.name)
+  })
+  reg.fire("a.x.b", 1)
+  reg.fire("a.x", 2)
+  reg.fire("b", 3)
+  assert_eq(fired.val, ["a.x.b"])
+}
+
+///|
+test "多段通配匹配零段：a.**.b 匹配 a.b，也匹配 a.c.d.b" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(Array(capacity=0))
+  let _ = reg.register("a.**.b", fn(ev : @rx.TriggerEvent[Int]) {
+    fired.val.push(ev.name)
+  })
+  reg.fire("a.b", 1)
+  reg.fire("a.c.d.b", 2)
+  reg.fire("a.b.c", 3)
+  assert_eq(fired.val, ["a.b", "a.c.d.b"])
+}
+
+///|
+test "纯多段通配 **：匹配任意事件名（含单段与多段）" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(Array(capacity=0))
+  let _ = reg.register("**", fn(ev : @rx.TriggerEvent[Int]) {
+    fired.val.push(ev.name)
+  })
+  reg.fire("a", 1)
+  reg.fire("a.b.c", 2)
+  reg.fire("other", 3)
+  assert_eq(fired.val, ["a", "a.b.c", "other"])
+}
+
+///|
+test "单段通配不跨越段边界：a.* 不匹配 a.b.c，也不匹配 a" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(Array(capacity=0))
+  let _ = reg.register("a.*", fn(ev : @rx.TriggerEvent[Int]) {
+    fired.val.push(ev.name)
+  })
+  reg.fire("a.b", 1)
+  reg.fire("a.b.c", 2)
+  reg.fire("a", 3)
+  assert_eq(fired.val, ["a.b"])
 }

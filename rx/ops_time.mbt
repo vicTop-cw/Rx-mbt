@@ -18,7 +18,7 @@ pub struct Clock {
 pub fn Clock::new() -> Clock {
   {
     ms: Ref::Ref(0L),
-    timers: Ref::Ref(Array::new()),
+    timers: Ref::Ref(Array(capacity=0)),
     next_timer_id: Ref::Ref(0),
   }
 }
@@ -32,8 +32,8 @@ pub fn Clock::now(self : Clock) -> Int64 {
 pub fn Clock::advance(self : Clock, ms : Int64) -> Unit {
   self.ms.val = self.ms.val + ms
   let target = self.ms.val
-  let remaining = Array::new()
-  let due = Array::new()
+  let remaining = Array(capacity=0)
+  let due = Array(capacity=0)
   for t in self.timers.val {
     if t.0 <= target {
       due.push(t)
@@ -57,7 +57,7 @@ fn Clock::set_timer(
   self.next_timer_id.val = self.next_timer_id.val + 1
   self.timers.val.push((self.ms.val + delay_ms, id, fire))
   Subscription::new(fn() {
-    let keep = Array::new()
+    let keep = Array(capacity=0)
     for t in self.timers.val {
       if t.1 != id {
         keep.push(t)
@@ -156,7 +156,7 @@ pub fn[T, E] Observable::delay_on(
     let complete = downstream.complete
     let stopped = Ref::Ref(false)
     // 收集所有待触发的 timer，dispose 时统一取消，避免残留
-    let timers = Ref::Ref(Array::new())
+    let timers = Ref::Ref(Array(capacity=0))
     let source_sub = source_fn({
       next: fn(v : T) {
         if !stopped.val {

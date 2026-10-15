@@ -185,7 +185,7 @@ pub fn[T, E] Observable::reverse(self : Observable[T, E]) -> Observable[Array[T]
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -272,8 +272,8 @@ pub fn[T, E, U, R] Observable::zip_with(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf_a = Ref::Ref(Array::new())
-    let buf_b = Ref::Ref(Array::new())
+    let buf_a = Ref::Ref(Array(capacity=0))
+    let buf_b = Ref::Ref(Array(capacity=0))
     let done_a = Ref::Ref(false)
     let done_b = Ref::Ref(false)
     let completed = Ref::Ref(false)
@@ -353,9 +353,9 @@ pub fn[T, E, U, V] Observable::zip3(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let buf_a = Ref::Ref(Array::new())
-      let buf_b = Ref::Ref(Array::new())
-      let buf_c = Ref::Ref(Array::new())
+      let buf_a = Ref::Ref(Array(capacity=0))
+      let buf_b = Ref::Ref(Array(capacity=0))
+      let buf_c = Ref::Ref(Array(capacity=0))
       let done_a = Ref::Ref(false)
       let done_b = Ref::Ref(false)
       let done_c = Ref::Ref(false)
@@ -452,8 +452,8 @@ pub fn[T, E, U] Observable::unzip(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let col_a = Ref::Ref(Array::new())
-      let col_b = Ref::Ref(Array::new())
+      let col_a = Ref::Ref(Array(capacity=0))
+      let col_b = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(pair : (T, U)) {
           col_a.val.push(pair.0)
@@ -481,7 +481,7 @@ pub fn[T, E] Observable::transpose(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let rows = Ref::Ref(Array::new())
+      let rows = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(row : Array[T]) { rows.val.push(row) },
         error: error,
@@ -493,10 +493,10 @@ pub fn[T, E] Observable::transpose(
               max_len = row.length()
             }
           }
-          let result = Array::new()
+          let result = Array(capacity=0)
           let mut i = 0
           while i < max_len {
-            let col = Array::new()
+            let col = Array(capacity=0)
             for row in rs {
               if i < row.length() {
                 col.push(row[i])
@@ -529,14 +529,14 @@ pub fn[T, E] Observable::span(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let buf = Ref::Ref(Array::new())
+      let buf = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(v : T) { buf.val.push(v) },
         error: error,
         complete: fn() {
           let arr = buf.val
-          let prefix = Array::new()
-          let rest = Array::new()
+          let prefix = Array(capacity=0)
+          let rest = Array(capacity=0)
           let mut seen_break = false
           for v in arr {
             if !seen_break && pred(v) {
@@ -576,14 +576,14 @@ pub fn[T, E] Observable::split_at(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let buf = Ref::Ref(Array::new())
+      let buf = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(v : T) { buf.val.push(v) },
         error: error,
         complete: fn() {
           let arr = buf.val
-          let left = Array::new()
-          let right = Array::new()
+          let left = Array(capacity=0)
+          let right = Array(capacity=0)
           let mut i = 0
           let mut count = 0
           while i < arr.length() {
@@ -615,8 +615,8 @@ pub fn[T, E] Observable::partition(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let yes = Ref::Ref(Array::new())
-      let no = Ref::Ref(Array::new())
+      let yes = Ref::Ref(Array(capacity=0))
+      let no = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(v : T) {
           if pred(v) {
@@ -692,13 +692,13 @@ pub fn[T : Eq, E] Observable::delete_first(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         let mut removed = false
         for v in arr {
           if !removed && v == target {
@@ -735,13 +735,13 @@ pub fn[T, E] Observable::group_adjacent_by(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let current = Ref::Ref(Array::new())
+    let current = Ref::Ref(Array(capacity=0))
     let init : T? = None
     let prev = Ref::Ref(init)
     let flush : () -> Unit = fn() {
       if !current.val.is_empty() {
         next(current.val)
-        current.val = Array::new()
+        current.val = Array(capacity=0)
       }
     }
     source_fn({
@@ -861,7 +861,7 @@ pub fn[T, E, Acc] Observable::foldr(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -893,13 +893,13 @@ pub fn[T, E, Acc] Observable::scanr(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let results = Array::new()
+        let results = Array(capacity=0)
         let mut acc = seed
         let mut i = arr.length() - 1
         while i >= 0 {
@@ -984,7 +984,7 @@ pub fn[T, E] Observable::sort_by(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1074,7 +1074,7 @@ pub fn[T, E] Observable::find_indices(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let idxs = Ref::Ref(Array::new())
+    let idxs = Ref::Ref(Array(capacity=0))
     let idx = Ref::Ref(0)
     source_fn({
       next: fn(v : T) {
@@ -1229,14 +1229,14 @@ pub fn[T, E] Observable::scanr1(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
         let n = arr.length()
-        let results = Array::new()
+        let results = Array(capacity=0)
         if n > 0 {
           let mut acc = arr[n - 1]
           results.push(acc)
@@ -1268,7 +1268,7 @@ pub fn[T, E] Observable::foldr1(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1331,14 +1331,14 @@ pub fn[T, E, Acc, U] Observable::map_accum_r(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
         let mut acc = seed
-        let results = Array::new()
+        let results = Array(capacity=0)
         let mut i = arr.length() - 1
         while i >= 0 {
           let (new_acc, u) = f(acc, arr[i])
@@ -1463,13 +1463,13 @@ pub fn[T, E] Observable::take_while_end(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         let mut i = arr.length() - 1
         while i >= 0 && pred(arr[i]) {
           result.push(arr[i])
@@ -1496,7 +1496,7 @@ pub fn[T, E] Observable::drop_while_end(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1506,7 +1506,7 @@ pub fn[T, E] Observable::drop_while_end(
         while i >= 0 && pred(arr[i]) {
           i = i - 1
         }
-        let result = Array::new()
+        let result = Array(capacity=0)
         let mut j = 0
         while j <= i {
           result.push(arr[j])
@@ -1534,15 +1534,15 @@ pub fn[T, E] Observable::inits(self : Observable[T, E]) -> Observable[Array[Arra
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
-        result.push(Array::new())
-        let prefix = Array::new()
+        let result = Array(capacity=0)
+        result.push(Array(capacity=0))
+        let prefix = Array(capacity=0)
         for v in arr {
           prefix.push(v)
           let copy = prefix.copy()
@@ -1565,16 +1565,16 @@ pub fn[T, E] Observable::tails(self : Observable[T, E]) -> Observable[Array[Arra
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         let mut i = 0
         while i <= arr.length() {
-          let suffix = Array::new()
+          let suffix = Array(capacity=0)
           let mut j = i
           while j < arr.length() {
             suffix.push(arr[j])
@@ -1602,7 +1602,7 @@ pub fn[T : Eq, E] Observable::strip_prefix(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1620,7 +1620,7 @@ pub fn[T : Eq, E] Observable::strip_prefix(
             i = i + 1
           }
           if ok {
-            let r = Array::new()
+            let r = Array(capacity=0)
             let mut j = xs.length()
             while j < arr.length() {
               r.push(arr[j])
@@ -1648,7 +1648,7 @@ pub fn[T : Eq, E] Observable::strip_suffix(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1667,7 +1667,7 @@ pub fn[T : Eq, E] Observable::strip_suffix(
             i = i + 1
           }
           if ok {
-            let r = Array::new()
+            let r = Array(capacity=0)
             let mut j = 0
             while j < base {
               r.push(arr[j])
@@ -1696,13 +1696,13 @@ pub fn[T, E] Observable::delete_first_by(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         let removed = Ref::Ref(false)
         for v in arr {
           if !removed.val && eq(target, v) {
@@ -1730,7 +1730,7 @@ pub fn[T : Eq, E] Observable::is_subsequence_of(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1764,13 +1764,13 @@ pub fn[T, E] Observable::nub_by(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         for v in arr {
           let mut dup = false
           for r in result {
@@ -1802,9 +1802,9 @@ pub fn[T, E, U, V] Observable::unzip3(
       let next = downstream.next
       let error = downstream.error
       let complete = downstream.complete
-      let col_t = Ref::Ref(Array::new())
-      let col_u = Ref::Ref(Array::new())
-      let col_v = Ref::Ref(Array::new())
+      let col_t = Ref::Ref(Array(capacity=0))
+      let col_u = Ref::Ref(Array(capacity=0))
+      let col_v = Ref::Ref(Array(capacity=0))
       source_fn({
         next: fn(v : (T, U, V)) {
           col_t.val.push(v.0)
@@ -1832,7 +1832,7 @@ pub fn[T : Eq, E] Observable::union(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
@@ -1869,13 +1869,13 @@ pub fn[T : Eq, E] Observable::intersect(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         for v in arr {
           let mut found = false
           for y in ys {
@@ -1907,14 +1907,14 @@ pub fn[T : Eq, E] Observable::difference(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
         let remaining = ys.copy()
-        let result = Array::new()
+        let result = Array(capacity=0)
         for v in arr {
           let mut found_idx : Int? = None
           let mut i = 0
@@ -1959,13 +1959,13 @@ pub fn[T, E] Observable::insert_by(
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : T) { buf.val.push(v) },
       error: error,
       complete: fn() {
         let arr = buf.val
-        let result = Array::new()
+        let result = Array(capacity=0)
         let inserted = Ref::Ref(false)
         for v in arr {
           if !inserted.val && cmp(x, v) <= 0 {
@@ -1989,7 +1989,7 @@ pub fn[T, E] Observable::insert_by(
 /// 语义同 Haskell `lines`：lines "a\nb\n" = ["a","b"]；lines "\n" = [""]；lines "" = []。
 /// 末尾换行符不产生多余空行。
 pub fn[E] lines(s : String) -> Observable[String, E] {
-  let arr = Array::new()
+  let arr = Array(capacity=0)
   for sv in s.split("\n") {
     arr.push(sv.to_owned())
   }
@@ -2003,8 +2003,8 @@ pub fn[E] lines(s : String) -> Observable[String, E] {
 /// 连续空白合并、首尾空白忽略。
 /// 语义同 Haskell `words`：words " a  b\nc " = ["a","b","c"]；words "" = []。
 pub fn[E] words(s : String) -> Observable[String, E] {
-  let arr = Array::new()
-  let cur : Array[Char] = Array::new()
+  let arr = Array(capacity=0)
+  let cur : Array[Char] = Array(capacity=0)
   for c in s.iter() {
     if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
       if !cur.is_empty() {
@@ -2029,7 +2029,7 @@ pub fn[E] Observable::unlines(self : Observable[String, E]) -> Observable[String
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : String) { buf.val.push(v) },
       error: error,
@@ -2055,7 +2055,7 @@ pub fn[E] Observable::unwords(self : Observable[String, E]) -> Observable[String
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let buf = Ref::Ref(Array::new())
+    let buf = Ref::Ref(Array(capacity=0))
     source_fn({
       next: fn(v : String) { buf.val.push(v) },
       error: error,

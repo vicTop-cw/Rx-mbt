@@ -6,6 +6,7 @@ registry-import-test/
 scripts/
 cmd/
 AGENTS.md
+fist-mbt.db
 _fix_interrupt.py
 _old_ops_filter.txt
 _str_api.txt

@@ -4,7 +4,7 @@
 
 ///|
 test "run 立即消费并原样返回" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).tap(
     fn(v) { values.val.push(v) },
   )
@@ -14,7 +14,7 @@ test "run 立即消费并原样返回" {
 
 ///|
 test "debug 透传所有值" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3]).debug(
     Some("Test"),
   )
@@ -24,7 +24,7 @@ test "debug 透传所有值" {
 
 ///|
 test "all 全满足发 true" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Bool, Unit] = @rx.Observable::from_iter([2, 4, 6]).all(
     fn(v) { v % 2 == 0 },
   )
@@ -38,7 +38,7 @@ test "ReplaySubject with_buffer_size 只重放最近 N 个" {
   subject.on_next(1)
   subject.on_next(2)
   subject.on_next(3)
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let _ = subject.subscribe(@rx.Observer::on_next_only(fn(v) { values.val.push(v) }))
   assert_eq(values.val, [2, 3])
 }
@@ -49,7 +49,7 @@ test "PublishSubject 完成后新订阅者立即收到完成信号" {
   let subject : @rx.PublishSubject[Int, Unit] = @rx.PublishSubject::new()
   subject.on_next(1)
   subject.on_completed()
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let completed = Ref::Ref(false)
   let _ = subject.subscribe(
     @rx.Observer::new(fn(v : Int) { values.val.push(v) }, fn(_ : Unit) {}, fn() {
@@ -65,8 +65,8 @@ test "BehaviorSubject 出错后新订阅者立即收到错误且不重放当前�
   // 回归：修复前已终止的 BehaviorSubject 会错误地重放 current 值
   let subject : @rx.BehaviorSubject[Int, String] = @rx.BehaviorSubject::with_value(42)
   subject.on_error("boom")
-  let values = Ref::Ref(Array::new())
-  let errs = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
+  let errs = Ref::Ref(Array(capacity=0))
   let _ = subject.subscribe(
     @rx.Observer::new(fn(v : Int) { values.val.push(v) }, fn(e : String) {
       errs.val.push(e)
@@ -87,7 +87,7 @@ test "CurrentThreadScheduler 同步执行任务" {
 
 ///|
 test "cum_sum 累积求和逐值发出" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3, 4]).cum_sum()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [1, 3, 6, 10])
@@ -95,7 +95,7 @@ test "cum_sum 累积求和逐值发出" {
 
 ///|
 test "cum_min 累积最小值逐值发出" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([5, 2, 8, 1]).cum_min()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [5, 2, 2, 1])
@@ -103,7 +103,7 @@ test "cum_min 累积最小值逐值发出" {
 
 ///|
 test "cum_max 累积最大值逐值发出" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([3, 1, 9, 4]).cum_max()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [3, 3, 9, 9])
@@ -111,7 +111,7 @@ test "cum_max 累积最大值逐值发出" {
 
 ///|
 test "abs 逐元素取绝对值" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Double, Unit] = @rx.Observable::from_iter([-1.5, 2.0, -3.5]).abs()
   let _ = obs.subscribe_on_next(fn(v) { values.val.push(v) })
   assert_eq(values.val, [1.5, 2.0, 3.5])
@@ -119,7 +119,7 @@ test "abs 逐元素取绝对值" {
 
 ///|
 test "curry_map 返回可组合函数并应用" {
-  let values = Ref::Ref(Array::new())
+  let values = Ref::Ref(Array(capacity=0))
   let mapper : (@rx.Observable[Int, Unit]) -> @rx.Observable[Int, Unit] = @rx.curry_map(
     fn(v : Int, k : Int) { v * k },
     10,
@@ -135,7 +135,7 @@ test "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复
   s.on_next(1)
   s.on_completed()
   s.on_next(2) // 已终止：应被忽略，不进入缓冲
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let _ = s.as_observable().subscribe_on_next(fn(v : Int) { values.val.push(v) })
   // 终止后重放已完成前缓冲的历史（[1]），on_next(2) 未进入缓冲
   assert_eq(values.val, [1])
@@ -143,7 +143,7 @@ test "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复
 
 ///|
 test "delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟）" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let clock = @rx.Clock::new()
   let src : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([1, 2, 3])
@@ -181,7 +181,7 @@ test "timeout_on 源完成后挂起 timer 不误触发错误（回归）" {
 
 ///|
 test "timer_on 延迟触发一次并完成" {
-  let values : Ref[Array[Int64]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int64]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let clock = @rx.Clock::new()
   let _ = @rx.timer_on(clock, 10L).subscribe(
@@ -203,7 +203,7 @@ test "timer_on 延迟触发一次并完成" {
 
 ///|
 test "interval_on 按周期发射递增计数" {
-  let values : Ref[Array[Int64]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int64]] = Ref::Ref(Array(capacity=0))
   let clock = @rx.Clock::new()
   let sub = @rx.interval_on(clock, 10L).subscribe_on_next(fn(v : Int64) { values.val.push(v) })
   clock.advance(10L)

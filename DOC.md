@@ -19,6 +19,7 @@
 - [Observable 方法——订阅](#observable-方法订阅)
 - [Subject（多播主题）](#subject多播主题)
 - [调度器](#调度器)
+- [触发机制（Trigger）](#触发机制trigger)
 - [自由函数操作符](#自由函数操作符)
 - [Itor / Node（可控制迭代器）](#itor--node可控制迭代器)
 - [Haskell 迭代器 API 对照](#haskell-迭代器-api-对照)
@@ -351,6 +352,68 @@
 | `ImmediateScheduler` | `new` / `with_clock(Clock)` |
 | `AsyncScheduler` | `new` / `with_clock(Clock)` |
 | `ThreadPoolScheduler` | `new` / `with_threads(Int)` / `with_clock(Clock, Int)` / `get_num_threads(Self) -> Int` |
+
+---
+
+## 触发机制（Trigger）
+
+事件驱动的非定时任务触发：`事件名精确 / 通配匹配 → 条件过滤 → 优先级排序 → 分发执行`。`once` 触发器触发一次后自动注销；`fire_with_key` 提供幂等去重；触发与执行解耦（事件驱动，与时间类操作符互补）。
+
+### `TriggerEvent[T]`
+
+触发事件：事件名 + 载荷 + 自增事件序号 + 发生时刻（虚拟时钟毫秒）。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `name` | `String` | 事件名（按 `.` 分段） |
+| `payload` | `T` | 事件载荷 |
+| `id` | `Int64` | 自增事件序号（注册表内全局递增） |
+| `at` | `Int64` | 发生时刻（虚拟时钟毫秒） |
+
+### `Trigger[T]`
+
+触发器：事件名（支持通配）+ 条件 + 时机 + 处理器。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | `Int` | 触发器 id（注册表内递增，`unregister` 用） |
+| `event_name` | `String` | 事件名模式（支持 `*` / `**` 通配） |
+| `condition` | `(TriggerEvent[T]) -> Bool` | 条件过滤器，不满足则跳过 |
+| `once` | `Bool` | 是否一次性（触发后自动注销） |
+| `priority` | `Int` | 优先级（越大越先执行） |
+| `handler` | `(TriggerEvent[T]) -> Unit` | 事件处理器 |
+| `fired_count` | `Ref[Int]` | 已触发次数（内部计数，condition 不满足不递增） |
+
+### `TriggerRegistry[T]`
+
+触发器注册表：集中管理 + 事件分发 + 幂等去重。
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `fn new() -> TriggerRegistry[T]` | 创建空注册表 |
+| `register` | `fn register(Self, String, (TriggerEvent[T]) -> Unit) -> Int` | 注册简单触发器（无条件、非一次性、优先级 0） |
+| `register_with` | `fn register_with(Self, String, (TriggerEvent[T]) -> Unit, condition? : ((TriggerEvent[T]) -> Bool)?, once? : Bool, priority? : Int) -> Int` | 注册可配置触发器，返回 trigger_id |
+| `unregister` | `fn unregister(Self, Int) -> Bool` | 注销触发器（存在返回 true，否则 false） |
+| `fire` | `fn fire(Self, String, T) -> Unit` | 分发事件，时刻取默认虚拟时钟当前时间 |
+| `fire_at` | `fn fire_at(Self, String, T, Int64) -> Unit` | 分发事件（指定时刻） |
+| `fire_with_key` | `fn fire_with_key(Self, String, T, String) -> Unit` | 幂等触发：key 已存在则整体跳过 |
+| `has_trigger` | `fn has_trigger(Self, String) -> Bool` | 是否存在匹配该事件名（含通配）的触发器 |
+| `trigger_count` | `fn trigger_count(Self) -> Int` | 当前注册的触发器数量 |
+| `clear` | `fn clear(Self) -> Unit` | 清空所有触发器与幂等键（事件序号继续递增） |
+
+### 事件名匹配规则
+
+按 `.` 分段比较，不引入正则：
+
+| 模式 | 含义 | 示例 |
+|---|---|---|
+| 精确 | 逐段相等 | `task.done` 匹配 `task.done` |
+| `*` | 单段通配（不跨段边界） | `task.*` 匹配 `task.done`，不匹配 `task.a.b` 或 `task` |
+| `**` | 多段通配（匹配零段或多段，可出现在任意位置） | `a.**.b` 匹配 `a.b` / `a.x.b` / `a.c.d.b`，不匹配 `a.x`；纯 `**` 匹配任意事件名 |
+
+### 分发顺序
+
+命中事件名后按 `priority` 降序执行（同优先级保持注册序）；`condition` 不满足则跳过且不递增 `fired_count`；`once=true` 的触发器触发一次后自动注销。
 
 ---
 

@@ -40,7 +40,7 @@ pub struct TriggerRegistry[T] {
 /// 创建空注册表
 pub fn[T] TriggerRegistry::new() -> TriggerRegistry[T] {
   {
-    triggers: Ref::Ref(Array::new()),
+    triggers: Ref::Ref(Array(capacity=0)),
     seq: Ref::Ref(0),
     event_seq: Ref::Ref(0L),
     dedup_keys: Ref::Ref(@hashset.from_array([])),
@@ -91,7 +91,7 @@ pub fn[T] TriggerRegistry::unregister(
   self : TriggerRegistry[T],
   trigger_id : Int,
 ) -> Bool {
-  let keep = Array::new()
+  let keep = Array(capacity=0)
   let mut removed = false
   for t in self.triggers.val {
     if t.id == trigger_id {
@@ -107,7 +107,7 @@ pub fn[T] TriggerRegistry::unregister(
 ///|
 /// 按 "." 分段转为字符串数组
 fn split_dot(s : String) -> Array[String] {
-  let res = Array::new()
+  let res = Array(capacity=0)
   for sv in s.split(".") {
     res.push(sv.to_owned())
   }
@@ -115,40 +115,56 @@ fn split_dot(s : String) -> Array[String] {
 }
 
 /// 事件名匹配：精确 / "*" 单段通配 / "**" 多段通配（分段比较，不引入正则）
+/// "*" 仅匹配单个段；"**" 可出现在任意位置，匹配零段或多段
 fn event_matches(pattern : String, name : String) -> Bool {
   let pat = split_dot(pattern)
   let parts = split_dot(name)
+  let p_len = pat.length()
+  let n_len = parts.length()
   let mut pi = 0
   let mut ni = 0
-  while pi < pat.length() && ni < parts.length() {
-    let p = pat[pi]
-    if p == "**" {
-      // 多段通配：匹配剩余任意段（含零段），直接成功
-      return true
-    } else if p == "*" {
-      pi = pi + 1
-      ni = ni + 1
-    } else {
-      if p != parts[ni] {
-        return false
+  // star_p / star_n：记录最近的 "**" 模式段位置及对应 name 指针，用于回溯
+  let mut star_p = -1
+  let mut star_n = -1
+  while ni < n_len {
+    if pi < p_len {
+      let p = pat[pi]
+      if p == "**" {
+        star_p = pi
+        star_n = ni
+        pi = pi + 1
+      } else if p == "*" {
+        pi = pi + 1
+        ni = ni + 1
+      } else {
+        if p == parts[ni] {
+          pi = pi + 1
+          ni = ni + 1
+        } else if star_p != -1 {
+          // 当前段不匹配且之前出现过 "**"：让该 "**" 多吞一段后重试
+          star_n = star_n + 1
+          pi = star_p + 1
+          ni = star_n
+        } else {
+          return false
+        }
       }
-      pi = pi + 1
-      ni = ni + 1
+    } else if star_p != -1 {
+      star_n = star_n + 1
+      pi = star_p + 1
+      ni = star_n
+    } else {
+      return false
     }
   }
-  if pi == pat.length() {
-    return ni == parts.length()
-  }
-  // 模式还有剩余：仅当剩余段全为 "**" 时才匹配
-  let mut all_double = true
-  while pi < pat.length() {
+  // name 已耗尽：pattern 剩余段必须全为 "**" 才匹配
+  while pi < p_len {
     if pat[pi] != "**" {
-      all_double = false
-      break
+      return false
     }
     pi = pi + 1
   }
-  all_double
+  true
 }
 
 ///|
@@ -163,7 +179,7 @@ pub fn[T] TriggerRegistry::fire_at(
   self.event_seq.val = self.event_seq.val + 1
   let ev : TriggerEvent[T] = { name, payload, id: self.event_seq.val, at, }
   // 收集命中事件名的触发器（保持注册序）
-  let hit = Array::new()
+  let hit = Array(capacity=0)
   for t in self.triggers.val {
     if event_matches(t.event_name, name) {
       hit.push(t)
@@ -174,7 +190,7 @@ pub fn[T] TriggerRegistry::fire_at(
     b.priority - a.priority
   })
   // 分发执行；once 触发后收集待注销 id
-  let to_remove = Array::new()
+  let to_remove = Array(capacity=0)
   for t in hit {
     if (t.condition)(ev) {
       (t.handler)(ev)
@@ -239,6 +255,6 @@ pub fn[T] TriggerRegistry::trigger_count(self : TriggerRegistry[T]) -> Int {
 ///|
 /// 清空所有触发器与幂等键（事件序号继续递增）
 pub fn[T] TriggerRegistry::clear(self : TriggerRegistry[T]) -> Unit {
-  self.triggers.val = Array::new()
+  self.triggers.val = Array(capacity=0)
   self.dedup_keys.val = @hashset.from_array([])
 }

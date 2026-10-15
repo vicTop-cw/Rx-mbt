@@ -9,7 +9,7 @@ test "stress: 10 万元素 map+filter+reduce 链" {
     data[i] = i
     i = i + 1
   }
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
     .map(fn(v : Int) { v * 2 })
     .filter(fn(v : Int) { v % 4 == 0 })
@@ -28,7 +28,7 @@ test "stress: 5 万元素 take_while + skip_while + count" {
     data[i] = i
     i = i + 1
   }
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
     .skip_while(fn(v : Int) { v < 10_000 })
     .take_while(fn(v : Int) { v < 20_000 })
@@ -45,7 +45,7 @@ test "stress: 20 个操作符长链（map 连续嵌套）" {
     data[i] = i
     i = i + 1
   }
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let mut obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data)
   // 连续 20 个 map：每个元素乘以 2 共 20 次
   let mut k = 0
@@ -100,7 +100,7 @@ test "stress: ReplaySubject 缓冲重放（1 万条重放给迟到订阅者）" 
     subject.on_next(i)
     i = i + 1
   }
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let _ = subject.as_observable().subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val.length(), 10_000)
 }
@@ -108,7 +108,7 @@ test "stress: ReplaySubject 缓冲重放（1 万条重放给迟到订阅者）" 
 ///|
 test "stress: distinct 处理 5 万重复元素" {
   let data = Array::make(50_000, 7)
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data).distinct()
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val.length(), 1)
@@ -122,7 +122,7 @@ test "stress: to_set + count 大量重复" {
     data[i] = i % 100
     i = i + 1
   }
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter(data).to_set().map(
     fn(s : @hashset.HashSet[Int]) { s.length() },
   )
@@ -132,7 +132,7 @@ test "stress: to_set + count 大量重复" {
 
 ///|
 test "stress: 嵌套 flat_map 展开 1 万条" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_iter([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     .flat_map(fn(v : Int) -> @rx.Observable[Int, Unit] {
       let arr = Array::make(1_000, 0)
@@ -160,7 +160,7 @@ test "stress: 递归重试 + catch_error 错误路径不泄漏" {
     }
     @rx.Subscription::empty()
   }).retry(10).catch_error(fn(_e : String) -> @rx.Observable[Int, String] { @rx.Observable::of(-1) })
-  let values : Ref[Array[Int]] = Ref::Ref(Array::new())
+  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
   assert_eq(values.val, [123])
   assert_eq(attempts.val, 5)
