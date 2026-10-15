@@ -77,6 +77,40 @@ test "BehaviorSubject 出错后新订阅者立即收到错误且不重放当前�
 }
 
 ///|
+test "ReplaySubject 完成后新订阅者不重放历史、仅收到完成信号（回归）" {
+  // 与 BehaviorSubject 一致：终止后不得再发 next
+  let subject : @rx.ReplaySubject[Int, Unit] = @rx.ReplaySubject::new()
+  subject.on_next(1)
+  subject.on_next(2)
+  subject.on_completed()
+  let values = Ref::Ref(Array(capacity=0))
+  let completed = Ref::Ref(false)
+  let _ = subject.subscribe(
+    @rx.Observer::new(fn(v : Int) { values.val.push(v) }, fn(_ : Unit) {}, fn() {
+      completed.val = true
+    }),
+  )
+  assert_eq(values.val, [])
+  assert_true(completed.val)
+}
+
+///|
+test "ReplaySubject 出错后新订阅者不重放历史、仅收到错误（回归）" {
+  let subject : @rx.ReplaySubject[Int, String] = @rx.ReplaySubject::new()
+  subject.on_next(1)
+  subject.on_error("boom")
+  let values = Ref::Ref(Array(capacity=0))
+  let errs = Ref::Ref(Array(capacity=0))
+  let _ = subject.subscribe(
+    @rx.Observer::new(fn(v : Int) { values.val.push(v) }, fn(e : String) {
+      errs.val.push(e)
+    }, fn() {}),
+  )
+  assert_eq(values.val, [])
+  assert_eq(errs.val, ["boom"])
+}
+
+///|
 test "CurrentThreadScheduler 同步执行任务" {
   let scheduler = @rx.CurrentThreadScheduler::new()
   let ran = Ref::Ref(false)
@@ -137,8 +171,8 @@ test "ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复
   s.on_next(2) // 已终止：应被忽略，不进入缓冲
   let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
   let _ = s.as_observable().subscribe_on_next(fn(v : Int) { values.val.push(v) })
-  // 终止后重放已完成前缓冲的历史（[1]），on_next(2) 未进入缓冲
-  assert_eq(values.val, [1])
+  // 终止后不得再发 next：迟到订阅者不重放历史，仅收到完成信号
+  assert_eq(values.val, [])
 }
 
 ///|

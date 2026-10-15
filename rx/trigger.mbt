@@ -258,3 +258,11 @@ pub fn[T] TriggerRegistry::clear(self : TriggerRegistry[T]) -> Unit {
   self.triggers.val = Array(capacity=0)
   self.dedup_keys.val = @hashset.from_array([])
 }
+
+///|
+/// 仅清空幂等去重键（不清触发器、不清事件序号）。
+/// 用于长周期运行控制 dedup 表内存占用：与 clear 不同，保留已注册触发器，
+/// 清后同 key 可再次触发。
+pub fn[T] TriggerRegistry::reset_dedup_keys(self : TriggerRegistry[T]) -> Unit {
+  self.dedup_keys.val = @hashset.from_array([])
+}

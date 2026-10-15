@@ -222,12 +222,16 @@ pub fn[T, E] ReplaySubject::with_buffer_size(size : Int) -> ReplaySubject[T, E] 
 }
 
 /// 订阅：先重放全部（或最近 buffer_size 个）历史值
+/// 已终止的主题：不重放历史值，直接转发终止信号（与 BehaviorSubject 一致，
+/// 符合 Rx 规范——终止后不得再发 next）
 pub fn[T, E] ReplaySubject::subscribe(
   self : ReplaySubject[T, E],
   observer : Observer[T, E],
 ) -> Subscription {
-  for v in self.buffer.val {
-    observer.on_next(v)
+  if !self.state.stopped.val {
+    for v in self.buffer.val {
+      observer.on_next(v)
+    }
   }
   self.state.subscribe(observer)
 }

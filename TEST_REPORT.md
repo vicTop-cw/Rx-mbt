@@ -4,11 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-08-03 10:40:21 |
-| moon version | moon 0.1.20260724 (5f1406a 2026-07-24) |
+| Generated at | 2026-10-15 10:49:46 |
+| moon version | moon 0.1.20260920 (914d7da 2026-09-20) |
 | Test target | wasm |
-| Total tests | 377 |
-| Passed | 377 |
+| Total tests | 400 |
+| Passed | 400 |
 | Failed | 0 |
 
 **Result: PASS (all green)**
@@ -17,10 +17,10 @@
 
 | Package | Tests |
 |---|---|
-| vicTop-cw/RX-MBT/rx | 7 |
+| vicTop-cw/RX-MBT/rx | 28 |
 | vicTop-cw/RX-MBT/test-suit/aggregation | 37 |
 | vicTop-cw/RX-MBT/test-suit/composite | 22 |
-| vicTop-cw/RX-MBT/test-suit/core | 17 |
+| vicTop-cw/RX-MBT/test-suit/core | 19 |
 | vicTop-cw/RX-MBT/test-suit/create | 10 |
 | vicTop-cw/RX-MBT/test-suit/filter | 26 |
 | vicTop-cw/RX-MBT/test-suit/haskell | 81 |
@@ -28,7 +28,7 @@
 | vicTop-cw/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop-cw/RX-MBT/test-suit/stress | 10 |
 | vicTop-cw/RX-MBT/test-suit/transform | 10 |
-| **Total** | **377** |
+| **Total** | **400** |
 
 ## Test listing
 
@@ -36,13 +36,34 @@
 
 | # | Test name |
 |---|---|
-| 1 | of 发射单值并完成 |
-| 2 | from_iter 发射全部值 |
-| 3 | range 发射正确序列 |
-| 4 | empty 立即完成 |
-| 5 | error 发射错误不发射值 |
-| 6 | repeat 重复发射 |
-| 7 | 订阅可取消（幂等） |
+| 1 | 精确匹配：仅命中同名事件 |
+| 2 | 单段通配：task.* 命中 task.done / task.fail，不命中多段 task.a.b |
+| 3 | 多段通配：task.** 命中任意 task. 前缀的多段事件 |
+| 4 | priority：高优先先执行，同优先按注册序 |
+| 5 | once：触发一次后自动注销，再次 fire 不再执行 |
+| 6 | condition：条件不满足则不执行 |
+| 7 | fire_with_key：同 key 只触发一次，不同 key 各自触发 |
+| 8 | unregister：注销后不再触发，重复注销返回 false |
+| 9 | clear：清空触发器与幂等键，后续 fire 无效果 |
+| 10 | trigger_count / has_trigger：注册与注销后数量与匹配状态正确 |
+| 11 | fire_at：事件携带指定时刻与自增序号 |
+| 12 | 中间多段通配：a.**.b 匹配 a.x.b，不匹配 a.x（无 b 结尾） |
+| 13 | 多段通配匹配零段：a.**.b 匹配 a.b，也匹配 a.c.d.b |
+| 14 | 纯多段通配 **：匹配任意事件名（含单段与多段） |
+| 15 | 单段通配不跨越段边界：a.* 不匹配 a.b.c，也不匹配 a |
+| 16 | 纯单段通配 *：匹配单段事件，不匹配多段事件 |
+| 17 | 空事件名：纯 ** 命中，精确名不命中 |
+| 18 | 通配混合回溯：*.*.b 命中三段 a.c.b，不命中两段 a.b / 四段 a.c.d.b |
+| 19 | reset_dedup_keys：清幂等键后同 key 可再次触发，触发器保留 |
+| 20 | of 发射单值并完成 |
+| 21 | from_iter 发射全部值 |
+| 22 | range 发射正确序列 |
+| 23 | empty 立即完成 |
+| 24 | error 发射错误不发射值 |
+| 25 | repeat 重复发射 |
+| 26 | 订阅可取消（幂等） |
+| 27 | fired_count：fire 后内部计数器递增 |
+| 28 | fired_count：condition 不满足不递增，once 注销后计数保留 |
 
 ### vicTop-cw/RX-MBT/test-suit/aggregation
 
@@ -123,17 +144,19 @@
 | 4 | ReplaySubject with_buffer_size 只重放最近 N 个 |
 | 5 | PublishSubject 完成后新订阅者立即收到完成信号 |
 | 6 | BehaviorSubject 出错后新订阅者立即收到错误且不重放当前值 |
-| 7 | CurrentThreadScheduler 同步执行任务 |
-| 8 | cum_sum 累积求和逐值发出 |
-| 9 | cum_min 累积最小值逐值发出 |
-| 10 | cum_max 累积最大值逐值发出 |
-| 11 | abs 逐元素取绝对值 |
-| 12 | curry_map 返回可组合函数并应用 |
-| 13 | ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复） |
-| 14 | delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟） |
-| 15 | timeout_on 源完成后挂起 timer 不误触发错误（回归） |
-| 16 | timer_on 延迟触发一次并完成 |
-| 17 | interval_on 按周期发射递增计数 |
+| 7 | ReplaySubject 完成后新订阅者不重放历史、仅收到完成信号（回归） |
+| 8 | ReplaySubject 出错后新订阅者不重放历史、仅收到错误（回归） |
+| 9 | CurrentThreadScheduler 同步执行任务 |
+| 10 | cum_sum 累积求和逐值发出 |
+| 11 | cum_min 累积最小值逐值发出 |
+| 12 | cum_max 累积最大值逐值发出 |
+| 13 | abs 逐元素取绝对值 |
+| 14 | curry_map 返回可组合函数并应用 |
+| 15 | ReplaySubject 终止后 on_next 不再缓冲（回归：内存泄漏修复） |
+| 16 | delay_on 源完成时挂起延迟值不丢失（回归：complete 也延迟） |
+| 17 | timeout_on 源完成后挂起 timer 不误触发错误（回归） |
+| 18 | timer_on 延迟触发一次并完成 |
+| 19 | interval_on 按周期发射递增计数 |
 
 ### vicTop-cw/RX-MBT/test-suit/create
 

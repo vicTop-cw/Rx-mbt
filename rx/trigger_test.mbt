@@ -225,3 +225,59 @@ test "单段通配不跨越段边界：a.* 不匹配 a.b.c，也不匹配 a" {
   reg.fire("a", 3)
   assert_eq(fired.val, ["a.b"])
 }
+
+///|
+test "纯单段通配 *：匹配单段事件，不匹配多段事件" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(Array(capacity=0))
+  let _ = reg.register("*", fn(ev : @rx.TriggerEvent[Int]) {
+    fired.val.push(ev.name)
+  })
+  reg.fire("a", 1)
+  reg.fire("a.b", 2)
+  reg.fire("b.c.d", 3)
+  assert_eq(fired.val, ["a"])
+}
+
+///|
+test "空事件名：纯 ** 命中，精确名不命中" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(0)
+  let _ = reg.register("**", fn(_ : @rx.TriggerEvent[Int]) {
+    fired.val = fired.val + 1
+  })
+  let _ = reg.register("x", fn(_ : @rx.TriggerEvent[Int]) {
+    fired.val = fired.val + 1
+  })
+  reg.fire("", 1)
+  assert_eq(fired.val, 1)
+}
+
+///|
+test "通配混合回溯：*.*.b 命中三段 a.c.b，不命中两段 a.b / 四段 a.c.d.b" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(Array(capacity=0))
+  let _ = reg.register("*.*.b", fn(ev : @rx.TriggerEvent[Int]) {
+    fired.val.push(ev.name)
+  })
+  reg.fire("a.c.b", 1)
+  reg.fire("a.b", 2)
+  reg.fire("a.c.d.b", 4)
+  assert_eq(fired.val, ["a.c.b"])
+}
+
+///|
+test "reset_dedup_keys：清幂等键后同 key 可再次触发，触发器保留" {
+  let reg : @rx.TriggerRegistry[Int] = @rx.TriggerRegistry::new()
+  let fired = Ref::Ref(0)
+  let _ = reg.register("evt", fn(_ : @rx.TriggerEvent[Int]) {
+    fired.val = fired.val + 1
+  })
+  reg.fire_with_key("evt", 1, "k")
+  reg.fire_with_key("evt", 2, "k")
+  assert_eq(fired.val, 1)
+  reg.reset_dedup_keys()
+  reg.fire_with_key("evt", 3, "k")
+  assert_eq(fired.val, 2)
+  assert_eq(reg.trigger_count(), 1)
+}

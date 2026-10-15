@@ -1,24 +1,45 @@
 ﻿{
-    "generated_at":  "2026-08-03 10:40:21",
-    "moon_version":  "moon 0.1.20260724 (5f1406a 2026-07-24)",
+    "generated_at":  "2026-10-15 10:49:46",
+    "moon_version":  "moon 0.1.20260920 (914d7da 2026-09-20)",
     "target":  "wasm",
     "summary":  {
-                    "total":  377,
-                    "passed":  377,
+                    "total":  400,
+                    "passed":  400,
                     "failed":  0
                 },
     "packages":  [
                      {
                          "package":  "vicTop-cw/RX-MBT/rx",
-                         "count":  7,
+                         "count":  28,
                          "tests":  [
+                                       "精确匹配：仅命中同名事件",
+                                       "单段通配：task.* 命中 task.done / task.fail，不命中多段 task.a.b",
+                                       "多段通配：task.** 命中任意 task. 前缀的多段事件",
+                                       "priority：高优先先执行，同优先按注册序",
+                                       "once：触发一次后自动注销，再次 fire 不再执行",
+                                       "condition：条件不满足则不执行",
+                                       "fire_with_key：同 key 只触发一次，不同 key 各自触发",
+                                       "unregister：注销后不再触发，重复注销返回 false",
+                                       "clear：清空触发器与幂等键，后续 fire 无效果",
+                                       "trigger_count / has_trigger：注册与注销后数量与匹配状态正确",
+                                       "fire_at：事件携带指定时刻与自增序号",
+                                       "中间多段通配：a.**.b 匹配 a.x.b，不匹配 a.x（无 b 结尾）",
+                                       "多段通配匹配零段：a.**.b 匹配 a.b，也匹配 a.c.d.b",
+                                       "纯多段通配 **：匹配任意事件名（含单段与多段）",
+                                       "单段通配不跨越段边界：a.* 不匹配 a.b.c，也不匹配 a",
+                                       "纯单段通配 *：匹配单段事件，不匹配多段事件",
+                                       "空事件名：纯 ** 命中，精确名不命中",
+                                       "通配混合回溯：*.*.b 命中三段 a.c.b，不命中两段 a.b / 四段 a.c.d.b",
+                                       "reset_dedup_keys：清幂等键后同 key 可再次触发，触发器保留",
                                        "of 发射单值并完成",
                                        "from_iter 发射全部值",
                                        "range 发射正确序列",
                                        "empty 立即完成",
                                        "error 发射错误不发射值",
                                        "repeat 重复发射",
-                                       "订阅可取消（幂等）"
+                                       "订阅可取消（幂等）",
+                                       "fired_count：fire 后内部计数器递增",
+                                       "fired_count：condition 不满足不递增，once 注销后计数保留"
                                    ]
                      },
                      {
@@ -94,7 +115,7 @@
                      },
                      {
                          "package":  "vicTop-cw/RX-MBT/test-suit/core",
-                         "count":  17,
+                         "count":  19,
                          "tests":  [
                                        "run 立即消费并原样返回",
                                        "debug 透传所有值",
@@ -102,6 +123,8 @@
                                        "ReplaySubject with_buffer_size 只重放最近 N 个",
                                        "PublishSubject 完成后新订阅者立即收到完成信号",
                                        "BehaviorSubject 出错后新订阅者立即收到错误且不重放当前值",
+                                       "ReplaySubject 完成后新订阅者不重放历史、仅收到完成信号（回归）",
+                                       "ReplaySubject 出错后新订阅者不重放历史、仅收到错误（回归）",
                                        "CurrentThreadScheduler 同步执行任务",
                                        "cum_sum 累积求和逐值发出",
                                        "cum_min 累积最小值逐值发出",
