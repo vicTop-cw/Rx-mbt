@@ -21,7 +21,16 @@ pub fn[T : RhopCipher] from_filesystem(
   shared_path : String,
   cipher : T,
 ) -> @rx.Observable[RhopPacket, String] {
-  let _ = (shared_path, cipher)
+  from_filesystem_with(shared_path, cipher, false)
+}
+
+/// from_filesystem 带参版本；native 目标暂不可用。
+pub fn[T : RhopCipher] from_filesystem_with(
+  shared_path : String,
+  cipher : T,
+  skip_existing : Bool,
+) -> @rx.Observable[RhopPacket, String] {
+  let _ = (shared_path, cipher, skip_existing)
   @rx.Observable::new(
     fn(observer : @rx.Observer[RhopPacket, String]) -> @rx.Subscription {
       observer.on_error(

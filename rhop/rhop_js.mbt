@@ -55,13 +55,31 @@ pub fn[T : RhopCipher] rhop_send(
 
 /// 监控 shared path：捕获新增/变更的 .rhop 文件，解码为 RhopPacket 流。
 /// 失败策略：坏文件（解析/解密失败）跳过不中断，仅文档化；监控启动失败走 error。
+/// skip_existing=true 时，订阅建立瞬间把 shared path 已有的 .rhop 文件全部视为
+/// 已消费（政委场景只关心新消息，避免重放历史）。
 pub fn[T : RhopCipher] from_filesystem(
   shared_path : String,
   cipher : T,
 ) -> @rx.Observable[RhopPacket, String] {
+  from_filesystem_with(shared_path, cipher, false)
+}
+
+/// from_filesystem 的带参版本，见 from_filesystem 说明。
+/// skip_existing=true 时跳过 shared path 已有 .rhop 文件（政委场景只关心新消息）。
+pub fn[T : RhopCipher] from_filesystem_with(
+  shared_path : String,
+  cipher : T,
+  skip_existing : Bool,
+) -> @rx.Observable[RhopPacket, String] {
   let seen : @ref.Ref[@hashset.HashSet[String]] = @ref.Ref::new(@hashset.HashSet::new())
   @rx.Observable::new(
     fn(observer : @rx.Observer[RhopPacket, String]) -> @rx.Subscription {
+      if skip_existing {
+        let text = ffi_list_files(shared_path)
+        if text != "" {
+          seed_seen_from_listing(text, seen)
+        }
+      }
       let sub = @monitor.watch_folder(shared_path).subscribe(
         @rx.Observer::new(
           fn(ev : @monitor.WatchEvent) {
@@ -116,10 +134,10 @@ pub fn[T : RhopCipher] from_filesystem(
 }
 
 fn join_path(root : String, fname : String) -> String {
-  if root.has_suffix("/") || root.has_suffix("\\") {
+  if root.ends_with("/") || root.ends_with("\\") {
     root + fname
   } else {
-    root + "\\" + fname
+    root + "/" + fname
   }
 }
 
@@ -131,6 +149,26 @@ fn join_path(root : String, fname : String) -> String {
 /// 读取 utf8 文本文件；失败返回 "" 并写错误槽
 extern "js" fn ffi_read_file(path : String) -> String =
   #| (path) => { const G = globalThis; try { return process.getBuiltinModule("node:fs").readFileSync(path, "utf8"); } catch (e) { if (G.__rxmbt_io_err === undefined) { G.__rxmbt_io_err = ""; } G.__rxmbt_io_err = String(e && e.message || e); return ""; } }
+
+/// 列出目录下全部 .rhop 文件绝对路径（JSON 数组字符串）；失败返回 ""
+extern "js" fn ffi_list_files(dir : String) -> String =
+  #| (dir) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const pathMod = process.getBuiltinModule("node:path"); const names = fs.readdirSync(dir); const out = []; for (const n of names) { if (n.endsWith(".rhop") && !n.endsWith(".rhop.tmp")) { const abs = pathMod.resolve(dir, n); out.push(JSON.stringify(abs)); } } return "[" + out.join(",") + "]"; } catch (e) { if (G.__rxmbt_io_err === undefined) { G.__rxmbt_io_err = ""; } G.__rxmbt_io_err = String(e && e.message || e); return ""; } }
+
+/// 把 ffi_list_files 返回的 JSON 数组预填进 seen 集合（失败静默跳过）
+fn seed_seen_from_listing(text : String, seen : @ref.Ref[@hashset.HashSet[String]]) -> Unit {
+  let j = try {
+    @json.parse(text)
+  } catch {
+    _ => return
+  }
+  if j is Array(arr) {
+    for f in arr {
+      if f is String(s) {
+        seen.val.add(s)
+      }
+    }
+  }
+}
 
 /// 原子写：先写 tmp 再 rename
 extern "js" fn ffi_write_atomic(path : String, content : String) -> Unit =
