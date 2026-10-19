@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonbitlang/setup-moonbit@v1
+      - name: moon check (default target)
+        run: moon check
+      - name: moon check --target wasm
+        run: moon check --target wasm
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonbitlang/setup-moonbit@v1
+      - name: moon test (default target, wasm backend)
+        run: moon test
+      - name: moon test --target wasm
+        run: moon test --target wasm
+
+  release-build:
+    runs-on: ubuntu-latest
+    needs: [check, unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonbitlang/setup-moonbit@v1
+      - name: moon build --target wasm --release
+        run: moon build --target wasm --release
