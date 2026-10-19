@@ -1,0 +1,16 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rhop,
+  "vicTop-cw/RX-MBT/rx" @rx,
+  "moonbitlang/core/json" @json,
+  "moonbitlang/core/ref" @ref,
+}
+
+pkgtype(kind: "executable")
+
+options(
+  targets: {
+    "main.mbt": ["js"],
+    "main_native.mbt": ["native"],
+    "main_wasm.mbt": ["wasm"],
+  },
+)

@@ -68,9 +68,9 @@ moon test       # 运行全部测试
 | MoonBit 工具链 | `moon 0.1.20260724 (5f1406a 2026-07-24)`（`moon version` 输出） |
 | 操作系统 | Windows 11（PowerShell 7 / Windows PowerShell 5.1 均可运行脚本） |
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
-| 测试后端 | `moon test` 默认 wasm 后端 |
+| 测试后端 | `moon test` 默认 wasm 后端；监控 / rhop 相关测试在 `js` 与 `native` 目标 |
 | 库版本 | `vicTop-cw/RX-MBT@0.2.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | 400（基本 + 高压 + Haskell API 回归 + 触发机制，全部通过，见 `TEST_REPORT.md`） |
+| 测试数量 | js 411 / native 407（基本 + 高压 + Haskell API 回归 + 触发机制 + rhop，全部通过，见 `TEST_REPORT.md`） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。

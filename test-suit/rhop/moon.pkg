@@ -1,0 +1,10 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/json" @json,
+}
+
+options(
+  targets: {
+    "rhop_js_test.mbt": ["js"],
+  },
+)

@@ -11,7 +11,7 @@
 /// 文件系统监控事件类别（归一化）
 /// 注意：node fs.watch 的 `rename` 事件语义模糊（创建/删除/重命名进入或离开
 /// 均可能报 rename），js 后端通过事件后的 exists 探测区分 Created / Removed。
-pub enum WatchKind {
+pub(all) enum WatchKind {
   /// 文件或目录被创建（或重命名进入监控范围）
   Created
   /// 内容被修改
@@ -35,7 +35,7 @@ pub struct WatchEvent {
 } derive(Eq, Debug)
 
 /// 监控错误
-pub enum WatchError {
+pub(all) enum WatchError {
   /// 路径不存在或无法访问（附后端错误信息）
   NotFound(String)
   /// 当前目标/后端不支持该能力
