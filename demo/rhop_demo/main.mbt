@@ -5,30 +5,34 @@
 ///   node rhop_demo.js watch-skip <shared_path>     （进程 B：跳过 shared path 已有历史，只收新消息）
 ///
 /// 先起 watch 进程，再起 send 进程，验证 shared path 事件驱动传输。
-
-extern "js" fn ffi_argv_at(i : Int) -> String =
+extern "js" fn ffi_argv_at(i : Int32) -> String =
   #| (i) => {
   #|   const a = (typeof process !== "undefined" && process.argv) ? process.argv.slice(2) : [];
   #|   return (i < a.length) ? a[i] : "";
   #| }
 
-extern "js" fn ffi_exit(code : Int) -> Unit =
+///|
+extern "js" fn ffi_exit(code : Int32) -> Unit =
   #| (code) => { process.exit(code); }
 
-const DEMO_COUNT : Int = 5
+///|
+const DEMO_COUNT : Int32 = 5
+
+///|
 const DEMO_PASSWORD : String = "demo-password"
 
+///|
 fn main {
   let mode = ffi_argv_at(0)
   let shared = ffi_argv_at(1)
   if shared == "" {
-    println("用法: node rhop_demo.js <send|watch|watch-skip> <shared_path> [count]")
+    println(
+      "用法: node rhop_demo.js <send|watch|watch-skip> <shared_path> [count]",
+    )
     ffi_exit(1)
   }
   if mode == "send" {
-    try {
-      run_send(shared)
-    } catch {
+    run_send(shared) catch {
       _ => println("send 失败")
     }
   } else if mode == "watch" {
@@ -41,13 +45,14 @@ fn main {
   }
 }
 
+///|
 fn run_send(shared : String) -> Unit raise @json.ParseError {
   let cipher = @rhop.Aes256GcmCipher::new(DEMO_PASSWORD)
   // 可选第三参数指定条数（默认 DEMO_COUNT）
   let mut count = DEMO_COUNT
   let count_arg = ffi_argv_at(2)
   if count_arg != "" {
-    let n = try { @string.parse_int(count_arg) } catch { _ => -1 }
+    let n = @string.parse_int(count_arg) catch { _ => -1 }
     if n >= 0 {
       count = n
     }
@@ -71,17 +76,18 @@ fn run_send(shared : String) -> Unit raise @json.ParseError {
   println("send 完成，共 \{count} 条")
 }
 
+///|
 fn run_watch(shared : String, skip_existing : Bool) -> Unit {
   let cipher = @rhop.Aes256GcmCipher::new(DEMO_PASSWORD)
   let mut expect = DEMO_COUNT
   let count_arg = ffi_argv_at(2)
   if count_arg != "" {
-    let n = try { @string.parse_int(count_arg) } catch { _ => -1 }
+    let n = @string.parse_int(count_arg) catch { _ => -1 }
     if n >= 0 {
       expect = n
     }
   }
-  let got : @ref.Ref[Int] = @ref.Ref::new(0)
+  let got : @ref.Ref[Int32] = @ref.Ref::new(0)
   let source = if skip_existing {
     @rhop.from_filesystem_with(shared, cipher, true)
   } else {
@@ -101,9 +107,7 @@ fn run_watch(shared : String, skip_existing : Bool) -> Unit {
         println("watch error: \{err}")
         ffi_exit(2)
       },
-      fn() {
-        println("watch completed")
-      },
+      fn() { println("watch completed") },
     ),
   )
   // 保持事件循环运行直到收满退出

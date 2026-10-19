@@ -6,11 +6,7 @@
 test "rhop: RhopPacket to_json_string/from_json_text 往返" {
   let payload = @json.parse("{\"k\":\"v\",\"n\":1,\"nested\":{\"a\":true}}")
   let pkt = @rp.RhopPacket::new(
-    "id-001",
-    "proc-a",
-    "command",
-    payload,
-    1700000000123L,
+    "id-001", "proc-a", "command", payload, 1700000000123L,
   )
   let text = pkt.to_json_string()
   match @rp.RhopPacket::from_json_text(text) {
@@ -30,11 +26,7 @@ test "rhop: RhopPacket to_json_string/from_json_text 往返" {
 test "rhop: RhopPacket 带中文与转义字符往返" {
   let payload = @json.parse("{\"msg\":\"你好 rhop\"}")
   let pkt = @rp.RhopPacket::new(
-    "id-\"quoted\"",
-    "节点-A",
-    "state",
-    payload,
-    1L,
+    "id-\"quoted\"", "节点-A", "state", payload, 1L,
   )
   match @rp.RhopPacket::from_json_text(pkt.to_json_string()) {
     Err(e) => fail("解析失败: \{e}")

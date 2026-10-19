@@ -7,9 +7,12 @@
 // 直接替换本文件实现即可，公共 API 签名不变。
 // ============================================================================
 
+///|
 /// 监控单个文件。native 目标当前不可用，返回 Unsupported 错误流。
 pub fn watch_file(path : String) -> @rx.Observable[WatchEvent, WatchError] {
-  @rx.Observable::new(fn(observer : @rx.Observer[WatchEvent, WatchError]) -> @rx.Subscription {
+  @rx.Observable::new(fn(
+    observer : @rx.Observer[WatchEvent, WatchError],
+  ) -> @rx.Subscription {
     observer.on_error(
       WatchError::Unsupported(
         "native target 暂不支持文件监控：MoonBit core 无文件系统 API，js 目标为完整实现（node fs.watch）",
@@ -19,9 +22,12 @@ pub fn watch_file(path : String) -> @rx.Observable[WatchEvent, WatchError] {
   })
 }
 
+///|
 /// 监控整个文件夹。native 目标当前不可用，返回 Unsupported 错误流。
 pub fn watch_folder(path : String) -> @rx.Observable[WatchEvent, WatchError] {
-  @rx.Observable::new(fn(observer : @rx.Observer[WatchEvent, WatchError]) -> @rx.Subscription {
+  @rx.Observable::new(fn(
+    observer : @rx.Observer[WatchEvent, WatchError],
+  ) -> @rx.Subscription {
     observer.on_error(
       WatchError::Unsupported(
         "native target 暂不支持文件监控：MoonBit core 无文件系统 API，js 目标为完整实现（node fs.watch）",

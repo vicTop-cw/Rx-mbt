@@ -18,20 +18,20 @@ pub struct TriggerEvent[T] {
 ///|
 /// 触发器：事件名（支持通配）+ 条件 + 时机 + 处理器
 pub struct Trigger[T] {
-  id : Int
+  id : Int32
   event_name : String
   condition : (TriggerEvent[T]) -> Bool
   once : Bool
-  priority : Int
+  priority : Int32
   handler : (TriggerEvent[T]) -> Unit
-  fired_count : Ref[Int]
+  fired_count : Ref[Int32]
 }
 
 ///|
 /// 触发器注册表：集中管理 + 事件分发 + 幂等去重
 pub struct TriggerRegistry[T] {
   triggers : Ref[Array[Trigger[T]]]
-  seq : Ref[Int]
+  seq : Ref[Int32]
   event_seq : Ref[Int64]
   dedup_keys : Ref[@hashset.HashSet[String]]
 }
@@ -53,7 +53,7 @@ pub fn[T] TriggerRegistry::register(
   self : TriggerRegistry[T],
   event_name : String,
   handler : (TriggerEvent[T]) -> Unit,
-) -> Int {
+) -> Int32 {
   self.register_with(event_name, handler)
 }
 
@@ -63,10 +63,10 @@ pub fn[T] TriggerRegistry::register_with(
   self : TriggerRegistry[T],
   event_name : String,
   handler : (TriggerEvent[T]) -> Unit,
-  condition? : ((TriggerEvent[T]) -> Bool)? = None,
-  once? : Bool = false,
-  priority? : Int = 0,
-) -> Int {
+  condition~ : ((TriggerEvent[T]) -> Bool)? = None,
+  once~ : Bool = false,
+  priority~ : Int32 = 0,
+) -> Int32 {
   let id = self.seq.val
   self.seq.val = self.seq.val + 1
   let cond = match condition {
@@ -89,7 +89,7 @@ pub fn[T] TriggerRegistry::register_with(
 /// 注销触发器：存在并移除返回 true，不存在返回 false
 pub fn[T] TriggerRegistry::unregister(
   self : TriggerRegistry[T],
-  trigger_id : Int,
+  trigger_id : Int32,
 ) -> Bool {
   let keep = Array(capacity=0)
   let mut removed = false
@@ -114,6 +114,7 @@ fn split_dot(s : String) -> Array[String] {
   res
 }
 
+///|
 /// 事件名匹配：精确 / "*" 单段通配 / "**" 多段通配（分段比较，不引入正则）
 /// "*" 仅匹配单个段；"**" 可出现在任意位置，匹配零段或多段
 fn event_matches(pattern : String, name : String) -> Bool {
@@ -136,18 +137,16 @@ fn event_matches(pattern : String, name : String) -> Bool {
       } else if p == "*" {
         pi = pi + 1
         ni = ni + 1
+      } else if p == parts[ni] {
+        pi = pi + 1
+        ni = ni + 1
+      } else if star_p != -1 {
+        // 当前段不匹配且之前出现过 "**"：让该 "**" 多吞一段后重试
+        star_n = star_n + 1
+        pi = star_p + 1
+        ni = star_n
       } else {
-        if p == parts[ni] {
-          pi = pi + 1
-          ni = ni + 1
-        } else if star_p != -1 {
-          // 当前段不匹配且之前出现过 "**"：让该 "**" 多吞一段后重试
-          star_n = star_n + 1
-          pi = star_p + 1
-          ni = star_n
-        } else {
-          return false
-        }
+        return false
       }
     } else if star_p != -1 {
       star_n = star_n + 1
@@ -248,7 +247,7 @@ pub fn[T] TriggerRegistry::has_trigger(
 
 ///|
 /// 当前注册的触发器数量
-pub fn[T] TriggerRegistry::trigger_count(self : TriggerRegistry[T]) -> Int {
+pub fn[T] TriggerRegistry::trigger_count(self : TriggerRegistry[T]) -> Int32 {
   self.triggers.val.length()
 }
 

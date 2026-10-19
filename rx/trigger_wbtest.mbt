@@ -5,8 +5,10 @@
 
 ///|
 test "fired_count：fire 后内部计数器递增" {
-  let reg : TriggerRegistry[Int] = TriggerRegistry::new()
-  let id = reg.register("cnt", fn(ev : TriggerEvent[Int]) { ignore(ev.payload) })
+  let reg : TriggerRegistry[Int32] = TriggerRegistry::new()
+  let id = reg.register("cnt", fn(ev : TriggerEvent[Int32]) {
+    ignore(ev.payload)
+  })
   reg.fire("cnt", 1)
   reg.fire("cnt", 2)
   let mut fc = 0
@@ -20,11 +22,11 @@ test "fired_count：fire 后内部计数器递增" {
 
 ///|
 test "fired_count：condition 不满足不递增，once 注销后计数保留" {
-  let reg : TriggerRegistry[Int] = TriggerRegistry::new()
+  let reg : TriggerRegistry[Int32] = TriggerRegistry::new()
   let id = reg.register_with(
     "cnt",
-    fn(ev : TriggerEvent[Int]) { ignore(ev.payload) },
-    condition=Some(fn(ev : TriggerEvent[Int]) { ev.payload > 0 }),
+    fn(ev : TriggerEvent[Int32]) { ignore(ev.payload) },
+    condition=Some(fn(ev : TriggerEvent[Int32]) { ev.payload > 0 }),
   )
   reg.fire("cnt", -1)
   let mut fc = 0

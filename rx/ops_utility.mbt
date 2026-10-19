@@ -5,25 +5,33 @@
 // take_until_data
 // ============================================================================
 
+///|
 /// tap：对每个值执行副作用后原样透传
 pub fn[T, E] Observable::tap(
   self : Observable[T, E],
   f : (T) -> Unit,
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
     source_fn({
-      next: fn(v : T) { f(v); next(v) },
-      error: error,
-      complete: complete, interrupt: Ref::Ref(None),
+      next: fn(v : T) {
+        f(v)
+        next(v)
+      },
+      error,
+      complete,
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// tap_on_next：tap 的别名（只在 on_next 时触发副作用）
 pub fn[T, E] Observable::tap_on_next(
   self : Observable[T, E],
@@ -32,66 +40,90 @@ pub fn[T, E] Observable::tap_on_next(
   self.tap(f)
 }
 
+///|
 /// timestamp：给每个值打上虚拟时钟时间戳，发射 (value, ms)
-pub fn[T, E] Observable::timestamp(self : Observable[T, E]) -> Observable[(T, Int64), E] {
+pub fn[T, E] Observable::timestamp(
+  self : Observable[T, E],
+) -> Observable[(T, Int64), E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[(T, Int64), E]) -> Subscription = fn(downstream : Observer[(T, Int64), E]) {
+  let subscribe_fn : (Observer[(T, Int64), E]) -> Subscription = fn(
+    downstream : Observer[(T, Int64), E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
     source_fn({
       next: fn(v : T) { next((v, default_clock.now())) },
-      error: error,
-      complete: complete, interrupt: Ref::Ref(None),
+      error,
+      complete,
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// default_if_empty：流为空时发射默认值
 pub fn[T, E] Observable::default_if_empty(
   self : Observable[T, E],
   default_value : T,
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
     let empty = Ref::Ref(true)
     source_fn({
-      next: fn(v : T) { empty.val = false; next(v) },
-      error: error,
+      next: fn(v : T) {
+        empty.val = false
+        next(v)
+      },
+      error,
       complete: fn() {
         if empty.val {
           next(default_value)
         }
         complete()
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// ignore_elements：忽略所有值，只透传错误与完成
-pub fn[T, E] Observable::ignore_elements(self : Observable[T, E]) -> Observable[T, E] {
+pub fn[T, E] Observable::ignore_elements(
+  self : Observable[T, E],
+) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let error = downstream.error
     let complete = downstream.complete
     source_fn({
-      next: fn(_ : T) {},
-      error: error,
-      complete: complete, interrupt: Ref::Ref(None),
+      next: fn(_ : T) {  },
+      error,
+      complete,
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// pairwise：相邻两个值配对发射 (prev, curr)
-pub fn[T, E] Observable::pairwise(self : Observable[T, E]) -> Observable[(T, T), E] {
+pub fn[T, E] Observable::pairwise(
+  self : Observable[T, E],
+) -> Observable[(T, T), E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[(T, T), E]) -> Subscription = fn(downstream : Observer[(T, T), E]) {
+  let subscribe_fn : (Observer[(T, T), E]) -> Subscription = fn(
+    downstream : Observer[(T, T), E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -105,56 +137,63 @@ pub fn[T, E] Observable::pairwise(self : Observable[T, E]) -> Observable[(T, T),
         }
         prev.val = Some(v)
       },
-      error: error,
-      complete: complete, interrupt: Ref::Ref(None),
+      error,
+      complete,
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// pairwise_with_buffer：按 buffer_size 分块，相邻两个块配对发射
 pub fn[T, E] Observable::pairwise_with_buffer(
   self : Observable[T, E],
-  buffer_size : Int,
+  buffer_size : Int32,
 ) -> Observable[(Array[T], Array[T]), E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[(Array[T], Array[T]), E]) -> Subscription =
-    fn(downstream : Observer[(Array[T], Array[T]), E]) {
-      let next = downstream.next
-      let error = downstream.error
-      let complete = downstream.complete
-      let init_buf : (Array[T])? = None
-      let prev = Ref::Ref(init_buf)
-      let buf = Ref::Ref(Array(capacity=0))
-      source_fn({
-        next: fn(v : T) {
-          buf.val.push(v)
-          if buf.val.length() >= buffer_size {
-            let chunk = buf.val
-            buf.val = Array(capacity=0)
-            match prev.val {
-              Some(p) => {
-                prev.val = Some(chunk)
-                next((p, chunk))
-              }
-              None => prev.val = Some(chunk)
+  let subscribe_fn : (Observer[(Array[T], Array[T]), E]) -> Subscription = fn(
+    downstream : Observer[(Array[T], Array[T]), E],
+  ) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init_buf : Array[T]? = None
+    let prev = Ref::Ref(init_buf)
+    let buf = Ref::Ref(Array(capacity=0))
+    source_fn({
+      next: fn(v : T) {
+        buf.val.push(v)
+        if buf.val.length() >= buffer_size {
+          let chunk = buf.val
+          buf.val = Array(capacity=0)
+          match prev.val {
+            Some(p) => {
+              prev.val = Some(chunk)
+              next((p, chunk))
             }
+            None => prev.val = Some(chunk)
           }
-        },
-        error: error,
-        complete: complete, interrupt: Ref::Ref(None),
-      })
-    }
+        }
+      },
+      error,
+      complete,
+      interrupt: Ref::Ref(None),
+    })
+  }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// buffer_count：每 buffer_size 个值发射一个批次数组
 pub fn[T, E] Observable::buffer_count(
   self : Observable[T, E],
-  buffer_size : Int,
+  buffer_size : Int32,
 ) -> Observable[Array[T], E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(
+    downstream : Observer[Array[T], E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -168,18 +207,20 @@ pub fn[T, E] Observable::buffer_count(
           next(chunk)
         }
       },
-      error: error,
+      error,
       complete: fn() {
         if !buf.val.is_empty() {
           next(buf.val)
         }
         complete()
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// buffer_time：按时间窗口收集值，窗口到点发射一个批次（虚拟时钟驱动）
 pub fn[T, E] Observable::buffer_time(
   self : Observable[T, E],
@@ -188,6 +229,7 @@ pub fn[T, E] Observable::buffer_time(
   self.buffer_time_on(default_clock, ms)
 }
 
+///|
 /// buffer_time_on：指定虚拟时钟的按时间窗口缓冲
 pub fn[T, E] Observable::buffer_time_on(
   self : Observable[T, E],
@@ -195,14 +237,16 @@ pub fn[T, E] Observable::buffer_time_on(
   ms : Int64,
 ) -> Observable[Array[T], E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(downstream : Observer[Array[T], E]) {
+  let subscribe_fn : (Observer[Array[T], E]) -> Subscription = fn(
+    downstream : Observer[Array[T], E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
     let buf = Ref::Ref(Array(capacity=0))
     let stopped = Ref::Ref(false)
     let timer_handle = Ref::Ref(Subscription::empty())
-    let timer_ref = Ref::Ref(fn() {})
+    let timer_ref = Ref::Ref(fn() {  })
     let tick : () -> Unit = fn() {
       if !stopped.val {
         let chunk = buf.val
@@ -217,24 +261,26 @@ pub fn[T, E] Observable::buffer_time_on(
     timer_handle.val = clock.set_timer(ms, tick)
     let source_sub = source_fn({
       next: fn(v : T) { buf.val.push(v) },
-      error: error,
+      error,
       complete: fn() {
         stopped.val = true
         if !buf.val.is_empty() {
           next(buf.val)
         }
         complete()
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
       source_sub.dispose()
-      (timer_handle.val).dispose()
+      timer_handle.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// window：按时间窗口把流切成子 Observable（虚拟时钟驱动）
 pub fn[T, E] Observable::window(
   self : Observable[T, E],
@@ -243,6 +289,7 @@ pub fn[T, E] Observable::window(
   self.window_on(default_clock, ms)
 }
 
+///|
 /// window_on：指定虚拟时钟的窗口切分
 pub fn[T, E] Observable::window_on(
   self : Observable[T, E],
@@ -250,55 +297,62 @@ pub fn[T, E] Observable::window_on(
   ms : Int64,
 ) -> Observable[Observable[T, E], E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[Observable[T, E], E]) -> Subscription =
-    fn(downstream : Observer[Observable[T, E], E]) {
-      let next = downstream.next
-      let error = downstream.error
-      let complete = downstream.complete
-      let buf = Ref::Ref(Array(capacity=0))
-      let stopped = Ref::Ref(false)
-      let timer_handle = Ref::Ref(Subscription::empty())
-      let timer_ref = Ref::Ref(fn() {})
-      let tick : () -> Unit = fn() {
-        if !stopped.val {
-          let chunk = buf.val
-          buf.val = Array(capacity=0)
-          if !chunk.is_empty() {
-            next(Observable::from_iter(chunk))
-          }
-          timer_handle.val = clock.set_timer(ms, timer_ref.val)
-        }
-      }
-      timer_ref.val = tick
-      timer_handle.val = clock.set_timer(ms, tick)
-      let source_sub = source_fn({
-        next: fn(v : T) { buf.val.push(v) },
-        error: error,
-        complete: fn() {
-          stopped.val = true
-          if !buf.val.is_empty() {
-            next(Observable::from_iter(buf.val))
-          }
-          complete()
-        }, interrupt: Ref::Ref(None),
-      })
-      Subscription::new(fn() {
-        stopped.val = true
-        source_sub.dispose()
-        (timer_handle.val).dispose()
-      })
-    }
-  Observable::new(subscribe_fn)
-}
-
-/// switch：切换到最新的内部 Observable（前一个内部订阅被取消）
-pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E] {
-  let source_fn = source.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[Observable[T, E], E]) -> Subscription = fn(
+    downstream : Observer[Observable[T, E], E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
-    let init_sub : (Subscription)? = None
+    let buf = Ref::Ref(Array(capacity=0))
+    let stopped = Ref::Ref(false)
+    let timer_handle = Ref::Ref(Subscription::empty())
+    let timer_ref = Ref::Ref(fn() {  })
+    let tick : () -> Unit = fn() {
+      if !stopped.val {
+        let chunk = buf.val
+        buf.val = Array(capacity=0)
+        if !chunk.is_empty() {
+          next(Observable::from_iter(chunk))
+        }
+        timer_handle.val = clock.set_timer(ms, timer_ref.val)
+      }
+    }
+    timer_ref.val = tick
+    timer_handle.val = clock.set_timer(ms, tick)
+    let source_sub = source_fn({
+      next: fn(v : T) { buf.val.push(v) },
+      error,
+      complete: fn() {
+        stopped.val = true
+        if !buf.val.is_empty() {
+          next(Observable::from_iter(buf.val))
+        }
+        complete()
+      },
+      interrupt: Ref::Ref(None),
+    })
+    Subscription::new(fn() {
+      stopped.val = true
+      source_sub.dispose()
+      timer_handle.val.dispose()
+    })
+  }
+  Observable::new(subscribe_fn)
+}
+
+///|
+/// switch：切换到最新的内部 Observable（前一个内部订阅被取消）
+pub fn[T, E] switch(
+  source : Observable[Observable[T, E], E],
+) -> Observable[T, E] {
+  let source_fn = source.subscribe_fn
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
+    let next = downstream.next
+    let error = downstream.error
+    let complete = downstream.complete
+    let init_sub : Subscription? = None
     let current = Ref::Ref(init_sub)
     let stopped = Ref::Ref(false)
     let dispose_current : () -> Unit = fn() {
@@ -313,9 +367,10 @@ pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E
         if !stopped.val {
           dispose_current()
           let sub = inner.subscribe({
-            next: next,
-            error: error,
-            complete: fn() {}, interrupt: Ref::Ref(None),
+            next,
+            error,
+            complete: fn() {  },
+            interrupt: Ref::Ref(None),
           })
           current.val = Some(sub)
         }
@@ -333,7 +388,8 @@ pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E
           dispose_current()
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
@@ -344,10 +400,13 @@ pub fn[T, E] switch(source : Observable[Observable[T, E], E]) -> Observable[T, E
   Observable::new(subscribe_fn)
 }
 
+///|
 /// sample_first：只取第一个值后完成
 pub fn[T, E] sample_first(source : Observable[T, E]) -> Observable[T, E] {
   let source_fn = source.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -361,7 +420,7 @@ pub fn[T, E] sample_first(source : Observable[T, E]) -> Observable[T, E] {
           stopped.val = true
           next(v)
           // 取到首值立即取消上游，避免热流继续泄漏
-          (source_sub.val).dispose()
+          source_sub.val.dispose()
           complete()
         }
       },
@@ -376,23 +435,27 @@ pub fn[T, E] sample_first(source : Observable[T, E]) -> Observable[T, E] {
           stopped.val = true
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
-      (source_sub.val).dispose()
+      source_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// skip_until_data：跳过，直到第一个满足谓词的值出现后放行
 pub fn[T, E] Observable::skip_until_data(
   self : Observable[T, E],
   predicate : (T) -> Bool,
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -408,20 +471,24 @@ pub fn[T, E] Observable::skip_until_data(
         }
         next(v)
       },
-      error: error,
-      complete: complete, interrupt: Ref::Ref(None),
+      error,
+      complete,
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// take_until_data：一直取值，遇到第一个满足谓词的值后停止并完成
 pub fn[T, E] Observable::take_until_data(
   self : Observable[T, E],
   predicate : (T) -> Bool,
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -434,7 +501,7 @@ pub fn[T, E] Observable::take_until_data(
           if predicate(v) {
             stopped.val = true
             // 谓词满足即停止：取消上游，避免热流继续泄漏
-            (source_sub.val).dispose()
+            source_sub.val.dispose()
             complete()
           }
         }
@@ -450,23 +517,26 @@ pub fn[T, E] Observable::take_until_data(
           stopped.val = true
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
-      (source_sub.val).dispose()
+      source_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// run：立即订阅并消费全部值（触发副作用），再返回原样 Observable
 /// 等价于 `source.subscribe(noop); source`，常用于触发 do_on_next 等副作用
 pub fn[T, E] Observable::run(self : Observable[T, E]) -> Observable[T, E] {
-  let _ = self.subscribe_on_next(fn(_ : T) {})
+  let _ = self.subscribe_on_next(fn(_ : T) {  })
   self
 }
 
+///|
 /// debug：调试模式，打印订阅 / 接收 / 完成事件后原样透传
 /// name 为前缀名，默认 "[Observable]"
 pub fn[T, E] Observable::debug(
@@ -478,7 +548,9 @@ pub fn[T, E] Observable::debug(
     None => "[Observable]"
   }
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     println("\{prefix} subscribed")
     let next = downstream.next
     let error = downstream.error
@@ -495,7 +567,8 @@ pub fn[T, E] Observable::debug(
       complete: fn() {
         println("\{prefix} on_completed")
         complete()
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)

@@ -53,7 +53,7 @@ test "Node: from_iter 基本链" {
 
 ///|
 test "Node: from_iter 空迭代器返回 None" {
-  let empty : Array[Int] = []
+  let empty : Array[Int32] = []
   if @rx.Node::from_iter(empty.iter()) is Some(_) {
     assert_true(false)
   }
@@ -63,7 +63,7 @@ test "Node: from_iter 空迭代器返回 None" {
 test "Node: to_iter 按序产出" {
   match @rx.Node::from_iter([1, 2, 3].iter()) {
     Some(head) => {
-      let vals : Array[Int] = []
+      let vals : Array[Int32] = []
       for v in head.to_iter() {
         vals.push(v)
       }
@@ -76,7 +76,7 @@ test "Node: to_iter 按序产出" {
 ///|
 test "Node: to_iter 单节点" {
   let node = @rx.Node::new(42)
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   for v in node.to_iter() {
     vals.push(v)
   }
@@ -87,7 +87,7 @@ test "Node: to_iter 单节点" {
 test "Node: 无限惰性链表可安全取前 N 个" {
   // 模拟无限迭代器：迭代器每次被调用产生自增值
   let counter = Ref::Ref(0)
-  let infinite : Iter[Int] = Iter::new(fn() {
+  let infinite : Iter[Int32] = Iter::new(fn() {
     let c = counter.val
     counter.val = c + 1
     Some(c)
@@ -125,7 +125,7 @@ test "Node: to_itor 转 Itor 并迭代" {
     Some(head) => {
       let itor = head.to_itor()
       let gen = itor.call()
-      let vals : Array[Int] = []
+      let vals : Array[Int32] = []
       while true {
         match gen.next() {
           Some(v) => vals.push(v)
@@ -142,7 +142,7 @@ test "Node: to_itor 转 Itor 并迭代" {
 ///|
 test "Node: to_itor 无限流可 stop 终止" {
   let counter = Ref::Ref(0)
-  let infinite : Iter[Int] = Iter::new(fn() {
+  let infinite : Iter[Int32] = Iter::new(fn() {
     let c = counter.val
     counter.val = c + 1
     Some(c)
@@ -164,7 +164,7 @@ test "Node: to_itor 无限流可 stop 终止" {
 test "Itor: 全量迭代" {
   let itor = @rx.Itor::from_iter([1, 2, 3].iter())
   let gen = itor.call()
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -178,7 +178,7 @@ test "Itor: 全量迭代" {
 test "Itor: from_array 全量迭代" {
   let itor = @rx.Itor::from_array([4, 5, 6])
   let gen = itor.call()
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -246,7 +246,7 @@ test "Itor: 紧急插队单节点" {
   ignore(gen.send(@rx.Node::new(99)))
   assert_eq(gen.next(), Some(99))
   assert_eq(gen.next(), Some(2))
-  let rest : Array[Int] = []
+  let rest : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => rest.push(v)
@@ -268,7 +268,7 @@ test "Itor: 紧急插队整条链表" {
   assert_eq(gen.next(), Some(98))
   assert_eq(gen.next(), Some(99))
   assert_eq(gen.next(), Some(2))
-  let rest : Array[Int] = []
+  let rest : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => rest.push(v)
@@ -303,11 +303,12 @@ test "Itor: send_values 插队多个值" {
 test "Itor: 条件插队（历史长度达 3 时插入单节点）" {
   let itor = @rx.Itor::from_array([1, 2, 3, 4, 5])
   let gen = itor.call()
-  ignore(gen.send(
-    @rx.Node::new(88),
-    jump_when=fn(it : @rx.Itor[Int]) { it.history_len() == 3 },
-  ))
-  let vals : Array[Int] = []
+  ignore(
+    gen.send(@rx.Node::new(88), jump_when=fn(it : @rx.Itor[Int32]) {
+      it.history_len() == 3
+    }),
+  )
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -322,13 +323,15 @@ test "Itor: 条件插队整条链表" {
   let itor = @rx.Itor::from_array([1, 2, 3, 4, 5])
   let gen = itor.call()
   match @rx.Node::from_iter([88, 89].iter()) {
-    Some(chain) => ignore(gen.send(
-      chain,
-      jump_when=fn(it : @rx.Itor[Int]) { it.history_len() == 3 },
-    ))
+    Some(chain) =>
+      ignore(
+        gen.send(chain, jump_when=fn(it : @rx.Itor[Int32]) {
+          it.history_len() == 3
+        }),
+      )
     None => assert_true(false)
   }
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -342,11 +345,12 @@ test "Itor: 条件插队整条链表" {
 test "Itor: 条件永不满足则不插队" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
-  ignore(gen.send(
-    @rx.Node::new(99),
-    jump_when=fn(it : @rx.Itor[Int]) { it.history_len() > 100 },
-  ))
-  let vals : Array[Int] = []
+  ignore(
+    gen.send(@rx.Node::new(99), jump_when=fn(it : @rx.Itor[Int32]) {
+      it.history_len() > 100
+    }),
+  )
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -387,7 +391,7 @@ test "Itor: restart 重放历史并继续源" {
   assert_eq(gen.next(), Some(2))
   ignore(gen.restart())
   // 重放历史 [1, 2] 后继续源剩余 [3]
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -401,7 +405,7 @@ test "Itor: restart 重放历史并继续源" {
 test "Itor: 耗尽后 restart 仍可重放全部历史" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -410,7 +414,7 @@ test "Itor: 耗尽后 restart 仍可重放全部历史" {
   }
   assert_eq(vals, [1, 2, 3])
   ignore(gen.restart())
-  let replay : Array[Int] = []
+  let replay : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => replay.push(v)
@@ -425,7 +429,7 @@ test "Itor: set_history_max 保留最近 N 条（N=3）" {
   let itor = @rx.Itor::from_array([1, 2, 3, 4, 5])
   itor.set_history_max(3)
   let gen = itor.call()
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -434,7 +438,7 @@ test "Itor: set_history_max 保留最近 N 条（N=3）" {
   }
   assert_eq(vals, [1, 2, 3, 4, 5])
   ignore(gen.restart())
-  let replay : Array[Int] = []
+  let replay : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => replay.push(v)
@@ -457,7 +461,7 @@ test "Itor: set_history_max(-1) 完全保留" {
     }
   }
   ignore(gen.restart())
-  let replay : Array[Int] = []
+  let replay : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => replay.push(v)
@@ -479,7 +483,7 @@ test "Itor: set_history_max(0) 不保留历史" {
     }
   }
   ignore(gen.restart())
-  let replay : Array[Int] = []
+  let replay : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => replay.push(v)
@@ -493,11 +497,13 @@ test "Itor: set_history_max(0) 不保留历史" {
 test "Itor: 自定义历史策略（完全丢弃历史）" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   // 每次产出后清空历史：restart 后无内容可重放
-  ignore(itor.history_strategy(
-    Some(fn(it : @rx.Itor[Int]) { it.set_history_max(0) }),
-  ))
+  ignore(
+    itor.history_strategy(
+      Some(fn(it : @rx.Itor[Int32]) { it.set_history_max(0) }),
+    ),
+  )
   let gen = itor.call()
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)
@@ -506,7 +512,7 @@ test "Itor: 自定义历史策略（完全丢弃历史）" {
   }
   assert_eq(vals, [1, 2, 3])
   ignore(gen.restart())
-  let replay : Array[Int] = []
+  let replay : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => replay.push(v)
@@ -532,14 +538,16 @@ test "Itor: do_iter 副作用遍历" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   let seen = Ref::Ref(0)
-  ignore(gen.do_iter(fn(it : @rx.Itor[Int]) {
-    while true {
-      match it.next() {
-        Some(_) => seen.val = seen.val + 1
-        None => break
+  ignore(
+    gen.do_iter(fn(it : @rx.Itor[Int32]) {
+      while true {
+        match it.next() {
+          Some(_) => seen.val = seen.val + 1
+          None => break
+        }
       }
-    }
-  }))
+    }),
+  )
   assert_eq(seen.val, 3)
   assert_true(gen.is_stopped())
 }
@@ -549,22 +557,24 @@ test "Itor: do_iter 带 pre_f 与 sub_f" {
   let itor = @rx.Itor::from_array([1, 2, 3])
   let gen = itor.call()
   let log : Array[String] = []
-  ignore(gen.do_iter(
-    fn(it : @rx.Itor[Int]) {
-      log.push("f")
-      while true {
-        match it.next() {
-          Some(_) => ()
-          None => break
+  ignore(
+    gen.do_iter(
+      fn(it : @rx.Itor[Int32]) {
+        log.push("f")
+        while true {
+          match it.next() {
+            Some(_) => ()
+            None => break
+          }
         }
-      }
-    },
-    pre_f=fn(it : @rx.Itor[Int]) -> @rx.Itor[Int] {
-      log.push("pre")
-      it
-    },
-    sub_f=fn(_ : @rx.Itor[Int]) { log.push("sub") },
-  ))
+      },
+      pre_f=fn(it : @rx.Itor[Int32]) -> @rx.Itor[Int32] {
+        log.push("pre")
+        it
+      },
+      sub_f=fn(_ : @rx.Itor[Int32]) { log.push("sub") },
+    ),
+  )
   assert_eq(log, ["pre", "f", "sub"])
 }
 
@@ -604,7 +614,7 @@ test "Itor: restart 后新插队立即生效" {
   ignore(gen.restart())
   ignore(gen.send_value(99))
   // 重放历史 [1]，插队 99 在重放后、源继续前
-  let vals : Array[Int] = []
+  let vals : Array[Int32] = []
   while true {
     match gen.next() {
       Some(v) => vals.push(v)

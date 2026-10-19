@@ -8,6 +8,7 @@
 //     后续可接 C FFI polling 或 core/fs 支持后补齐。
 // ============================================================================
 
+///|
 /// 文件系统监控事件类别（归一化）
 /// 注意：node fs.watch 的 `rename` 事件语义模糊（创建/删除/重命名进入或离开
 /// 均可能报 rename），js 后端通过事件后的 exists 探测区分 Created / Removed。
@@ -22,6 +23,7 @@ pub(all) enum WatchKind {
   Other
 } derive(Eq, Debug)
 
+///|
 /// 一次文件系统变更事件
 pub struct WatchEvent {
   /// 触发事件的路径（js 后端为绝对路径；后端无法给出文件名时为监控根路径）
@@ -34,6 +36,7 @@ pub struct WatchEvent {
   raw : String
 } derive(Eq, Debug)
 
+///|
 /// 监控错误
 pub(all) enum WatchError {
   /// 路径不存在或无法访问（附后端错误信息）
@@ -44,6 +47,7 @@ pub(all) enum WatchError {
   Io(String)
 } derive(Eq, Debug)
 
+///|
 pub fn WatchEvent::to_string(self : WatchEvent) -> String {
   let kind_s = match self.kind {
     WatchKind::Created => "created"
@@ -54,6 +58,7 @@ pub fn WatchEvent::to_string(self : WatchEvent) -> String {
   "WatchEvent(path=\{self.path}, kind=\{kind_s}, ts=\{self.timestamp}, raw=\{self.raw})"
 }
 
+///|
 pub fn WatchError::to_string(self : WatchError) -> String {
   match self {
     WatchError::NotFound(msg) => "WatchError::NotFound(\{msg})"

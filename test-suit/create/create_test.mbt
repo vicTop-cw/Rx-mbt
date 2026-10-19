@@ -5,14 +5,12 @@
 
 ///|
 test "create: of 发射单值并完成" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let _ = @rx.Observable::of(42).subscribe(
-    @rx.Observer::new(
-      fn(v : Int) { values.val.push(v) },
-      fn(_ : Unit) {},
-      fn() { done.val = true },
-    ),
+    @rx.Observer::new(fn(v : Int32) { values.val.push(v) }, fn(_ : Unit) {  }, fn() {
+      done.val = true
+    }),
   )
   assert_eq(values.val, [42])
   assert_true(done.val)
@@ -20,14 +18,12 @@ test "create: of 发射单值并完成" {
 
 ///|
 test "create: from_iter 发射全部值并完成" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let _ = @rx.Observable::from_iter([1, 2, 3]).subscribe(
-    @rx.Observer::new(
-      fn(v : Int) { values.val.push(v) },
-      fn(_ : Unit) {},
-      fn() { done.val = true },
-    ),
+    @rx.Observer::new(fn(v : Int32) { values.val.push(v) }, fn(_ : Unit) {  }, fn() {
+      done.val = true
+    }),
   )
   assert_eq(values.val, [1, 2, 3])
   assert_true(done.val)
@@ -35,14 +31,12 @@ test "create: from_iter 发射全部值并完成" {
 
 ///|
 test "create: empty 立即完成不发射值" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let _ = @rx.Observable::empty().subscribe(
-    @rx.Observer::new(
-      fn(v : Int) { values.val.push(v) },
-      fn(_ : Unit) {},
-      fn() { done.val = true },
-    ),
+    @rx.Observer::new(fn(v : Int32) { values.val.push(v) }, fn(_ : Unit) {  }, fn() {
+      done.val = true
+    }),
   )
   assert_eq(values.val, [])
   assert_true(done.val)
@@ -50,14 +44,12 @@ test "create: empty 立即完成不发射值" {
 
 ///|
 test "create: never 不发射不完成" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
   let done : Ref[Bool] = Ref::Ref(false)
   let _ = @rx.Observable::never().subscribe(
-    @rx.Observer::new(
-      fn(v : Int) { values.val.push(v) },
-      fn(_ : Unit) {},
-      fn() { done.val = true },
-    ),
+    @rx.Observer::new(fn(v : Int32) { values.val.push(v) }, fn(_ : Unit) {  }, fn() {
+      done.val = true
+    }),
   )
   assert_eq(values.val, [])
   assert_false(done.val)
@@ -65,13 +57,13 @@ test "create: never 不发射不完成" {
 
 ///|
 test "create: error 只触发错误回调" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
-  let err : Ref[Option[String]] = Ref::Ref(None)
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
+  let err : Ref[String?] = Ref::Ref(None)
   let _ = @rx.Observable::error("boom").subscribe(
     @rx.Observer::new(
-      fn(v : Int) { values.val.push(v) },
+      fn(v : Int32) { values.val.push(v) },
       fn(e : String) { err.val = Some(e) },
-      fn() {},
+      fn() {  },
     ),
   )
   assert_eq(values.val, [])
@@ -80,9 +72,9 @@ test "create: error 只触发错误回调" {
 
 ///|
 test "create: repeat 重复发射指定次数" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
-  let obs : @rx.Observable[Int, Unit] = @rx.Observable::repeat(7, 3)
-  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
+  let obs : @rx.Observable[Int32, Unit] = @rx.Observable::repeat(7, 3)
+  let _ = obs.subscribe_on_next(fn(v : Int32) { values.val.push(v) })
   assert_eq(values.val, [7, 7, 7])
 }
 
@@ -97,23 +89,27 @@ test "create: from_range 发射半开区间序列" {
 ///|
 test "create: from_range_with_step 按步长发射" {
   let values : Ref[Array[Int64]] = Ref::Ref(Array(capacity=0))
-  let obs : @rx.Observable[Int64, Unit] = @rx.Observable::from_range_with_step(1L, 9L, 2L)
+  let obs : @rx.Observable[Int64, Unit] = @rx.Observable::from_range_with_step(
+    1L, 9L, 2L,
+  )
   let _ = obs.subscribe_on_next(fn(v : Int64) { values.val.push(v) })
   assert_eq(values.val, [1L, 3L, 5L, 7L])
 }
 
 ///|
 test "create: from_callable 调用函数并发射结果" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
-  let obs : @rx.Observable[Int, Unit] = @rx.Observable::from_callable(fn() { 99 })
-  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
+  let obs : @rx.Observable[Int32, Unit] = @rx.Observable::from_callable(fn() {
+    99
+  })
+  let _ = obs.subscribe_on_next(fn(v : Int32) { values.val.push(v) })
   assert_eq(values.val, [99])
 }
 
 ///|
 test "create: start 等价 from_callable" {
-  let values : Ref[Array[Int]] = Ref::Ref(Array(capacity=0))
-  let obs : @rx.Observable[Int, Unit] = @rx.Observable::start(fn() { 42 })
-  let _ = obs.subscribe_on_next(fn(v : Int) { values.val.push(v) })
+  let values : Ref[Array[Int32]] = Ref::Ref(Array(capacity=0))
+  let obs : @rx.Observable[Int32, Unit] = @rx.Observable::start(fn() { 42 })
+  let _ = obs.subscribe_on_next(fn(v : Int32) { values.val.push(v) })
   assert_eq(values.val, [42])
 }

@@ -3,28 +3,28 @@
 // with_latest_from / amb / end_with / iif / sequence_equal
 // ============================================================================
 
+///|
 /// start_with：先发射前缀数组中的值，再发射自身
 pub fn[T, E] Observable::start_with(
   self : Observable[T, E],
   prefix : Array[T],
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
     for v in prefix {
       next(v)
     }
-    source_fn({
-      next: next,
-      error: error,
-      complete: complete, interrupt: Ref::Ref(None),
-    })
+    source_fn({ next, error, complete, interrupt: Ref::Ref(None), })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// concat：自身完成后接续 other
 pub fn[T, E] Observable::concat(
   self : Observable[T, E],
@@ -32,7 +32,9 @@ pub fn[T, E] Observable::concat(
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
   let other_fn = other.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -40,29 +42,32 @@ pub fn[T, E] Observable::concat(
     let stopped = Ref::Ref(false)
     let other_sub = Ref::Ref(Subscription::empty())
     let source_sub = source_fn({
-      next: next,
-      error: error,
+      next,
+      error,
       complete: fn() {
         if !done.val && !stopped.val {
           done.val = true
           other_sub.val = other_fn({
-            next: next,
-            error: error,
-            complete: complete, interrupt: Ref::Ref(None),
+            next,
+            error,
+            complete,
+            interrupt: Ref::Ref(None),
           })
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       stopped.val = true
       done.val = true
       source_sub.dispose()
-      (other_sub.val).dispose()
+      other_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// merge：合并两个流（同步语义下等价 concat，顺序发射）
 pub fn[T, E] Observable::merge(
   self : Observable[T, E],
@@ -71,6 +76,7 @@ pub fn[T, E] Observable::merge(
   self.concat(other)
 }
 
+///|
 /// merge：自由函数版
 pub fn[T, E] merge(
   a : Observable[T, E],
@@ -79,6 +85,7 @@ pub fn[T, E] merge(
   a.concat(b)
 }
 
+///|
 /// zip：按位置配对两个流的值，双方都有值时立即发射配对
 pub fn[T, E, U] zip(
   a : Observable[T, E],
@@ -86,7 +93,9 @@ pub fn[T, E, U] zip(
 ) -> Observable[(T, U), E] {
   let a_fn = a.subscribe_fn
   let b_fn = b.subscribe_fn
-  let subscribe_fn : (Observer[(T, U), E]) -> Subscription = fn(downstream : Observer[(T, U), E]) {
+  let subscribe_fn : (Observer[(T, U), E]) -> Subscription = fn(
+    downstream : Observer[(T, U), E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -107,10 +116,11 @@ pub fn[T, E, U] zip(
       }
       // 一方完成且其缓冲已耗尽：无法再配对，终止并释放双方订阅
       if !completed.val {
-        if (done_a.val && buf_a.val.is_empty()) || (done_b.val && buf_b.val.is_empty()) {
+        if (done_a.val && buf_a.val.is_empty()) ||
+          (done_b.val && buf_b.val.is_empty()) {
           completed.val = true
-          (a_sub.val).dispose()
-          (b_sub.val).dispose()
+          a_sub.val.dispose()
+          b_sub.val.dispose()
           complete()
         }
       }
@@ -118,8 +128,8 @@ pub fn[T, E, U] zip(
     let fail : (E) -> Unit = fn(e : E) {
       if !completed.val {
         completed.val = true
-        (a_sub.val).dispose()
-        (b_sub.val).dispose()
+        a_sub.val.dispose()
+        b_sub.val.dispose()
         error(e)
       }
     }
@@ -134,7 +144,8 @@ pub fn[T, E, U] zip(
       complete: fn() {
         done_a.val = true
         try_emit()
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : U) {
@@ -147,18 +158,20 @@ pub fn[T, E, U] zip(
       complete: fn() {
         done_b.val = true
         try_emit()
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     try_emit()
     Subscription::new(fn() {
       completed.val = true
-      (a_sub.val).dispose()
-      (b_sub.val).dispose()
+      a_sub.val.dispose()
+      b_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// zip：方法版
 pub fn[T, E, U] Observable::zip(
   self : Observable[T, E],
@@ -167,6 +180,7 @@ pub fn[T, E, U] Observable::zip(
   zip(self, other)
 }
 
+///|
 /// combine_latest：任一源发值时，发射两个源最新值的组合
 pub fn[T, E, U] combine_latest(
   a : Observable[T, E],
@@ -174,7 +188,9 @@ pub fn[T, E, U] combine_latest(
 ) -> Observable[(T, U), E] {
   let a_fn = a.subscribe_fn
   let b_fn = b.subscribe_fn
-  let subscribe_fn : (Observer[(T, U), E]) -> Subscription = fn(downstream : Observer[(T, U), E]) {
+  let subscribe_fn : (Observer[(T, U), E]) -> Subscription = fn(
+    downstream : Observer[(T, U), E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -203,8 +219,8 @@ pub fn[T, E, U] combine_latest(
     let fail : (E) -> Unit = fn(e : E) {
       if !failed.val {
         failed.val = true
-        (a_sub.val).dispose()
-        (b_sub.val).dispose()
+        a_sub.val.dispose()
+        b_sub.val.dispose()
         error(e)
       }
     }
@@ -216,7 +232,11 @@ pub fn[T, E, U] combine_latest(
         }
       },
       error: fail,
-      complete: fn() { done_a.val = true; maybe_complete() }, interrupt: Ref::Ref(None),
+      complete: fn() {
+        done_a.val = true
+        maybe_complete()
+      },
+      interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : U) {
@@ -226,17 +246,22 @@ pub fn[T, E, U] combine_latest(
         }
       },
       error: fail,
-      complete: fn() { done_b.val = true; maybe_complete() }, interrupt: Ref::Ref(None),
+      complete: fn() {
+        done_b.val = true
+        maybe_complete()
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       failed.val = true
-      (a_sub.val).dispose()
-      (b_sub.val).dispose()
+      a_sub.val.dispose()
+      b_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// with_latest_from：a 每次发值时，携带 b 的最新值一起发射
 pub fn[T, E, U] with_latest_from(
   a : Observable[T, E],
@@ -244,7 +269,9 @@ pub fn[T, E, U] with_latest_from(
 ) -> Observable[(T, U), E] {
   let a_fn = a.subscribe_fn
   let b_fn = b.subscribe_fn
-  let subscribe_fn : (Observer[(T, U), E]) -> Subscription = fn(downstream : Observer[(T, U), E]) {
+  let subscribe_fn : (Observer[(T, U), E]) -> Subscription = fn(
+    downstream : Observer[(T, U), E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -256,15 +283,16 @@ pub fn[T, E, U] with_latest_from(
     let fail : (E) -> Unit = fn(e : E) {
       if !done.val {
         done.val = true
-        (a_sub.val).dispose()
-        (b_sub.val).dispose()
+        a_sub.val.dispose()
+        b_sub.val.dispose()
         error(e)
       }
     }
     b_sub.val = b_fn({
       next: fn(v : U) { last_b.val = Some(v) },
       error: fail,
-      complete: fn() {}, interrupt: Ref::Ref(None),
+      complete: fn() {  },
+      interrupt: Ref::Ref(None),
     })
     a_sub.val = a_fn({
       next: fn(v : T) {
@@ -280,20 +308,22 @@ pub fn[T, E, U] with_latest_from(
         if !done.val {
           done.val = true
           // a 完成即终止：取消 b 订阅，避免热流继续泄漏
-          (b_sub.val).dispose()
+          b_sub.val.dispose()
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
-      (a_sub.val).dispose()
-      (b_sub.val).dispose()
+      a_sub.val.dispose()
+      b_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// amb：先发射的流胜出，另一方被忽略
 pub fn[T, E] amb(
   a : Observable[T, E],
@@ -301,7 +331,9 @@ pub fn[T, E] amb(
 ) -> Observable[T, E] {
   let a_fn = a.subscribe_fn
   let b_fn = b.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -315,27 +347,30 @@ pub fn[T, E] amb(
           if winner.val == 0 {
             winner.val = 1
             // a 胜出：立即取消 b，避免另一路无限流继续泄漏
-            (b_sub.val).dispose()
+            b_sub.val.dispose()
           }
-          if winner.val == 1 { next(v) }
+          if winner.val == 1 {
+            next(v)
+          }
         }
       },
       error: fn(e : E) {
         if !done.val && winner.val != 2 {
           done.val = true
-          (a_sub.val).dispose()
-          (b_sub.val).dispose()
+          a_sub.val.dispose()
+          b_sub.val.dispose()
           error(e)
         }
       },
       complete: fn() {
         if !done.val && winner.val != 2 {
           done.val = true
-          (a_sub.val).dispose()
-          (b_sub.val).dispose()
+          a_sub.val.dispose()
+          b_sub.val.dispose()
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
       next: fn(v : T) {
@@ -343,51 +378,57 @@ pub fn[T, E] amb(
           if winner.val == 0 {
             winner.val = 2
             // b 胜出：立即取消 a
-            (a_sub.val).dispose()
+            a_sub.val.dispose()
           }
-          if winner.val == 2 { next(v) }
+          if winner.val == 2 {
+            next(v)
+          }
         }
       },
       error: fn(e : E) {
         if !done.val && winner.val != 1 {
           done.val = true
-          (a_sub.val).dispose()
-          (b_sub.val).dispose()
+          a_sub.val.dispose()
+          b_sub.val.dispose()
           error(e)
         }
       },
       complete: fn() {
         if !done.val && winner.val != 1 {
           done.val = true
-          (a_sub.val).dispose()
-          (b_sub.val).dispose()
+          a_sub.val.dispose()
+          b_sub.val.dispose()
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
     Subscription::new(fn() {
       done.val = true
-      (a_sub.val).dispose()
-      (b_sub.val).dispose()
+      a_sub.val.dispose()
+      b_sub.val.dispose()
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// end_with：流完成前追加后缀值
 pub fn[T, E] Observable::end_with(
   self : Observable[T, E],
   suffix : Array[T],
 ) -> Observable[T, E] {
   let source_fn = self.subscribe_fn
-  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(downstream : Observer[T, E]) {
+  let subscribe_fn : (Observer[T, E]) -> Subscription = fn(
+    downstream : Observer[T, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
     let done = Ref::Ref(false)
     source_fn({
-      next: next,
-      error: error,
+      next,
+      error,
       complete: fn() {
         if !done.val {
           done.val = true
@@ -396,21 +437,28 @@ pub fn[T, E] Observable::end_with(
           }
           complete()
         }
-      }, interrupt: Ref::Ref(None),
+      },
+      interrupt: Ref::Ref(None),
     })
   }
   Observable::new(subscribe_fn)
 }
 
+///|
 /// iif：按条件选择发射哪个流
 pub fn[T, E] iif(
   condition : Bool,
   then : Observable[T, E],
   otherwise : Observable[T, E],
 ) -> Observable[T, E] {
-  if condition { then } else { otherwise }
+  if condition {
+    then
+  } else {
+    otherwise
+  }
 }
 
+///|
 /// sequence_equal：比较两个流的值序列是否完全相等
 pub fn[T : Eq, E] sequence_equal(
   a : Observable[T, E],
@@ -418,7 +466,9 @@ pub fn[T : Eq, E] sequence_equal(
 ) -> Observable[Bool, E] {
   let a_fn = a.subscribe_fn
   let b_fn = b.subscribe_fn
-  let subscribe_fn : (Observer[Bool, E]) -> Subscription = fn(downstream : Observer[Bool, E]) {
+  let subscribe_fn : (Observer[Bool, E]) -> Subscription = fn(
+    downstream : Observer[Bool, E],
+  ) {
     let next = downstream.next
     let error = downstream.error
     let complete = downstream.complete
@@ -432,8 +482,8 @@ pub fn[T : Eq, E] sequence_equal(
     let stop_all : () -> Unit = fn() {
       if !emitted.val {
         emitted.val = true
-        (a_sub.val).dispose()
-        (b_sub.val).dispose()
+        a_sub.val.dispose()
+        b_sub.val.dispose()
       }
     }
     let fail : (E) -> Unit = fn(e : E) {
@@ -464,22 +514,24 @@ pub fn[T : Eq, E] sequence_equal(
       }
     }
     a_sub.val = a_fn({
-      next: fn(v : T) {
-        if !emitted.val { buf_a.val.push(v) }
-      },
+      next: fn(v : T) { if !emitted.val { buf_a.val.push(v) } },
       error: fail,
-      complete: fn() { done_a.val = true; try_emit() }, interrupt: Ref::Ref(None),
+      complete: fn() {
+        done_a.val = true
+        try_emit()
+      },
+      interrupt: Ref::Ref(None),
     })
     b_sub.val = b_fn({
-      next: fn(v : T) {
-        if !emitted.val { buf_b.val.push(v) }
-      },
+      next: fn(v : T) { if !emitted.val { buf_b.val.push(v) } },
       error: fail,
-      complete: fn() { done_b.val = true; try_emit() }, interrupt: Ref::Ref(None),
+      complete: fn() {
+        done_b.val = true
+        try_emit()
+      },
+      interrupt: Ref::Ref(None),
     })
-    Subscription::new(fn() {
-      stop_all()
-    })
+    Subscription::new(fn() { stop_all() })
   }
   Observable::new(subscribe_fn)
 }

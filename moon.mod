@@ -19,7 +19,7 @@ repository = "https://github.com/vicTop-cw/Rx-mbt"
 
 license = "Apache-2.0"
 
-keywords = ["reactive", "rx", "observable", "observer", "stream"]
+keywords = [ "reactive", "rx", "observable", "observer", "stream" ]
 
 preferred_target = "wasm"
 

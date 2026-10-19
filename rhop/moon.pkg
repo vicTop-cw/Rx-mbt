@@ -1,16 +1,13 @@
 import {
-  "vicTop-cw/RX-MBT/monitor" @monitor,
-  "vicTop-cw/RX-MBT/rx" @rx,
-  "moonbitlang/core/encoding/base64" @base64,
-  "moonbitlang/core/encoding/utf8" @utf8,
-  "moonbitlang/core/json" @json,
-  "moonbitlang/core/hashset" @hashset,
-  "moonbitlang/core/ref" @ref,
+  "vicTop-cw/RX-MBT/monitor",
+  "vicTop-cw/RX-MBT/rx",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/core/hashset",
+  "moonbitlang/core/ref",
 }
 
 options(
-  targets: {
-    "rhop_js.mbt": ["js"],
-    "rhop_native.mbt": ["native"],
-  },
+  targets: { "rhop_js.mbt": [ "js" ], "rhop_native.mbt": [ "native" ] },
 )
