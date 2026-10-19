@@ -1,0 +1,11 @@
+import {
+  "vicTop-cw/RX-MBT/rx" @rx,
+  "moonbitlang/core/ref",
+}
+
+options(
+  targets: {
+    "watcher_js.mbt": [ "js" ],
+    "watcher_native.mbt": [ "native" ],
+  }
+)
