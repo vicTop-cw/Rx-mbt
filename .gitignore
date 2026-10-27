@@ -28,3 +28,4 @@ pkg.generated.mbti
 /_fist_doctor_check.db
 backup/
 /mb*.txt
+.fist-mbt/
