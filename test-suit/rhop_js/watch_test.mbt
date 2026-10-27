@@ -221,41 +221,29 @@ test "watch · skip_existing：启动瞬间已存在的目标文件视为已消�
 }
 
 ///|
-/// 诊断用：统计 monitor 注册表里的 watcher 数量。
+/// 诊断用：统计 monitor 注册表里的 watcher 数量（js: globalThis.__rxmbt_watch_reg）。
 extern "js" fn ffi_watch_count() -> Int32 =
   #| () => { const G = globalThis; if (!G.__rxmbt_watch_reg) { return 0; } let n = 0; for (const _k of G.__rxmbt_watch_reg.keys()) { n++; } return n; }
 
 ///|
-/// 安全网：强制关闭 monitor 注册表里所有 watcher（保证测试进程能退出）。
-extern "js" fn ffi_close_all_watchers() -> Unit =
-  #| () => { const G = globalThis; if (!G.__rxmbt_watch_reg) { return; } for (const [k, w] of G.__rxmbt_watch_reg) { try { w.close(); } catch (_e) {} } G.__rxmbt_watch_reg.clear(); }
-
-///|
-/// 诊断用：打印仍活着的 node 句柄（定位「测试全跑完但进程不退出」）。
-extern "js" fn ffi_dump_handles() -> String =
-  #| () => { try { const get = process._getActiveHandles ? process._getActiveHandles() : []; const names = get.map((h) => (h && h.constructor) ? h.constructor.name : String(h)); return JSON.stringify(names); } catch (e) { return "ERR:" + String((e && e.message) || e); } }
-
-///|
-test "watch · 收尾清理（monitor dispose 未关句柄的已知缺陷兜底）" {
-  // 已定位的**上游缺陷**（不在本包作用域）：
-  //   monitor/watcher_js.mbt 的 ffi_watch_start 用 **number** 作
-  //   globalThis.__rxmbt_watch_reg 的 key，而 ffi_watch_stop 用 **int64(Number)**
-  //   去 get —— BigInt/number 类型不一致 ⇒ get 恒 undefined ⇒ close() 不执行。
-  //   结果：@rx.Subscription::dispose() 无法真正关闭 fs.watch 句柄，
-  //   句柄泄漏且 node 测试进程不退出（本文件此前正是被它卡住不打印汇总行）。
-  // 本包 stop() 的调用链是正确的（dispose → ffi_watch_stop），等 monitor 修好后
-  // 这里的强制清理自然变成 no-op。
-  let dir = ffi_w_mkdtemp("rhop-diag")
+/// 回归用例：`stop()` 必须真正关闭 fs.watch 句柄。
+///
+/// 历史缺陷（已修）：monitor 的 `ffi_watch_stop` 用 BigInt 去查以 number 为键的
+/// `__rxmbt_watch_reg`，`get` 恒 undefined ⇒ close() 从不执行 ⇒ `@rx.Subscription::dispose()`
+/// 名存实亡：句柄泄漏 + node 测试进程跑完不退出（moon 永远打不出汇总行）。
+/// 这里断言「start 后注册表 +1，stop 后回到基线」，正是该缺陷的回归点。
+test "watch · stop() 真正关闭 fs.watch 句柄（dispose 回归）" {
+  let dir = ffi_w_mkdtemp("rhop-w6")
+  let base = ffi_watch_count()
   let w = @rp.RhopWatcher::new(dir, @rp.RhopCrypto::from_key("k"))
-  let _ = w.start()
+  assert_eq(w.start(), Ok(()))
+  assert_eq(ffi_watch_count(), base + 1)
   w.stop()
-  let before = ffi_watch_count()
-  println(
-    "[watch] monitor 注册表残留 watcher = " +
-    before.to_string() +
-    "（>0 即上游 dispose 未生效）",
-  )
-  ffi_close_all_watchers()
-  assert_eq(ffi_watch_count(), 0)
+  assert_eq(ffi_watch_count(), base)
+  // 重复 start/stop 也不残留
+  assert_eq(w.start(), Ok(()))
+  assert_eq(ffi_watch_count(), base + 1)
+  w.stop()
+  assert_eq(ffi_watch_count(), base)
   ffi_w_rmrf(dir)
 }

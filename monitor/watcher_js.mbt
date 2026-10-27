@@ -71,8 +71,15 @@ extern "js" fn ffi_watch_start(
   #| (path, cb) => { const G = globalThis; if (G.__rxmbt_watch_err === undefined) { G.__rxmbt_watch_err = ""; } if (G.__rxmbt_watch_reg === undefined) { G.__rxmbt_watch_reg = new Map(); G.__rxmbt_watch_seq = 0; } try { const id = G.__rxmbt_watch_seq++; const fs = process.getBuiltinModule("node:fs"); const pathMod = process.getBuiltinModule("node:path"); const sep = pathMod.sep; const watcher = fs.watch(path, { persistent: true }, (et, fn) => { let target = path; if (fn !== null) { target = (path.endsWith("/") || path.endsWith("\\")) ? (path + fn) : (path + sep + fn); } let kind = 3; if (et === "change") { kind = 1; } else if (fs.existsSync(target)) { kind = 0; } else { kind = 2; } cb(BigInt(id), BigInt(kind), BigInt(Date.now()), et, fn === null ? "" : fn); }); G.__rxmbt_watch_reg.set(id, watcher); return BigInt(id); } catch (e) { G.__rxmbt_watch_err = String(e && e.message || e); return BigInt(-1); } }
 
 ///|
+/// 停止并释放某个 watcher 句柄。
+///
+/// **键类型必须与 start 侧一致**：`__rxmbt_watch_reg` 的 key 是 `ffi_watch_start` 里
+/// `G.__rxmbt_watch_seq++` 产生的 **JS number**，而这里的形参 `id : Int64` 进到 JS 是
+/// **BigInt**。若直接 `reg.get(id)` 会因 `BigInt(0) !== 0` 恒得 undefined，
+/// `close()` 永远不执行 —— 表现是 fs.watch 句柄泄漏 + node 进程无法自然退出
+/// （rhop watch/relay js 测试曾因此挂住且不打印汇总行）。故统一 `Number(id)` 归一。
 extern "js" fn ffi_watch_stop(id : Int64) -> Unit =
-  #| (id) => { const G = globalThis; if (G.__rxmbt_watch_reg === undefined) { return; } const w = G.__rxmbt_watch_reg.get(id); if (w !== undefined) { try { w.close(); } catch (_e) {} G.__rxmbt_watch_reg.delete(id); } }
+  #| (id) => { const G = globalThis; if (G.__rxmbt_watch_reg === undefined) { return; } const key = Number(id); const w = G.__rxmbt_watch_reg.get(key); if (w !== undefined) { try { w.close(); } catch (_e) {} G.__rxmbt_watch_reg.delete(key); } }
 
 ///|
 extern "js" fn ffi_watch_last_error() -> String =
