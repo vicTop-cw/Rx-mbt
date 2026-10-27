@@ -1,0 +1,162 @@
+// ============================================================================
+// rhop · 真机签名（对齐 vools-rhop `signer.py`）
+//
+// AbstractSigner  — 签名抽象（返回 String? ：无硬件时可为 None）
+// FileHashSigner  — 通用文件哈希签名（非 NPU 场景兜底），格式 "sha256:<hex>"
+// NPUSigner       — NPU 真机签名，格式 "<marker>:<serial>:<md5>"
+//
+// ⚠ preimage 口径（与 envelope checksum **不同**，照抄 vools 事实）：
+//   preimage = json.dumps({"task_id":…, "result":…}, sort_keys=True)
+//   vools 没传 ensure_ascii ⇒ Python 默认 **ensure_ascii=True**
+//   ⇒ 非 ASCII 一律转义成 `\uXXXX`（故用 `canonical_json_ascii`）。
+//   含中文 result 的签名只有按此口径才能与 vools 一致（qa fixture 有硬向量）。
+// 纯逻辑（无 FFI / 无子进程），wasm / js / native 三目标可用。
+// ============================================================================
+
+///|
+/// NPUSigner 的默认 marker 字面量（vools `NPUSigner(marker="NPU_MARKER")`）。
+pub const NPU_MARKER_DEFAULT : String = "NPU_MARKER"
+
+///|
+/// 签名抽象（vools `AbstractSigner`）。
+///
+/// `sign` 返回 `None` 表示「当前环境无法签名」（例如没有 NPU 序列号），
+/// 调用方应把信封的 `signature` 留空，而不是伪造一个值。
+pub trait AbstractSigner {
+  /// 对 `result` 签名；返回签名串，无法签名时返回 `None`。
+  fn sign(Self, String, Json) -> String?
+  /// 验证签名是否与 `(task_id, result)` 匹配；无法签名时恒为 `false`。
+  fn verify(Self, String, Json, String) -> Bool
+}
+
+///|
+/// 构造签名 preimage：`{"result": …, "task_id": …}`（键升序，ensure_ascii=True）。
+///
+/// 与 vools `json.dumps({"task_id": task_id, "result": result}, sort_keys=True)`
+/// 逐字节一致。
+fn signer_preimage(task_id : String, result : Json) -> String {
+  let fields : Map[String, Json] = Map::new()
+  fields["task_id"] = Json::string(task_id)
+  fields["result"] = result
+  canonical_json_ascii(Json::object(fields))
+}
+
+///|
+/// 通用文件哈希签名（vools `FileHashSigner`）。
+///
+/// 签名 = `"sha256:" + hex(sha256(preimage))`，preimage 见 `signer_preimage`。
+/// 确定性：同一 `(task_id, result)` 恒得同一签名；无需任何外部依赖。
+pub struct FileHashSigner {}
+
+///|
+/// 构造无状态的文件哈希签名器。
+pub fn FileHashSigner::new() -> FileHashSigner {
+  FileHashSigner::{ }
+}
+
+///|
+/// 计算签名（`"sha256:" + 64 位小写 hex`）。
+pub fn FileHashSigner::signature(
+  self : FileHashSigner,
+  task_id : String,
+  result : Json,
+) -> String {
+  "sha256:" + sha256_hex_of_utf8(signer_preimage(task_id, result))
+}
+
+///|
+pub impl AbstractSigner for FileHashSigner with fn sign(self, task_id, result) {
+  Some(self.signature(task_id, result))
+}
+
+///|
+pub impl AbstractSigner for FileHashSigner with fn verify(
+  self,
+  task_id,
+  result,
+  signature,
+) {
+  signature == self.signature(task_id, result)
+}
+
+///|
+/// NPU 真机签名（vools `NPUSigner`）。
+///
+/// 签名格式 `"<marker>:<serial>:<md5(preimage)>"`，其中 `serial` 由
+/// `serial_provider` 注入：
+///   - 默认 provider 返回 `None` ⇒ `sign` 返回 `None`（本机无 npu-smi 的真实语义）；
+///   - 测试/真机由调用方注入 provider，**本库不 spawn 子进程**，因此三目标一致、
+///     且不会在测试里真的调用 npu-smi。
+pub struct NPUSigner {
+  /// 签名前缀标记（默认 `NPU_MARKER`）
+  marker : String
+  /// 序列号来源；返回 None 表示当前环境无 NPU
+  serial_provider : () -> String?
+}
+
+///|
+/// 以指定 marker 构造 NPU 签名器（serial provider 默认不可用 ⇒ sign 返回 None）。
+pub fn NPUSigner::new(marker : String) -> NPUSigner {
+  { marker, serial_provider: fn() { None }, }
+}
+
+///|
+/// 以默认 marker（`NPU_MARKER`）构造 NPU 签名器。
+pub fn NPUSigner::with_default_marker() -> NPUSigner {
+  NPUSigner::new(NPU_MARKER_DEFAULT)
+}
+
+///|
+/// 注入序列号来源（返回新对象，原对象不变）。
+///
+/// provider 返回 `Some(serial)` 时 `sign` 产出
+/// `"<marker>:<serial>:<md5>"`；返回 `None` 时 `sign` 返回 `None`。
+pub fn NPUSigner::with_serial_provider(
+  self : NPUSigner,
+  provider : () -> String?,
+) -> NPUSigner {
+  { marker: self.marker, serial_provider: provider, }
+}
+
+///|
+/// 当前 marker。
+pub fn NPUSigner::marker(self : NPUSigner) -> String {
+  self.marker
+}
+
+///|
+/// 是否有可用的序列号来源（precheck，不产生签名）。
+pub fn NPUSigner::has_serial(self : NPUSigner) -> Bool {
+  match (self.serial_provider)() {
+    Some(_) => true
+    None => false
+  }
+}
+
+///|
+pub impl AbstractSigner for NPUSigner with fn sign(self, task_id, result) {
+  match (self.serial_provider)() {
+    None => None
+    Some(serial) =>
+      Some(
+        self.marker +
+        ":" +
+        serial +
+        ":" +
+        md5_hex_of_utf8(signer_preimage(task_id, result)),
+      )
+  }
+}
+
+///|
+pub impl AbstractSigner for NPUSigner with fn verify(
+  self,
+  task_id,
+  result,
+  signature,
+) {
+  match self.sign(task_id, result) {
+    None => false
+    Some(expected) => signature == expected
+  }
+}
