@@ -1,0 +1,752 @@
+{
+  "canonical_json": [
+    {
+      "expected": "{}",
+      "expected_utf8_hex": "7b7d",
+      "input": {},
+      "name": "empty_object"
+    },
+    {
+      "expected": "[]",
+      "expected_utf8_hex": "5b5d",
+      "input": [],
+      "name": "empty_array"
+    },
+    {
+      "expected": "{\"task_id\": \"task-001\", \"中文键\": \"中文值\", \"嵌套\": {\"启用\": true, \"目标\": \"测试机\", \"空值\": null, \"重试\": 2}, \"数组\": [1, 2, 3, \"四\", {\"五\": 5}]}",
+      "expected_utf8_hex": "7b227461736b5f6964223a20227461736b2d303031222c2022e4b8ade69687e994ae223a2022e4b8ade69687e580bc222c2022e5b58ce5a597223a207b22e590afe794a8223a20747275652c2022e79baee6a087223a2022e6b58be8af95e69cba222c2022e7a9bae580bc223a206e756c6c2c2022e9878de8af95223a20327d2c2022e695b0e7bb84223a205b312c20322c20332c2022e59b9b222c207b22e4ba94223a20357d5d7d",
+      "input": {
+        "task_id": "task-001",
+        "中文键": "中文值",
+        "嵌套": {
+          "启用": true,
+          "目标": "测试机",
+          "空值": null,
+          "重试": 2
+        },
+        "数组": [
+          1,
+          2,
+          3,
+          "四",
+          {
+            "五": 5
+          }
+        ]
+      },
+      "name": "nested_unicode"
+    },
+    {
+      "expected": "{\"backslash\": \"a\\\\b\", \"backspace\": \"a\\bb\", \"cr\": \"a\\rb\", \"ctrl_0x01\": \"\\u0001\", \"emoji\": \"🚀\", \"formfeed\": \"a\\fb\", \"newline\": \"line1\\nline2\", \"quote\": \"he said \\\"hi\\\"\", \"slash\": \"a/b\", \"tab\": \"a\\tb\"}",
+      "expected_utf8_hex": "7b226261636b736c617368223a2022615c5c62222c20226261636b7370616365223a2022615c6262222c20226372223a2022615c7262222c20226374726c5f30783031223a20225c7530303031222c2022656d6f6a69223a2022f09f9a80222c2022666f726d66656564223a2022615c6662222c20226e65776c696e65223a20226c696e65315c6e6c696e6532222c202271756f7465223a202268652073616964205c2268695c22222c2022736c617368223a2022612f62222c2022746162223a2022615c7462227d",
+      "input": {
+        "backslash": "a\\b",
+        "backspace": "a\bb",
+        "cr": "a\rb",
+        "ctrl_0x01": "\u0001",
+        "emoji": "🚀",
+        "formfeed": "a\fb",
+        "newline": "line1\nline2",
+        "quote": "he said \"hi\"",
+        "slash": "a/b",
+        "tab": "a\tb"
+      },
+      "name": "escapes"
+    },
+    {
+      "expected": "{\"false\": false, \"int\": 42, \"negative\": -7, \"null\": null, \"true\": true, \"zero\": 0}",
+      "expected_utf8_hex": "7b2266616c7365223a2066616c73652c2022696e74223a2034322c20226e65676174697665223a202d372c20226e756c6c223a206e756c6c2c202274727565223a20747275652c20227a65726f223a20307d",
+      "input": {
+        "false": false,
+        "int": 42,
+        "negative": -7,
+        "null": null,
+        "true": true,
+        "zero": 0
+      },
+      "name": "scalars"
+    },
+    {
+      "expected": "{\"1\": 4, \"A\": 3, \"a\": 2, \"b\": 6, \"z\": 1, \"中文a\": 5}",
+      "expected_utf8_hex": "7b2231223a20342c202241223a20332c202261223a20322c202262223a20362c20227a223a20312c2022e4b8ade6968761223a20357d",
+      "input": {
+        "1": 4,
+        "A": 3,
+        "a": 2,
+        "b": 6,
+        "z": 1,
+        "中文a": 5
+      },
+      "name": "key_order"
+    },
+    {
+      "expected": "{\"L1\": {\"L2\": {\"L3\": {\"L4\": [{\"L5\": \"底\"}]}}}}",
+      "expected_utf8_hex": "7b224c31223a207b224c32223a207b224c33223a207b224c34223a205b7b224c35223a2022e5ba95227d5d7d7d7d7d",
+      "input": {
+        "L1": {
+          "L2": {
+            "L3": {
+              "L4": [
+                {
+                  "L5": "底"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "name": "deep_nest"
+    }
+  ],
+  "crypto": {
+    "deterministic": true,
+    "encrypt_json_cases": [
+      {
+        "alg": "fernet",
+        "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnEzd0pBcTc0NXhxUjBTdFNDNXpzOWJMaGNVVWo4ZTF0dm0tTk0yM1Fpc1JRTXIzZkI2aEFYS04zY3hlY3IwekZfYV9HLTJaRVpnTjRlQzVscWZ6Q1FhRDlOODUxR0FXT244VmM0Z0tMMmdoSnc4Y2s9\"}",
+        "ct": "Z0FBQUFBQnEzd0pBcTc0NXhxUjBTdFNDNXpzOWJMaGNVVWo4ZTF0dm0tTk0yM1Fpc1JRTXIzZkI2aEFYS04zY3hlY3IwekZfYV9HLTJaRVpnTjRlQzVscWZ6Q1FhRDlOODUxR0FXT244VmM0Z0tMMmdoSnc4Y2s9",
+        "ct_token_parts": {
+          "ciphertext_hex": "48fc7b5b6f9be34cdb7422b1140caf77c1ea101728dddcc5e72bd3317f6bf1be",
+          "hmac_hex": "d9911980de1e0b996a7f3090683f4df39d460163a7f1573880a2f6821270f1c9",
+          "iv_hex": "abbe39c6a4744ad482e73b3d6cb85c51",
+          "note": "raw = 0x80 | ts_be8 | iv16 | aes128-cbc 密文 | hmac-sha256(32)",
+          "timestamp": 1793000000,
+          "version_byte": 128
+        },
+        "input": {
+          "k": "v",
+          "n": 1
+        },
+        "name": "simple_obj",
+        "payload": {
+          "k": "v",
+          "n": 1
+        },
+        "plaintext_utf8": "{\"k\": \"v\", \"n\": 1}",
+        "v": 1,
+        "vools_decrypt": {
+          "ok": true,
+          "payload": {
+            "k": "v",
+            "n": 1
+          },
+          "reason": "OK"
+        }
+      },
+      {
+        "alg": "fernet",
+        "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnEzd0pBSlUyQUpCR1lITDM3WFZzR1JOV3Bpb0lPRndnYnktVGRYeUk3Rkw5NklNcTRXOXdselUyWWVFSGtTQ3k5dVJmSm00REJsZHlFSWxpOWZnRDF1WFZuRGZfcFZ2N2QyNTQyX01hWjNwOTYzWk95bVI0LWVsaEdPN2N4djU3amlGWUZfekVzMEJqdjEwVGdkWDlEbXRULXBUYThOWjZfc2lVWTZBdm53dDZ2a0NrPQ==\"}",
+        "ct": "Z0FBQUFBQnEzd0pBSlUyQUpCR1lITDM3WFZzR1JOV3Bpb0lPRndnYnktVGRYeUk3Rkw5NklNcTRXOXdselUyWWVFSGtTQ3k5dVJmSm00REJsZHlFSWxpOWZnRDF1WFZuRGZfcFZ2N2QyNTQyX01hWjNwOTYzWk95bVI0LWVsaEdPN2N4djU3amlGWUZfekVzMEJqdjEwVGdkWDlEbXRULXBUYThOWjZfc2lVWTZBdm53dDZ2a0NrPQ==",
+        "ct_token_parts": {
+          "ciphertext_hex": "820e17081bcbe4dd5f223b14bf7a20cab85bdc25cd4d987841e4482cbdb917c99b80c195dc842258bd7e00f5b975670dffe956fedddb9e36fcc699de9f7add93b2991e3e7a58463bb731bf9ee3885605",
+          "hmac_hex": "ff312cd018efd744e0757f439ad4fea536bc359ebfb22518e80be7c2deaf9029",
+          "iv_hex": "254d802411981cbdfb5d5b0644d5a98a",
+          "note": "raw = 0x80 | ts_be8 | iv16 | aes128-cbc 密文 | hmac-sha256(32)",
+          "timestamp": 1793000000,
+          "version_byte": 128
+        },
+        "input": {
+          "中文": "值",
+          "列表": [
+            1,
+            2,
+            3
+          ],
+          "嵌套": {
+            "a": null,
+            "b": true
+          }
+        },
+        "name": "unicode_nested",
+        "payload": {
+          "中文": "值",
+          "列表": [
+            1,
+            2,
+            3
+          ],
+          "嵌套": {
+            "a": null,
+            "b": true
+          }
+        },
+        "plaintext_utf8": "{\"中文\": \"值\", \"列表\": [1, 2, 3], \"嵌套\": {\"a\": null, \"b\": true}}",
+        "v": 1,
+        "vools_decrypt": {
+          "ok": true,
+          "payload": {
+            "中文": "值",
+            "列表": [
+              1,
+              2,
+              3
+            ],
+            "嵌套": {
+              "a": null,
+              "b": true
+            }
+          },
+          "reason": "OK"
+        }
+      },
+      {
+        "alg": "fernet",
+        "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnEzd0pBR1diajZDdDhxWVF3WFMwc0xHVHZRbjFaMWZCdWNPZTdHeWROWHN3RndIUVdUVU9jOWJDaG5lOXBxVFVZSGFsSWw4U1h6LWJkM0RpQTdmX080aURFczZXOTZVeVYxSHlfUDhVMVhDQU1XRzg9\"}",
+        "ct": "Z0FBQUFBQnEzd0pBR1diajZDdDhxWVF3WFMwc0xHVHZRbjFaMWZCdWNPZTdHeWROWHN3RndIUVdUVU9jOWJDaG5lOXBxVFVZSGFsSWw4U1h6LWJkM0RpQTdmX080aURFczZXOTZVeVYxSHlfUDhVMVhDQU1XRzg9",
+        "ct_token_parts": {
+          "ciphertext_hex": "7d59d5f06e70e7bb1b274d5ecc05c074164d439cf5b0a19def69a935181da948",
+          "hmac_hex": "97c497cfe6dddc3880edffcee220c4b3a5bde94c95d47cbf3fc5355c200c586f",
+          "iv_hex": "1966e3e82b7ca984305d2d2c2c64ef42",
+          "note": "raw = 0x80 | ts_be8 | iv16 | aes128-cbc 密文 | hmac-sha256(32)",
+          "timestamp": 1793000000,
+          "version_byte": 128
+        },
+        "input": "just-a-string",
+        "name": "plain_string_payload",
+        "payload": {
+          "__text__": "just-a-string"
+        },
+        "plaintext_utf8": "{\"__text__\": \"just-a-string\"}",
+        "v": 1,
+        "vools_decrypt": {
+          "ok": true,
+          "payload": {
+            "__text__": "just-a-string"
+          },
+          "reason": "OK"
+        }
+      }
+    ],
+    "encrypt_secret_cases": [
+      {
+        "ct_token_parts": {
+          "ciphertext_hex": "0862ac19b0b308f0a87b251098a27db9",
+          "hmac_hex": "1b81f1a4c70b7f7dfbea1a2755e9ad7184268bfae5b7906325e6ccc07cc32ab5",
+          "iv_hex": "b34fd871c4062efea278b1d8788259b9",
+          "note": "raw = 0x80 | ts_be8 | iv16 | aes128-cbc 密文 | hmac-sha256(32)",
+          "timestamp": 1793000000,
+          "version_byte": 128
+        },
+        "name": "password_ascii",
+        "plaintext_utf8": "s3cr3t-p@ss",
+        "secret": "RHOP-ENC:Z0FBQUFBQnEzd0pBczBfWWNjUUdMdjZpZUxIWWVJSlp1UWhpckJtd3N3andxSHNsRUppaWZia2JnZkdreHd0X2ZmdnFHaWRWNmExeGhDYUwtdVcza0dNbDVzekFmTU1xdFE9PQ==",
+        "secret_prefix": "RHOP-ENC:"
+      },
+      {
+        "ct_token_parts": {
+          "ciphertext_hex": "02d2e8ce470c08684e02ac4489ee60e6604b3893707b7c3249b56c9c55af039c",
+          "hmac_hex": "9e470f937ce87af13af22a83b72d25a2fdf061c2defba52a75ceee9b5112c009",
+          "iv_hex": "a901a01e26fa123e11be6d27a2a26779",
+          "note": "raw = 0x80 | ts_be8 | iv16 | aes128-cbc 密文 | hmac-sha256(32)",
+          "timestamp": 1793000000,
+          "version_byte": 128
+        },
+        "name": "token_unicode",
+        "plaintext_utf8": "令牌-中文-🔑",
+        "secret": "RHOP-ENC:Z0FBQUFBQnEzd0pBcVFHZ0hpYjZFajRSdm0wbm9xSm5lUUxTNk01SERBaG9UZ0tzUkludVlPWmdTemlUY0h0OE1rbTFiSnhWcndPY25rY1BrM3pvZXZFNjhpcUR0eTBsb3Yzd1ljTGUtNlVxZGM3dW0xRVN3QWs9",
+        "secret_prefix": "RHOP-ENC:"
+      }
+    ],
+    "env_alg": "fernet",
+    "env_version": 1,
+    "fernet_ts": 1793000000,
+    "iv_rule": "sha256('rx-mbt-iv:<第n次os.urandom调用>:<n字节>')[:n]（仅生成窗口内的确定性替身，Fernet 算法本身完全是真实实现）",
+    "kdf": {
+      "dk_len": 32,
+      "fk_b64url": "WdN3SiP7WH5URkuaD7wmd6oLkFTUCFHOWFKJiNhzArM=",
+      "iterations": 200000,
+      "note": "FK = base64url(PBKDF2-SHA256(key, salt=sha256(key)[:16], iterations=200000, dkLen=32))",
+      "salt_hex": "7067a45fb3f94cf54e8d89daaa5d5193",
+      "salt_rule": "sha256(key_bytes)[:16]",
+      "scheme": "PBKDF2-HMAC-SHA256"
+    },
+    "key": "rhop-test-key-2026",
+    "negative_cases": [
+      {
+        "expect": {
+          "ok": false,
+          "reason": "MALFORMED"
+        },
+        "input": "definitely-not-json",
+        "name": "not_json",
+        "vools_actual_reason": "MALFORMED"
+      },
+      {
+        "expect": {
+          "ok": false,
+          "reason": "MALFORMED"
+        },
+        "input": "[1, 2]",
+        "name": "json_but_not_object",
+        "vools_actual_reason": "MALFORMED"
+      },
+      {
+        "expect": {
+          "ok": false,
+          "reason": "MALFORMED"
+        },
+        "input": "{\"v\": 2, \"alg\": \"fernet\", \"ct\": \"x\"}",
+        "name": "wrong_version",
+        "vools_actual_reason": "MALFORMED"
+      },
+      {
+        "expect": {
+          "ok": false,
+          "reason": "MALFORMED"
+        },
+        "input": "{\"v\": 1, \"alg\": \"xor\", \"ct\": \"x\"}",
+        "name": "wrong_alg",
+        "vools_actual_reason": "MALFORMED"
+      },
+      {
+        "expect": {
+          "ok": false,
+          "reason": "MALFORMED"
+        },
+        "input": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"\"}",
+        "name": "empty_ct",
+        "vools_actual_reason": "MALFORMED"
+      },
+      {
+        "expect": {
+          "ok": false,
+          "reason": "BAD_TOKEN"
+        },
+        "input": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"AAAA\"}",
+        "name": "garbage_ct",
+        "vools_actual_reason": "BAD_TOKEN"
+      },
+      {
+        "encrypted_with_key": "another-key-2026",
+        "expect": {
+          "ok": false,
+          "reason": "BAD_TOKEN"
+        },
+        "input": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnEzd0pBSlBGTmx0anBNZE5xSUM4anJjTWxpUzBWQlJnNmxSWGFBMHJXaWZIUC1uYWh1cGRFbEQtYmprT3ZuM2txVnBNR09GMVljUnVnTldwamp1SjVkWmtnd2c9PQ==\"}",
+        "name": "wrong_key",
+        "note": "密文由 another-key-2026 加密，用 fixture 的标准 key 解密必须失败",
+        "vools_actual_reason": "BAD_TOKEN"
+      }
+    ],
+    "secret_prefix": "RHOP-ENC:",
+    "skipped": false
+  },
+  "digest": {
+    "hmac_sha256": [
+      {
+        "hex": "520afc274a9f0502c752ac5eda2be0f549b8fd1a310df33f5e79161351c55fc6",
+        "key_utf8": "rhop-hmac-key",
+        "message_utf8": "hello rhop",
+        "name": "short"
+      },
+      {
+        "hex": "ce53bd16926449b1560c2aab3583f72df174c124d78450a7bfb7ea25394d0fc6",
+        "key_utf8": "密钥",
+        "message_utf8": "消息内容",
+        "name": "unicode"
+      }
+    ],
+    "md5": [
+      {
+        "hex": "d41d8cd98f00b204e9800998ecf8427e",
+        "input_utf8": "",
+        "input_utf8_hex": "",
+        "name": "empty"
+      },
+      {
+        "hex": "900150983cd24fb0d6963f7d28e17f72",
+        "input_utf8": "abc",
+        "input_utf8_hex": "616263",
+        "name": "abc"
+      },
+      {
+        "hex": "49493b14874ac6e99b8645aee8fdf91b",
+        "input_utf8": "中文校验",
+        "input_utf8_hex": "e4b8ade69687e6a0a1e9aa8c",
+        "name": "unicode"
+      },
+      {
+        "hex": "fa590025a9e55240b93c5c036ce9c23d",
+        "input_utf8": "rhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhop",
+        "input_utf8_hex": "72686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f70",
+        "name": "long"
+      },
+      {
+        "hex": "90926673ee0aa0cb4ce7f53d4172e237",
+        "input_utf8": "{\"a\": 1, \"b\": \"中文\"}",
+        "input_utf8_hex": "7b2261223a20312c202262223a2022e4b8ade69687227d",
+        "name": "json"
+      }
+    ],
+    "note": "sha256/md5 对 UTF-8 字节；pbkdf2 迭代 1000 次（测试口径，非生产参数）",
+    "pbkdf2_hmac_sha256": [
+      {
+        "dk_len": 32,
+        "hex": "d483321b8c65fc041a57b1bcf206c5a3361f65c50fa37e52f4adb305958ff216",
+        "iterations": 1000,
+        "name": "basic",
+        "password_utf8": "password-123",
+        "salt_utf8": "salt-abc"
+      }
+    ],
+    "sha256": [
+      {
+        "hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "input_utf8": "",
+        "input_utf8_hex": "",
+        "name": "empty"
+      },
+      {
+        "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "input_utf8": "abc",
+        "input_utf8_hex": "616263",
+        "name": "abc"
+      },
+      {
+        "hex": "620707171a865f6d3488f5a977ff4631dc896f8b96560bb4c7fb6d5c1e9b45ce",
+        "input_utf8": "中文校验",
+        "input_utf8_hex": "e4b8ade69687e6a0a1e9aa8c",
+        "name": "unicode"
+      },
+      {
+        "hex": "ae0fb3850a88b18f7b91df75d6f0f6ea526274dc87634be96fc13c6c974ea58d",
+        "input_utf8": "rhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhoprhop",
+        "input_utf8_hex": "72686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f7072686f70",
+        "name": "long"
+      },
+      {
+        "hex": "1c1799998da79b2fed78696a08c9a24388d422e3314b9efabf8efe4d7af9d645",
+        "input_utf8": "{\"a\": 1, \"b\": \"中文\"}",
+        "input_utf8_hex": "7b2261223a20312c202262223a2022e4b8ade69687227d",
+        "name": "json"
+      }
+    ]
+  },
+  "envelope": [
+    {
+      "checksum": "sha256:248e08c31f172d69360aec041047471b46b8456e8630a6e720b34db1eee98f05",
+      "checksum_match": true,
+      "checksum_preimage_sha256": "248e08c31f172d69360aec041047471b46b8456e8630a6e720b34db1eee98f05",
+      "checksum_preimage_utf8": "{\"created_at\": \"2026-10-27T11:00:00Z\", \"error\": null, \"hops_seen\": [], \"payload\": {\"cmd\": \"jump.probe\", \"ok\": true, \"参数\": {\"目标\": \"测试机\", \"重试\": 2}, \"数组\": [1, \"二\", {\"三\": 3}], \"空\": null}, \"result\": null, \"side\": \"requester\", \"signature\": null, \"status\": \"pending\", \"task_id\": \"task-001\", \"updated_at\": \"2026-10-27T11:00:00Z\", \"v\": 1, \"version\": 1}",
+      "fields": {
+        "checksum": "sha256:248e08c31f172d69360aec041047471b46b8456e8630a6e720b34db1eee98f05",
+        "created_at": "2026-10-27T11:00:00Z",
+        "error": null,
+        "hops_seen": [],
+        "payload": {
+          "cmd": "jump.probe",
+          "ok": true,
+          "参数": {
+            "目标": "测试机",
+            "重试": 2
+          },
+          "数组": [
+            1,
+            "二",
+            {
+              "三": 3
+            }
+          ],
+          "空": null
+        },
+        "result": null,
+        "side": "requester",
+        "signature": null,
+        "status": "pending",
+        "task_id": "task-001",
+        "updated_at": "2026-10-27T11:00:00Z",
+        "version": 1
+      },
+      "integrity_verify": [
+        true,
+        ""
+      ],
+      "name": "minimal_pending",
+      "to_rhop_bytes_sha256": "f0fbde4ff1f391c515cdc1e30a7c351853bf7f619f5df1e1f693411bd8a56d01",
+      "to_rhop_bytes_utf8": "{\"checksum\": \"sha256:248e08c31f172d69360aec041047471b46b8456e8630a6e720b34db1eee98f05\", \"created_at\": \"2026-10-27T11:00:00Z\", \"error\": null, \"hops_seen\": [], \"payload\": {\"cmd\": \"jump.probe\", \"ok\": true, \"参数\": {\"目标\": \"测试机\", \"重试\": 2}, \"数组\": [1, \"二\", {\"三\": 3}], \"空\": null}, \"result\": null, \"side\": \"requester\", \"signature\": null, \"status\": \"pending\", \"task_id\": \"task-001\", \"updated_at\": \"2026-10-27T11:00:00Z\", \"v\": 1, \"version\": 1}",
+      "to_rhop_bytes_utf8_hex": "7b22636865636b73756d223a20227368613235363a32343865303863333166313732643639333630616563303431303437343731623436623834353665383633306136653732306233346462316565653938663035222c2022637265617465645f6174223a2022323032362d31302d32375431313a30303a30305a222c20226572726f72223a206e756c6c2c2022686f70735f7365656e223a205b5d2c20227061796c6f6164223a207b22636d64223a20226a756d702e70726f6265222c20226f6b223a20747275652c2022e58f82e695b0223a207b22e79baee6a087223a2022e6b58be8af95e69cba222c2022e9878de8af95223a20327d2c2022e695b0e7bb84223a205b312c2022e4ba8c222c207b22e4b889223a20337d5d2c2022e7a9ba223a206e756c6c7d2c2022726573756c74223a206e756c6c2c202273696465223a2022726571756573746572222c20227369676e6174757265223a206e756c6c2c2022737461747573223a202270656e64696e67222c20227461736b5f6964223a20227461736b2d303031222c2022757064617465645f6174223a2022323032362d31302d32375431313a30303a30305a222c202276223a20312c202276657273696f6e223a20317d",
+      "v": 1
+    },
+    {
+      "checksum": "sha256:ce9a0b78795987da9845780059f460dbc182f716f480b82020f9848b94756c40",
+      "checksum_match": true,
+      "checksum_preimage_sha256": "ce9a0b78795987da9845780059f460dbc182f716f480b82020f9848b94756c40",
+      "checksum_preimage_utf8": "{\"created_at\": \"2026-10-27T11:00:00Z\", \"error\": null, \"hops_seen\": [\"requester\", \"executor\"], \"payload\": {\"cmd\": \"echo\", \"文本\": \"中文载荷\"}, \"result\": {\"ok\": true, \"指标\": [1, 2, 3], \"结论\": \"完成\"}, \"side\": \"executor\", \"signature\": \"sha256:deadbeef\", \"status\": \"done\", \"task_id\": \"task-002\", \"updated_at\": \"2026-10-27T12:30:00Z\", \"v\": 1, \"version\": 3}",
+      "fields": {
+        "checksum": "sha256:ce9a0b78795987da9845780059f460dbc182f716f480b82020f9848b94756c40",
+        "created_at": "2026-10-27T11:00:00Z",
+        "error": null,
+        "hops_seen": [
+          "requester",
+          "executor"
+        ],
+        "payload": {
+          "cmd": "echo",
+          "文本": "中文载荷"
+        },
+        "result": {
+          "ok": true,
+          "指标": [
+            1,
+            2,
+            3
+          ],
+          "结论": "完成"
+        },
+        "side": "executor",
+        "signature": "sha256:deadbeef",
+        "status": "done",
+        "task_id": "task-002",
+        "updated_at": "2026-10-27T12:30:00Z",
+        "version": 3
+      },
+      "integrity_verify": [
+        true,
+        ""
+      ],
+      "name": "full_done",
+      "to_rhop_bytes_sha256": "c674d2196fc75f96d2992252f6e1a7a2cb88c59c579c226a15936917db086dca",
+      "to_rhop_bytes_utf8": "{\"checksum\": \"sha256:ce9a0b78795987da9845780059f460dbc182f716f480b82020f9848b94756c40\", \"created_at\": \"2026-10-27T11:00:00Z\", \"error\": null, \"hops_seen\": [\"requester\", \"executor\"], \"payload\": {\"cmd\": \"echo\", \"文本\": \"中文载荷\"}, \"result\": {\"ok\": true, \"指标\": [1, 2, 3], \"结论\": \"完成\"}, \"side\": \"executor\", \"signature\": \"sha256:deadbeef\", \"status\": \"done\", \"task_id\": \"task-002\", \"updated_at\": \"2026-10-27T12:30:00Z\", \"v\": 1, \"version\": 3}",
+      "to_rhop_bytes_utf8_hex": "7b22636865636b73756d223a20227368613235363a63653961306237383739353938376461393834353738303035396634363064626331383266373136663438306238323032306639383438623934373536633430222c2022637265617465645f6174223a2022323032362d31302d32375431313a30303a30305a222c20226572726f72223a206e756c6c2c2022686f70735f7365656e223a205b22726571756573746572222c20226578656375746f72225d2c20227061796c6f6164223a207b22636d64223a20226563686f222c2022e69687e69cac223a2022e4b8ade69687e8bdbde88db7227d2c2022726573756c74223a207b226f6b223a20747275652c2022e68c87e6a087223a205b312c20322c20335d2c2022e7bb93e8aeba223a2022e5ae8ce68890227d2c202273696465223a20226578656375746f72222c20227369676e6174757265223a20227368613235363a6465616462656566222c2022737461747573223a2022646f6e65222c20227461736b5f6964223a20227461736b2d303032222c2022757064617465645f6174223a2022323032362d31302d32375431323a33303a30305a222c202276223a20312c202276657273696f6e223a20337d",
+      "v": 1
+    },
+    {
+      "base": "minimal_pending",
+      "expect_error": true,
+      "expect_error_contains": "checksum mismatch",
+      "name": "tampered_checksum",
+      "to_rhop_bytes_utf8_hex": "7b22636865636b73756d223a20227368613235363a32343865303863333166313732643639333630616563303431303437343731623436623834353665383633306136653732306233346462316565653938663030222c2022637265617465645f6174223a2022323032362d31302d32375431313a30303a30305a222c20226572726f72223a206e756c6c2c2022686f70735f7365656e223a205b5d2c20227061796c6f6164223a207b22636d64223a20226a756d702e70726f6265222c20226f6b223a20747275652c2022e58f82e695b0223a207b22e79baee6a087223a2022e6b58be8af95e69cba222c2022e9878de8af95223a20327d2c2022e695b0e7bb84223a205b312c2022e4ba8c222c207b22e4b889223a20337d5d2c2022e7a9ba223a206e756c6c7d2c2022726573756c74223a206e756c6c2c202273696465223a2022726571756573746572222c20227369676e6174757265223a206e756c6c2c2022737461747573223a202270656e64696e67222c20227461736b5f6964223a20227461736b2d303031222c2022757064617465645f6174223a2022323032362d31302d32375431313a30303a30305a222c202276223a20312c202276657273696f6e223a20317d",
+      "vools_actual_error": "checksum mismatch: envelope may be corrupted"
+    }
+  ],
+  "key": "rhop-test-key-2026",
+  "moonbit_output_schema": {
+    "description": "MoonBit 侧（test-suit/rhop_js, js 目标）把实际产出写成这个形状的 JSON，再交给 scripts/verify_interop.py 用 Python vools 逐项复核。未产出的分节可以整节省略或置为 null。",
+    "sections": {
+      "canonical_json": [
+        {
+          "actual": "<canonical_json 的实际输出>",
+          "name": "<与 fixture.canonical_json[i].name 对应>"
+        }
+      ],
+      "crypto": {
+        "encrypt_json": [
+          {
+            "ciphertext_json_text": "<RhopCrypto::encrypt_json 的输出文本>",
+            "decrypt_payload": "<可选：用自己的 decrypt_verify 解 fixture 里的 vools 密文后得到的 payload>",
+            "name": "<fixture.crypto.encrypt_json_cases[i].name>"
+          }
+        ],
+        "encrypt_secret": [
+          {
+            "name": "<...>",
+            "secret": "<RHOP-ENC:...>"
+          }
+        ]
+      },
+      "digest": {
+        "hmac_sha256": [
+          {
+            "hex": "<hex>",
+            "name": "<fixture.digest.hmac_sha256[i].name>"
+          }
+        ],
+        "md5": [
+          {
+            "hex": "<md5_hex>",
+            "name": "<fixture.digest.md5[i].name>"
+          }
+        ],
+        "pbkdf2_hmac_sha256": [
+          {
+            "hex": "<hex>",
+            "name": "<fixture.digest.pbkdf2_hmac_sha256[i].name>"
+          }
+        ],
+        "sha256": [
+          {
+            "hex": "<sha256_hex_of_utf8>",
+            "name": "<fixture.digest.sha256[i].name>"
+          }
+        ]
+      },
+      "envelope": [
+        {
+          "bytes_utf8_hex": "<可选：同上字节的 hex>",
+          "checksum": "<Envelope.checksum>",
+          "name": "<fixture.envelope[i].name>",
+          "to_rhop_bytes_utf8": "<Envelope::to_rhop_bytes 解出的 utf8 文本>"
+        }
+      ],
+      "signer": {
+        "file_hash": [
+          {
+            "name": "<fixture.signer.file_hash.cases[i].name>",
+            "signature": "<FileHashSigner::sign 输出>"
+          }
+        ]
+      }
+    },
+    "top_level": {
+      "produced_by": "自由文本，例如 'moon test --target js (test-suit/rhop_js)'",
+      "schema": "rhop-moonbit-output",
+      "schema_version": 1
+    },
+    "verify_command": "python scripts/verify_interop.py <moonbit_output.json>"
+  },
+  "parity_notes": {
+    "canonicalizations": {
+      "envelope_checksum": {
+        "ensure_ascii": false,
+        "moonbit_expect": "canonical_json(Json) / canonical_json_utf8(Json) 必须与之一致",
+        "python": "json.dumps(data, ensure_ascii=False, sort_keys=True)",
+        "separators": "Python 默认 ', ' / ': '",
+        "unicode": "非 ASCII 原样输出（中文键值保持中文字面）",
+        "used_by": "vools.rhop.envelope.Envelope._compute_checksum / to_rhop_bytes",
+        "verified_by": "fixtures.canonical_json[*] + fixtures.envelope[*].checksum_preimage_utf8"
+      },
+      "file_hash_signature": {
+        "ensure_ascii": true,
+        "moonbit_expect": "FileHashSigner 的 preimage 必须用 ensure_ascii=True 口径（如需新增 canonical_json_ascii），**不得**复用 envelope 的 ensure_ascii=False canonical_json",
+        "python": "json.dumps({'task_id': ..., 'result': ...}, sort_keys=True)",
+        "separators": "Python 默认 ', ' / ': '",
+        "trap": "若 signer 复用 canonical_json(ensure_ascii=False)，ASCII result 仍然对，但含中文 result 的签名会与 vools 不一致 —— 这是最容易漏测的一类假 GREEN。",
+        "unicode": "非 ASCII 转义为 \\uXXXX（中文按键/值全部转义）",
+        "used_by": "vools.rhop.signer.FileHashSigner.sign",
+        "verified_by": "fixtures.signer.file_hash.cases[*].preimage（含 unicode_result 反例）"
+      }
+    },
+    "decision": {
+      "decided_at": "2026-10-27",
+      "decided_by": "lead（人类指挥官授权代行）",
+      "ruling": "按 vools 真实口径精确复刻：FileHashSigner preimage 用默认 ensure_ascii=True；envelope checksum 用 ensure_ascii=False。不把 vools 的不一致「改正」，因为跨实现互操作以既有 vools 行为为准。"
+    },
+    "other_notable_differences": [
+      {
+        "detail": "vools 用 json.dumps 默认分隔符（冒号/逗号后带空格，如 {\"v\": 1, \"alg\": \"fernet\", \"ct\": \"...\"}）。解密方只做 JSON 解析，所以 MoonBit 侧输出文本不必逐字复刻；但若有「全文相等」断言，需按带空格形式写。",
+        "topic": "encrypt_json 输出文本分隔符"
+      },
+      {
+        "detail": "RhopCrypto.encrypt_json 接受 str：若本身是合法 JSON 文本则原样加密；否则包成 {\"__text__\": \"...\"} 再加密。见 fixtures.crypto.encrypt_json_cases 的 plain_string_payload。",
+        "topic": "字符串 payload 的非 JSON 包装"
+      },
+      {
+        "detail": "VText.decrypt 解密失败时回退原文/空串并发 RuntimeWarning；RhopCrypto.decrypt_verify 在其上做启发式，才区分出 BAD_TOKEN / NOT_JSON。MoonBit 侧需要显式实现这三态。见 fixtures.crypto.negative_cases。",
+        "topic": "解密失败的静默回退"
+      }
+    ],
+    "summary": "vools 的 envelope checksum 与 FileHashSigner 用的**不是同一套** JSON 规范化；本项目按 vools 真实行为精确复刻，两侧口径都保留。"
+  },
+  "schema": "rhop-conformance-vectors",
+  "schema_version": 1,
+  "signer": {
+    "file_hash": {
+      "algo": "sha256",
+      "cases": [
+        {
+          "name": "ascii_result",
+          "preimage": "{\"result\": {\"elapsed_ms\": 12, \"rows\": 3, \"status\": \"done\"}, \"task_id\": \"task-001\"}",
+          "preimage_ensure_ascii": true,
+          "result": {
+            "elapsed_ms": 12,
+            "rows": 3,
+            "status": "done"
+          },
+          "signature": "sha256:979367e98855937a0a164b19c6c8cbd925bf6f334994b10111c1515d675cea2d",
+          "task_id": "task-001",
+          "verify_ok": true
+        },
+        {
+          "name": "unicode_result",
+          "preimage": "{\"result\": {\"\\u6307\\u6807\": [1, 2], \"\\u7ed3\\u8bba\": \"\\u5b8c\\u6210\"}, \"task_id\": \"task-002\"}",
+          "preimage_ensure_ascii": true,
+          "result": {
+            "指标": [
+              1,
+              2
+            ],
+            "结论": "完成"
+          },
+          "signature": "sha256:008d35d8bc6adba19859645f59bbe206ed5f0824d2d855e49b7e0a0b6be11194",
+          "task_id": "task-002",
+          "verify_ok": true
+        },
+        {
+          "name": "nested_result",
+          "preimage": "{\"result\": {\"error\": null, \"result\": {\"items\": [\"a\", \"b\"], \"ok\": true}}, \"task_id\": \"task-003\"}",
+          "preimage_ensure_ascii": true,
+          "result": {
+            "error": null,
+            "result": {
+              "items": [
+                "a",
+                "b"
+              ],
+              "ok": true
+            }
+          },
+          "signature": "sha256:32803b55a365cd8d7e85dc2a36c642adb08d7079caf49a1480f9ab14a6b0c306",
+          "task_id": "task-003",
+          "verify_ok": true
+        }
+      ],
+      "format": "sha256:<hex>",
+      "preimage_rule": "json.dumps({'task_id': ..., 'result': ...}, sort_keys=True) —— vools 原实现用默认 ensure_ascii=True（非 ASCII 会转义成 \\uXXXX），分隔符为 Python 默认 ', ' / ': '"
+    },
+    "npu": {
+      "expect_sign_is_null": true,
+      "marker": "NPU_MARKER",
+      "note": "NPUSigner.sign 在拿不到 npu-smi 序列号时返回 None（本机无 npu-smi 即 None）；签名格式 <marker>:<serial>:<md5>",
+      "sign": null
+    }
+  },
+  "source": {
+    "impl": "vools-rhop",
+    "module_relpath": "vools/rhop/envelope.py",
+    "python": "生成脚本只用标准库 + cryptography；同一份 vools 源码在 py3.10/py3.13 产出逐字节相同（绝对路径不入 fixture）",
+    "version": "0.9.0"
+  },
+  "status_flow": {
+    "side": {
+      "executor": "executor",
+      "other_of_executor": "requester",
+      "other_of_requester": "executor",
+      "requester": "requester"
+    },
+    "table": {
+      "cancelled": {
+        "allowed": [],
+        "is_terminal": true
+      },
+      "claimed": {
+        "allowed": [
+          "cancelled",
+          "running"
+        ],
+        "is_terminal": false
+      },
+      "done": {
+        "allowed": [],
+        "is_terminal": true
+      },
+      "failed": {
+        "allowed": [],
+        "is_terminal": true
+      },
+      "pending": {
+        "allowed": [
+          "cancelled",
+          "claimed"
+        ],
+        "is_terminal": false
+      },
+      "running": {
+        "allowed": [
+          "done",
+          "failed"
+        ],
+        "is_terminal": false
+      }
+    }
+  }
+}

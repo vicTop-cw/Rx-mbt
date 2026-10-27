@@ -1,0 +1,14 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+options(
+  targets: {
+    "crypto_test.mbt": [ "js" ],
+    "transport_test.mbt": [ "js" ],
+    "watch_test.mbt": [ "js" ],
+    "relay_test.mbt": [ "js" ],
+  },
+)
