@@ -1,5 +1,6 @@
 import {
   "vicTop-cw/RX-MBT/rhop" @rp,
+  "vicTop-cw/RX-MBT/rx",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
