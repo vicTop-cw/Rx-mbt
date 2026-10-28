@@ -93,7 +93,7 @@ test "digest: MD5 输出 16 字节、中文 UTF-8、长输入" {
   )
   assert_eq(
     @rp.md5_hex_of_utf8("a".repeat(1000)),
-    @rp.md5_hex_of_utf8("a".repeat(1000)),
+    "cabe45dcc9ae5b66ba86600cca6b8ba8",
   )
 }
 

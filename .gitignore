@@ -34,3 +34,5 @@ fist-mbt.db-wal
 .mcp.json
 @TMP@/
 rhop-data/
+.moon-build.lock/
+fist-mbt/reports/run-logs/

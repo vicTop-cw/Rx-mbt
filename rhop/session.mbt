@@ -79,6 +79,43 @@ pub fn Role::parse(text : String) -> Result[Role, String] {
 }
 
 ///|
+/// 包文件名白名单校验（安全边界：防路径穿越 / 任意路径写入）。
+///
+/// 规则：长度 1..128；字符集仅 `A-Za-z0-9._-`；禁止 `.` / `..` 及任何连续 `..`。
+/// 路径分隔符、盘符、URI 前缀、空白与控制字符都因字符集被拒 ——
+/// `send_package` / `recv_package` / `remove_package` 与 `interact` 的缺省包名
+/// 统一走这一处校验，介质层因此拿不到可穿越的文件名。
+pub fn safe_filename(name : String) -> Result[String, String] {
+  if name.length() == 0 {
+    return Err("包文件名不能为空")
+  }
+  if name.length() > 128 {
+    return Err("包文件名过长（最多 128 字符）")
+  }
+  if name.contains("..") {
+    return Err(
+      "包文件名不允许包含 \"..\"（防路径穿越）: " + name,
+    )
+  }
+  for c in name {
+    let code = c.to_int()
+    let ok = (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      code == 46 ||
+      code == 95 ||
+      code == 45
+    if not(ok) {
+      return Err(
+        "包文件名只允许 A-Za-z0-9._-，遇到非法字符（码点 \{code}）: " +
+        name,
+      )
+    }
+  }
+  Ok(name)
+}
+
+///|
 /// 一次配置驱动会话：角色 + 介质 + 中转 + 密钥。
 ///
 /// `shared` 用 `SharedPathView`（多端写/读视图）；`online` 是按优先级排列的在线通道；
@@ -201,19 +238,88 @@ fn Session::pick_online(self : Session) -> &OnlineChannel? {
 }
 
 ///|
-/// 取可用的 shared path 视图（未配置/不可达返回 None）。
+/// shared path 单侧可用性探测（**无副作用**：不建目录、不写文件）。
+///
+/// 已知本地根的介质用 `exists(".")` / `exists("..")` 纯探测：
+/// - 读侧：根目录已存在（且是目录）；
+/// - 写侧：根目录已存在，或其父目录已存在（真正写入时由 write_text 建目录）。
+///
+/// 未知根的介质（内存 / 远端 / HTTP 抽象实现）没有可探测的本地状态，
+/// 回退契约 `available()` —— 这类实现自己保证无副作用。
+///
+/// 为什么不再直接用 `SharedPath::available`：`LocalSharedPath::available`
+/// 的实现是 mkdir -p，探测本身会产生副作用；而 `SharedPathView::available`
+/// 又要求写端可建目录，导致「写端只读 + 读端可读」的接收端被判整条不可用。
+/// 端点适配器（`EndpointSharedPath`，`root()` 恒 `None`）是否指向本地文件系统。
+///
+/// 本地端点**不能用** `available()` 探测：`LocalSharedPath::available` 走
+/// `fs_ensure_dir`（会建目录），在 `available()/select()` 这类纯探测路径上产生副作用。
+fn sp_is_local_endpoint(sp : &SharedPath) -> Bool {
+  let n = SharedPath::name(sp)
+  n.has_prefix("shared:local:") || n.has_prefix("shared:file-url:")
+}
+
+///|
+/// 单侧可用性探测（**无副作用**）：不建目录、不写文件。
+///
+/// - `root()` 已知（`LocalSharedPath` / 测试 mock）：用存在性判定，
+///   读侧要求根目录已存在，写侧要求根目录或父目录存在（写入时会自建目录）。
+/// - 端点适配器：先做存在性探测（本地/远端都无副作用）；本地端点若连父目录都不存在
+///   则直接判不可用（绝不为了探测而建目录）；远端端点退回 `available()` 探活。
+fn sp_side_usable(sp : &SharedPath, for_write : Bool) -> Bool {
+  let dot = SharedPath::exists(sp, ".")
+  if for_write {
+    if dot || SharedPath::exists(sp, "..") {
+      return true
+    }
+  } else if dot {
+    return true
+  }
+  match SharedPath::root(sp) {
+    Some(_) => false
+    None =>
+      // 本地端点：存在性已给出答案，不再用 available()（它会建目录）
+      if sp_is_local_endpoint(sp) {
+        false
+      } else {
+        SharedPath::available(sp)
+      }
+  }
+}
+
+///|
+/// 取读端可用的 shared 视图（未配置 / 读端不可用返回 None）。
 fn Session::pick_shared(self : Session) -> SharedPathView? {
   match self.shared {
     None => None
-    Some(view) => if SharedPath::available(view) { Some(view) } else { None }
+    Some(view) =>
+      if sp_side_usable(view.read_view, false) {
+        Some(view)
+      } else {
+        None
+      }
+  }
+}
+
+///|
+/// 取写端可用的 shared 视图（发送侧专用：只读介质不参与发送）。
+fn Session::pick_shared_write(self : Session) -> SharedPathView? {
+  match self.shared {
+    None => None
+    Some(view) =>
+      if sp_side_usable(view.write_view, true) {
+        Some(view)
+      } else {
+        None
+      }
   }
 }
 
 ///|
 /// 介质链是否至少有一条可用（中转 > 在线 > shared path）。
 ///
-/// 注意：会**真实探测**（中转 /health、在线通道 available、shared 目录可建），
-/// 因此不要在热路径反复调用。
+/// 注意：会**真实探测**（中转 /health、在线通道 available、shared 存在性），
+/// 但探测过程**不产生副作用**（不建目录、不写文件），因此可用于配置自检与热路径。
 pub fn Session::available(self : Session) -> Bool {
   match self.pick_relay() {
     Some(_) => true
@@ -223,7 +329,11 @@ pub fn Session::available(self : Session) -> Bool {
         None =>
           match self.pick_shared() {
             Some(_) => true
-            None => false
+            None =>
+              match self.pick_shared_write() {
+                Some(_) => true
+                None => false
+              }
           }
       }
   }
@@ -266,9 +376,20 @@ pub fn Session::select(self : Session) -> TransportSelection {
                 SharedPath::name(view),
               )
             None =>
-              TransportSelection::new(
-                "none", "", false, "无可用的传输介质（relay/online/shared 全不可达）",
-              )
+              match self.pick_shared_write() {
+                Some(view) =>
+                  TransportSelection::new(
+                    "shared",
+                    SharedPath::name(view),
+                    false,
+                    "在线通道均不可达，回退 shared path（仅写端可用）: " +
+                    SharedPath::name(view),
+                  )
+                None =>
+                  TransportSelection::new(
+                    "none", "", false, "无可用的传输介质（relay/online/shared 全不可达）",
+                  )
+              }
           }
       }
   }
@@ -284,10 +405,14 @@ pub fn Session::select(self : Session) -> TransportSelection {
 /// 成功：`{"status": "ok", "transport": <relay|online|shared>, "filename": ..., "role": ...}`
 /// 传输层失败：`{"status": "error", "transport": ..., "filename": ..., "reason": ...}`
 ///
-/// `Err` 只用于**配置/角色类**错误（vools 抛 ValueError/IOError 的等价物）：
-/// RELAY 角色不允许发送、未配置密钥、加密失败、通道链全不可达。
+/// `Err` 只用于**参数 / 配置 / 角色类**错误（vools 抛 ValueError/IOError 的等价物）：
+/// 文件名非法（`safe_filename` 拒绝）、RELAY 角色不允许发送、未配置密钥、加密失败、
+/// 通道链全不可达。
 /// 传输层 I/O 失败归一成可序列化的错误结构（调用方必须判 `status`），
 /// 这样跨进程回执可以原样转发，而不必让调用方分辨「异常 vs 回执」。
+///
+/// 分流原则（全包统一，勿再反复）：**调用方传错参数 / 配置不成立 → `Err(String)`；
+/// 介质在对侧"尽力了但失败"（读不到、写不进、解密不通过）→ `Ok({status:"error"})` 收据**。
 pub fn Session::send_package(
   self : Session,
   filename : String,
@@ -295,6 +420,11 @@ pub fn Session::send_package(
 ) -> Result[Json, String] {
   if self.role == Role::Relay {
     return Err("RELAY 角色不发送载荷，仅提供中转")
+  }
+  // 安全边界：文件名先过白名单，介质层拿不到可穿越路径
+  let name = match safe_filename(filename) {
+    Ok(n) => n
+    Err(e) => return Err("rhop session: " + e)
   }
   let crypto = match self.crypto {
     Some(c) => c
@@ -308,15 +438,15 @@ pub fn Session::send_package(
     self.pick_relay() {
     Some(rc) => {
       let ch : &OnlineChannel = rc
-      ("relay", OnlineChannel::send(ch, filename, token_text))
+      ("relay", OnlineChannel::send(ch, name, token_text))
     }
     None =>
       match self.pick_online() {
-        Some(ch) => ("online", OnlineChannel::send(ch, filename, token_text))
+        Some(ch) => ("online", OnlineChannel::send(ch, name, token_text))
         None =>
-          match self.pick_shared() {
+          match self.pick_shared_write() {
             Some(view) =>
-              ("shared", SharedPath::write_text(view, filename, token_text))
+              ("shared", SharedPath::write_text(view, name, token_text))
             None =>
               (
                 "none",
@@ -328,6 +458,16 @@ pub fn Session::send_package(
       }
   }
   if label == "none" {
+    // 只读介质：读端可用但写端不可用 —— 给出可诊断原因（不是"全不可达"）
+    let only_readable = match self.shared {
+      Some(view) => sp_side_usable(view.read_view, false)
+      None => false
+    }
+    if only_readable {
+      return Err(
+        "rhop session: shared path 写端不可用（介质只读）；如需发送请配置可写 write 视图",
+      )
+    }
     return Err(
       "rhop session: 无可用的传输介质（relay/online/shared 全不可达）",
     )
@@ -338,7 +478,7 @@ pub fn Session::send_package(
         Json::object({
           "status": Json::string("error"),
           "transport": Json::string(label),
-          "filename": Json::string(filename),
+          "filename": Json::string(name),
           "reason": Json::string(e),
         }),
       )
@@ -347,7 +487,7 @@ pub fn Session::send_package(
         Json::object({
           "status": Json::string("ok"),
           "transport": Json::string(label),
-          "filename": Json::string(filename),
+          "filename": Json::string(name),
           "role": Json::string(self.role.to_string()),
         }),
       )
@@ -362,13 +502,20 @@ pub fn Session::send_package(
 ///   - 传输层读失败：reason 为可诊断中文原因；
 ///   - 解密验证失败：reason 为四态字面量 `MALFORMED` / `BAD_TOKEN` / `NOT_JSON`。
 ///
-/// `Err` 同样只用于配置/角色类错误（RELAY 角色、未配置密钥、通道链全不可达）。
+/// `Err` 同样只用于参数/配置/角色类错误：文件名非法（`safe_filename`）、
+/// RELAY 角色、未配置密钥、通道链全不可达。介质读失败与解密失败一律走
+/// `status:"error"` 收据 —— 见 `send_package` 文档里的分流原则。
 pub fn Session::recv_package(
   self : Session,
   filename : String,
 ) -> Result[Json, String] {
   if self.role == Role::Relay {
     return Err("RELAY 角色不消费载荷，仅提供中转")
+  }
+  // 安全边界：文件名先过白名单（与发送侧同一规则）
+  let name = match safe_filename(filename) {
+    Ok(n) => n
+    Err(e) => return Err("rhop session: " + e)
   }
   let crypto = match self.crypto {
     Some(c) => c
@@ -378,14 +525,14 @@ pub fn Session::recv_package(
     self.pick_relay() {
     Some(rc) => {
       let ch : &OnlineChannel = rc
-      ("relay", OnlineChannel::receive(ch, filename))
+      ("relay", OnlineChannel::receive(ch, name))
     }
     None =>
       match self.pick_online() {
-        Some(ch) => ("online", OnlineChannel::receive(ch, filename))
+        Some(ch) => ("online", OnlineChannel::receive(ch, name))
         None =>
           match self.pick_shared() {
-            Some(view) => ("shared", SharedPath::read_text(view, filename))
+            Some(view) => ("shared", SharedPath::read_text(view, name))
             None =>
               (
                 "none",
@@ -397,17 +544,26 @@ pub fn Session::recv_package(
       }
   }
   if label == "none" {
+    let only_writable = match self.shared {
+      Some(view) => sp_side_usable(view.write_view, true)
+      None => false
+    }
+    if only_writable {
+      return Err(
+        "rhop session: shared path 读端不可用（介质无读取视图）；如需接收请配置可读 read 视图",
+      )
+    }
     return Err(
       "rhop session: 无可用的传输介质（relay/online/shared 全不可达）",
     )
   }
   let token_text = match read {
-    Err(e) => return Ok(recv_error(label, filename, e))
+    Err(e) => return Ok(recv_error(label, name, e))
     Ok(text) => text
   }
   let verified = crypto.decrypt_verify(token_text)
   if !verified.ok {
-    return Ok(recv_error(label, filename, verified.reason))
+    return Ok(recv_error(label, name, verified.reason))
   }
   let payload = match verified.payload {
     Some(p) => p
@@ -417,10 +573,30 @@ pub fn Session::recv_package(
     Json::object({
       "status": Json::string("ok"),
       "transport": Json::string(label),
-      "filename": Json::string(filename),
+      "filename": Json::string(name),
       "payload": payload,
     }),
   )
+}
+
+///|
+/// 从介质删除一包（**仅 shared path**；在线通道/中转没有删除契约）。
+///
+/// 用途：roundtrip 的一次性响应包消费 —— 取出 `res_<filename>` 后必须删除，
+/// 否则下一轮请求可能读到上一轮的陈旧回执（见 F1）。
+/// 删除走**读视图**（响应包从读端取回，就在读端消失）。
+pub fn Session::remove_package(
+  self : Session,
+  filename : String,
+) -> Result[Unit, String] {
+  let name = match safe_filename(filename) {
+    Ok(n) => n
+    Err(e) => return Err("rhop session: " + e)
+  }
+  match self.shared {
+    Some(view) => SharedPath::remove(view.read_view, name)
+    None => Err("rhop session: 仅 shared path 支持删除包")
+  }
 }
 
 ///|

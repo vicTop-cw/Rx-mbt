@@ -170,11 +170,18 @@ fn Envelope::body_fields(self : Envelope) -> Map[String, Json] {
 ///|
 /// 序列化为 .rhop 文件字节：规范 JSON（含 `checksum` 键）的 UTF-8 编码。
 ///
-/// 与 Python `Envelope.to_rhop_bytes()` 逐字节一致（前提是语料不含浮点，
-/// 见 `json_canonical.mbt` 的已知限制）。
+/// **每次序列化都按当前字段重算 checksum**（照抄 vools `to_rhop_bytes`，见
+/// `envelope.py:79-83`）：这样「读入时补过默认值 / 调用方原地改过字段 /
+/// 含未知字段被丢弃」的信封也能写出**自身可读回**的字节，而不是把已经失效的
+/// 旧 `self.checksum` 原样写出去。
+///
+/// 与 Python `Envelope.to_rhop_bytes()` 逐字节一致的**前提**：对象构造后未被
+/// 改动（`self.checksum == compute_checksum()`），且语料不含浮点（见
+/// `json_canonical.mbt` 的已知限制）。构造时 `self.checksum` 原样保留
+/// （`from_dict` 不校验 checksum，vools 语义），只有写出/校验时才重算。
 pub fn Envelope::to_rhop_bytes(self : Envelope) -> Bytes {
   let fields = self.body_fields()
-  fields["checksum"] = Json::string(self.checksum)
+  fields["checksum"] = Json::string(self.compute_checksum())
   canonical_json_utf8(Json::object(fields))
 }
 
@@ -296,16 +303,25 @@ fn optional_string(
 }
 
 ///|
-/// 取可选字符串字段，缺省 / `null` ⇒ `default`（供 created_at/updated_at 等
-/// 带空串默认值的字段用）。
+/// 取可选字符串字段：**缺键 ⇒ `default`；显式 `null` ⇒ 字段值非法**。
+///
+/// 与缺键给默认值的字段（created_at/updated_at）共用。vools 会保留 `None`，
+/// 但本项目用 `String` 表示、无法无损表达 `null`；静默改写成 `""` 会与
+/// checksum 脱钩且不可排障，故显式拒绝（见矩阵 §7 的取舍记录）。
 fn optional_string_or(
   fields : Map[String, Json],
   key : String,
   default : String,
 ) -> String raise EnvelopeError {
-  match optional_string(fields, key) {
-    Some(text) => text
+  match fields.get(key) {
     None => default
+    Some(String(text)) => text
+    Some(Null) =>
+      raise EnvelopeError(
+        "envelope 字段值非法: \{key} 不能为 null（vools 保留 None，本实现用 String 表示、无法无损表达）",
+      )
+    Some(_) =>
+      raise EnvelopeError("envelope 字段值非法: \{key} 必须是字符串")
   }
 }
 
@@ -319,15 +335,37 @@ fn optional_json(fields : Map[String, Json], key : String) -> Json? {
 }
 
 ///|
-/// 取可选整数字段（缺省 ⇒ `default`；非数字 ⇒ 错误）。
+/// 取可选整数字段：缺键 ⇒ `default`；**显式 `null` / 浮点 / 非数字 ⇒ 字段值非法**。
+///
+/// vools 对 `version: null` 会保留 `None`、对 `version: 2.7` 会保留 `2.7`；
+/// 本项目用 `Int` 表示，无法无损表达 ⇒ 显式拒绝，**绝不静默截断/改值**
+/// （见矩阵 §7 的取舍记录与 C1 报告 PROTO-02）。
 fn optional_int(
   fields : Map[String, Json],
   key : String,
   default : Int32,
 ) -> Int32 raise EnvelopeError {
   match fields.get(key) {
-    None | Some(Null) => default
-    Some(Number(value, ..)) => value.to_int()
+    None => default
+    Some(Number(value, ..)) => {
+      // 先排除 NaN/Inf/超大数：直接 to_int() 在 wasm 上会 trap
+      if value != value || value > 1.0e18 || value < -1.0e18 {
+        raise EnvelopeError(
+          "envelope 字段值非法: \{key} 必须是整数（收到 \{canonical_number(value, None)}）",
+        )
+      }
+      let as_int = value.to_int()
+      if as_int.to_double() != value {
+        raise EnvelopeError(
+          "envelope 字段值非法: \{key} 必须是整数（收到 \{canonical_number(value, None)}，vools 会保留浮点，本实现用 Int 无法无损表达）",
+        )
+      }
+      as_int
+    }
+    Some(Null) =>
+      raise EnvelopeError(
+        "envelope 字段值非法: \{key} 不能为 null（vools 保留 None，本实现用 Int 无法无损表达）",
+      )
     Some(_) =>
       raise EnvelopeError("envelope 字段值非法: \{key} 必须是数字")
   }
@@ -344,28 +382,31 @@ fn parse_status(fields : Map[String, Json]) -> TaskStatus raise EnvelopeError {
 }
 
 ///|
-/// 解析 `side` 字段（缺失 ⇒ 默认 requester，与 Python `Side(data.get("side","requester"))` 一致）。
+/// 解析 `side` 字段：**缺键 ⇒ 默认 requester**（与 Python `data.get("side","requester")`
+/// 一致）；显式 `null` ⇒ 与 vools 相同的拒绝（`None is not a valid Side`）。
 fn parse_side(fields : Map[String, Json]) -> Side raise EnvelopeError {
   match fields.get("side") {
-    None | Some(Null) => Requester
+    None => Requester
     Some(String(raw)) =>
       match Side::parse(raw) {
         Ok(side) => side
         Err(reason) =>
           raise EnvelopeError("envelope 字段值非法: \{reason}")
       }
+    Some(Null) =>
+      raise EnvelopeError("envelope 字段值非法: None is not a valid Side")
     Some(_) =>
       raise EnvelopeError("envelope 字段值非法: side 必须是字符串")
   }
 }
 
 ///|
-/// 解析 `hops_seen`（缺省 / null ⇒ 空数组；元素必须是字符串）。
+/// 解析 `hops_seen`：**缺键 ⇒ 空数组**；显式 `null` ⇒ 字段值非法；元素必须是字符串。
 fn parse_hops_seen(
   fields : Map[String, Json],
 ) -> Array[String] raise EnvelopeError {
   match fields.get("hops_seen") {
-    None | Some(Null) => []
+    None => []
     Some(Array(items)) => {
       let hops : Array[String] = []
       for item in items {
@@ -379,6 +420,10 @@ fn parse_hops_seen(
       }
       hops
     }
+    Some(Null) =>
+      raise EnvelopeError(
+        "envelope 字段值非法: hops_seen 不能为 null（vools 保留 None，本实现用数组无法无损表达）",
+      )
     Some(_) =>
       raise EnvelopeError("envelope 字段值非法: hops_seen 必须是数组")
   }

@@ -95,7 +95,7 @@ test "core: 非法跳转一律 false（不能越级/回退/自环）" {
 }
 
 ///|
-test "core: 6×6 全流转矩阵（合法边恰为 7 条）" {
+test "core: 6×6 全流转矩阵（合法边恰为 6 条）" {
   // 期望的合法边集合（与 core.py `_TRANSITIONS` 逐条对应）
   let allow : Array[(String, String)] = [
     ("pending", "claimed"),

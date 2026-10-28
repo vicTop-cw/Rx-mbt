@@ -93,6 +93,17 @@ test "canonical: 键按 Unicode 码点排序（ASCII < CJK < emoji）" {
 }
 
 ///|
+test "canonical: 补充平面字符键按码点序（判别 UTF-16 序实现）" {
+  // U+FFFD < U+1F600：码点序 FFFD 在前；UTF-16 码元序 D83D < FFFD 会把 😀 排前面。
+  // 现有 B/a/中/😀 用例在两种实现下同形，无法判别；这条用例能区分（PROTO-08）。
+  let value = jobj([
+    ("\u{1F600}", Json::number(2.0)),
+    ("\u{FFFD}", Json::number(1.0)),
+  ])
+  assert_eq(@rp.canonical_json(value), "{\"\u{FFFD}\": 1, \"\u{1F600}\": 2}")
+}
+
+///|
 test "canonical: 空对象与空数组" {
   assert_eq(@rp.canonical_json(jobj([])), "{}")
   assert_eq(@rp.canonical_json(Json::array([])), "[]")
@@ -276,17 +287,10 @@ test "canonical: fixture escapes（引号/反斜杠/控制字符/emoji/斜杠）
     b +
     "tb\"}"
   let actual = @rp.canonical_json(canon_input(input_text))
-  // 期望形态与 Python json.dumps(sort_keys=True, ensure_ascii=False) 逐项同形
-  assert_true(actual.contains("\"backslash\": \"a" + b + b + "b\""))
-  assert_true(actual.contains("\"backspace\": \"a" + b + "bb\""))
-  assert_true(actual.contains("\"cr\": \"a" + b + "rb\""))
-  assert_true(actual.contains("\"ctrl_0x01\": \"" + b + "u0001\""))
-  assert_true(actual.contains("\"emoji\": \"\u{1F680}\""))
-  assert_true(actual.contains("\"formfeed\": \"a" + b + "fb\""))
-  assert_true(actual.contains("\"newline\": \"line1" + b + "nline2\""))
-  assert_true(actual.contains("\"quote\": \"he said " + b + "\"hi" + b + "\""))
-  assert_true(actual.contains("\"slash\": \"a/b\""))
-  assert_true(actual.contains("\"tab\": \"a" + b + "tb\""))
+  // C1 审计 F9：整串比对（原先是 10 条 contains 片段断言，拼错字段名/多出字段/键序异常都抓不到）。
+  // input_text 与 fixture.vools_vectors.json canonical_json/escapes 用例的 expected 逐字节相同，
+  // 整串相等即证明 canonical 输出与 Python json.dumps(ensure_ascii=False, sort_keys=True) 逐字符对齐。
+  assert_eq(actual, input_text)
 }
 
 ///|

@@ -138,15 +138,26 @@ test "signer: 两种 ensure_ascii 口径对 ASCII 结果等价、对中文结果
 }
 
 ///|
-test "signer: NPUSigner 默认 provider → sign 返回 None（无 npu-smi 语义）" {
+test "signer: NPUSigner 默认 provider → UNKNOWN_NPU 兜底（vools signer.py:52-74 同形）" {
   let signer = @rp.NPUSigner::new("NPU_MARKER")
   let result = signer_result("{\"stdout\": \"ok\"}")
-  assert_eq(@rp.AbstractSigner::sign(signer, "job-001", result), None)
-  // verify 在无法签名时恒为 false
-  assert_false(
-    @rp.AbstractSigner::verify(signer, "job-001", result, "anything"),
-  )
+  // vools：npu-smi 可执行但解析不到序列号 ⇒ serial = "UNKNOWN_NPU"，签名照出。
+  // 本实现 provider 返回 None 即走该兜底，sign 恒不为 None（PROTO-06）。
+  match @rp.AbstractSigner::sign(signer, "job-001", result) {
+    None => fail("UNKNOWN_NPU 兜底后 sign 不应返回 None")
+    Some(sig) => {
+      // md5 与注入真实 serial 的用例相同（只与 preimage 有关）
+      assert_eq(sig, "NPU_MARKER:UNKNOWN_NPU:c5c2ef71728dc922a90f23f5bb9bae3b")
+      assert_true(sig.has_prefix("NPU_MARKER:UNKNOWN_NPU:"))
+      assert_true(@rp.AbstractSigner::verify(signer, "job-001", result, sig))
+      assert_false(
+        @rp.AbstractSigner::verify(signer, "job-001", result, "anything"),
+      )
+    }
+  }
+  // has_serial 只表示 provider 是否给出真实序列号（不代表不能签）
   assert_false(signer.has_serial())
+  assert_eq(@rp.NPU_UNKNOWN_SERIAL, "UNKNOWN_NPU")
   assert_eq(signer.marker(), "NPU_MARKER")
   // 默认 marker 构造器
   assert_eq(
@@ -185,7 +196,7 @@ test "signer: NPUSigner 注入 provider → 格式 <marker>:<serial>:<md5>" {
 }
 
 ///|
-test "signer: NPUSigner marker 可定制、provider 返回 None 时不可签名" {
+test "signer: NPUSigner marker 可定制、provider 返回 None 时用 UNKNOWN_NPU 兜底" {
   let signer = @rp.NPUSigner::new("TEST_MARKER").with_serial_provider(fn() {
     Some("SN-9")
   })
@@ -193,12 +204,13 @@ test "signer: NPUSigner marker 可定制、provider 返回 None 时不可签名"
     None => fail("应可签名")
     Some(sig) => assert_true(sig.has_prefix("TEST_MARKER:SN-9:"))
   }
-  // provider 显式返回 None ⇒ None
+  // provider 显式返回 None ⇒ UNKNOWN_NPU 兜底（不是 None，PROTO-06）
   let none_signer = @rp.NPUSigner::new("M").with_serial_provider(fn() { None })
-  assert_eq(
-    @rp.AbstractSigner::sign(none_signer, "t", signer_result("{\"a\": 1}")),
-    None,
-  )
+  match
+    @rp.AbstractSigner::sign(none_signer, "t", signer_result("{\"a\": 1}")) {
+    None => fail("provider 返回 None 时应走 UNKNOWN_NPU 兜底")
+    Some(sig) => assert_true(sig.has_prefix("M:UNKNOWN_NPU:"))
+  }
   // 空 marker / 空 serial 也是合法输入（仅格式结果更短），不 panic
   let empty_signer = @rp.NPUSigner::new("").with_serial_provider(fn() {
     Some("")

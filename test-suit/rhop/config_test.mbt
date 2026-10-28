@@ -127,9 +127,10 @@ test "config · _key_from_cfg 分支 1+2：明文串 / {\"plain\"}" {
     Ok("in-plain"),
   )
   // plain 为空时继续往后面分支探（不把空串当合法密钥）
+  // plain 为空 → 继续走 env/path 分支：既不得把空串当密钥，也不得静默成功
   match @rp._key_from_cfg(Some(cfgj("{\"plain\": \"\"}"))) {
-    Ok(k) => assert_true(k == "" || k.contains("rhop")) // 走到 env/path 分支后为 Err
-    Err(e) => assert_true(e.contains("密钥") || e.contains("RHOP_KEY"))
+    Ok(k) => assert_true(k.length() > 0) // 只可能来自 env / path 分支
+    Err(e) => assert_true(e.contains("未找到本地固定密钥"))
   }
 }
 
@@ -541,5 +542,151 @@ test "config · from_file / load_config(路径)：不存在的文件在两目标
   match @rp.RhopConfig::from_file("") {
     Ok(_) => abort("空路径应当 Err")
     Err(e) => assert_true(e.contains("配置文件路径不能为空"))
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8. C1-F6：to_dict 递归掩码（online / relay / shared 的敏感字段）
+// ---------------------------------------------------------------------------
+
+///|
+test "config · to_dict 递归掩码：online/relay/shared 的 password/key_path/token 都是 ***" {
+  let cfg = @rp.RhopConfig::from_dict(
+    cfgj(
+      "{\"key\": \"k\", \"sftp\": {\"host\": \"h\", \"password\": \"SFTP-PW-X\", \"key_path\": \"/id-x\"}, \"online\": [{\"kind\": \"sftp\", \"host\": \"h\", \"password\": \"ONLINE-PW-X\", \"key_path\": \"/id-online-x\", \"token\": \"ONLINE-TOKEN-X\"}, {\"kind\": \"relay\", \"host\": \"r\", \"token\": \"INNER-TOKEN-X\"}], \"relay\": {\"host\": \"10.0.0.1\", \"port\": 9000, \"token\": \"RELAY-TOKEN-X\"}, \"shared\": {\"write\": \"/tmp/x\", \"password\": \"SHARED-PW-X\"}}",
+    ),
+  )
+  match cfg {
+    Ok(c) => {
+      let text = Json::stringify(c.to_dict())
+      // 所有敏感明文都不得出现在导出结果里
+      assert_true(!text.contains("SFTP-PW-X"))
+      assert_true(!text.contains("ONLINE-PW-X"))
+      assert_true(!text.contains("/id-online-x"))
+      assert_true(!text.contains("ONLINE-TOKEN-X"))
+      assert_true(!text.contains("INNER-TOKEN-X"))
+      assert_true(!text.contains("RELAY-TOKEN-X"))
+      assert_true(!text.contains("SHARED-PW-X"))
+      // 结构与非敏感字段仍在（掩码不是删字段）
+      let d = c.to_dict()
+      assert_eq(cfg_str_json(d, "role"), "\"SEND\"")
+      match cfg_field_of(d, "relay") {
+        Some(relay) => {
+          assert_eq(cfg_str_of(relay, "host"), "10.0.0.1")
+          assert_eq(cfg_str_of(relay, "token"), "***")
+        }
+        None => abort("relay 字段丢失")
+      }
+      match cfg_field_of(d, "online") {
+        Some(Array(items)) => {
+          assert_eq(items.length(), 2)
+          assert_eq(cfg_str_of(items[0], "password"), "***")
+          assert_eq(cfg_str_of(items[1], "token"), "***")
+        }
+        _ => abort("online 应为数组")
+      }
+    }
+    Err(e) => abort("配置解析失败: " + e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. C1-F7：Python `or` 语义（空串回退默认、0/负数端口归一）
+// ---------------------------------------------------------------------------
+
+///|
+test "config · build_relay：host 空串回退 127.0.0.1；port 0/负值归一（C1-F7）" {
+  let cfg = @rp.RhopConfig::from_dict(
+    cfgj("{\"key\": \"k\", \"relay\": {\"host\": \"\", \"port\": 9000}}"),
+  )
+  match cfg {
+    Ok(c) =>
+      match c.build_relay() {
+        Ok(Some(rc)) => assert_eq(rc.base(), "http://127.0.0.1:9000")
+        Ok(None) => abort("relay 不应为 None")
+        Err(e) => abort("build_relay 失败: " + e)
+      }
+    Err(e) => abort("配置解析失败: " + e)
+  }
+  // port 0 / 负数 → 回退默认 0（表示「未定端口」，绝不产生非法端口值）
+  for
+    spec in [
+      "{\"key\": \"k\", \"relay\": {\"port\": 0}}", "{\"key\": \"k\", \"relay\": {\"port\": -5}}",
+    ] {
+    match @rp.RhopConfig::from_dict(cfgj(spec)) {
+      Ok(c) =>
+        match c.build_relay() {
+          Ok(Some(rc)) => assert_eq(rc.base(), "http://127.0.0.1:0")
+          Ok(None) => abort("relay 不应为 None")
+          Err(e) => abort("build_relay 失败: " + e)
+        }
+      Err(e) => abort("配置解析失败: " + e)
+    }
+  }
+  // timeout 0 视为未配置（不产生 0 超时探测）
+  match
+    @rp.RhopConfig::from_dict(
+      cfgj(
+        "{\"key\": \"k\", \"relay\": {\"host\": \"h\", \"port\": 1, \"timeout\": 0}}",
+      ),
+    ) {
+    Ok(c) =>
+      match c.build_relay() {
+        Ok(Some(rc)) => assert_eq(rc.base(), "http://h:1")
+        Ok(None) => abort("relay 不应为 None")
+        Err(e) => abort("build_relay 失败: " + e)
+      }
+    Err(e) => abort("配置解析失败: " + e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10. C1-F8：低成本语义对齐（role 空串 / shared {} / online 非对象 / 布尔 key）
+// ---------------------------------------------------------------------------
+
+///|
+test "config · F8 语义对齐：role 空串→SEND、shared {}→None、online 非对象→Err、key 布尔→Err" {
+  // vools: role = str(data.get("role") or SEND).upper()
+  match @rp.RhopConfig::from_dict(cfgj("{\"key\": \"k\", \"role\": \"\"}")) {
+    Ok(c) => assert_eq(c.role(), @rp.Role::Send)
+    Err(e) => abort("role 空串应当回退 SEND: " + e)
+  }
+  match @rp.RhopConfig::from_dict(cfgj("{\"key\": \"k\", \"role\": \"  \"}")) {
+    Ok(c) => assert_eq(c.role(), @rp.Role::Send)
+    Err(e) => abort("role 纯空白应当回退 SEND: " + e)
+  }
+  // vools: if not self.shared: return None（{} 是 falsy）
+  match @rp.RhopConfig::from_dict(cfgj("{\"key\": \"k\", \"shared\": {}}")) {
+    Ok(c) =>
+      match c.build_shared() {
+        Ok(None) => ()
+        Ok(Some(_)) => abort("shared {} 应当等价于未配置（None）")
+        Err(e) => abort("shared {} 不应 Err: " + e)
+      }
+    Err(e) => abort("配置解析失败: " + e)
+  }
+  // 非对象 online spec：必须 Err，不能静默造空通道
+  match
+    @rp.RhopConfig::from_dict(
+      cfgj("{\"key\": \"k\", \"online\": [\"oops\", 42]}"),
+    ) {
+    Ok(c) =>
+      match c.build_online() {
+        Ok(chs) =>
+          abort(
+            "非对象 online spec 应当 Err，实际构造了 \{chs.length()} 条",
+          )
+        Err(e) => assert_true(e.contains("必须是对象"))
+      }
+    Err(e) => abort("配置解析失败: " + e)
+  }
+  // 布尔 key：明确 Err（vools str(True)="True" 与 MoonBit "true" 口径不同）
+  match @rp.RhopConfig::from_dict(cfgj("{\"key\": true}")) {
+    Ok(_) => abort("布尔 key 应当 Err")
+    Err(e) => assert_true(e.contains("不接受布尔值"))
+  }
+  match @rp._key_from_cfg(Some(cfgj("false"))) {
+    Ok(_) => abort("布尔 key 应当 Err")
+    Err(e) => assert_true(e.contains("不接受布尔值"))
   }
 }

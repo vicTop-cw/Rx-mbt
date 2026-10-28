@@ -11,6 +11,7 @@ options(
     "daemon_test.mbt": [ "js" ],
     "sync_folder_test.mbt": [ "js" ],
     "actions_fs_test.mbt": [ "js" ],
+    "p1_fix_regression_test.mbt": [ "js" ],
     "nonjs_test.mbt": [ "wasm", "native" ],
   },
 )

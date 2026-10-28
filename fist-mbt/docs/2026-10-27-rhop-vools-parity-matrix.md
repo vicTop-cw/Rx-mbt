@@ -528,6 +528,8 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | 14 | **sync_folder 无独立 Source 抽象**：vools `LocalDirSource`（list_files / open_bytes / describe）；本项目由 `SyncFolder` 内部承担 + 公开 `sync_glob_match` | 同步实现 | 语义等价（源目录即本地目录）；无独立 describe |
 | 15 | **HTTP / 端点 / 子进程能力仅 js**：`HttpEndpoint`、clipboard 后端、`RelayServer` 子进程 | 相关类型 | 非 js 返回可诊断 `Err` 或 `available()=false`；三目标均可编译 |
 | 16 | **CLI 与 P2 task 队列**：vools 有 CLI 入口与完整 `task/` 队列（230 符号）；本项目不迁 CLI，`rhop_task` 覆盖数据/配置/密文（P2a）+ 存储/队列/心跳/执行/同步（P2b）共 8 文件，尚未移植 `task/cli.py`、`task/daemon.py`、`task/local_runner.py`、Postgres 后端 | P2 | 见 §5.9 与 §11 |
+| 17 | **信封字段类型严格度高于 vools**：`task_id:123` / `error:5` / `hops_seen:[1]` / `version:"3"` 本实现 `Err`，vools dataclass 无运行期类型检查会接受 | 读取他方产出的畸形 `.rhop` | 有意保留（C1 PROTO-03）：显式失败优于静默接受；vools 能读的文件本实现可能拒绝 |
+| 18 | **非规范数字字面量**：payload 写 `1.50` / `1e2` 时本实现按 `preserve_number_repr` 保留原文重算 checksum；vools `json.loads` 规范化（`1.5` / `100.0`）后重算，对同一文件判 `checksum mismatch` | 与 vools 交换含非规范数字的文件 | 有意保留（C1 PROTO-07）：避免二次序列化改值；规范语料（Python `json.dumps` 产出）不受影响 |
 
 > 历史条目（v3 的第 17/18 条：P2 心跳文件格式不互通、未来时间戳判定方向）**已于 2026-10-28 T0r15 解决**（vools 字节级对齐 + 真 vools 双向互操作 6/6），已移出本表，证据见 §5.9 B1/B2。
 

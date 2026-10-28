@@ -433,10 +433,15 @@ test "session · recv_package：介质缺文件 → status:error + 传输层原�
     }
     Err(e) => fail("介质缺文件应走 status:error 回执而非 Err: \{e}")
   }
-  // 边界：空文件名也走同一条错误回执路径（不崩、不静默成功）
+  // 边界：空文件名属**调用方参数错误** → Err（分流原则：参数/配置错误走 Err，
+  // 传输层 I/O 失败才走 status:error 收据）
   match s.recv_package("") {
-    Ok(j) => assert_eq(json_str_of(j, "status"), "error")
-    Err(e) => fail("空文件名不应抛 Err: \{e}")
+    Ok(j) =>
+      fail(
+        "空文件名应为参数错误 Err，实际回执: " +
+        Json::stringify(j),
+      )
+    Err(e) => assert_true(e.contains("包文件名不能为空"))
   }
 }
 
@@ -544,4 +549,198 @@ test "session · describe 输出 vools 同形字段（不做介质探测）" {
     Json::stringify(empty),
     "{\"name\":\"session:send\",\"role\":\"SEND\",\"online\":[],\"shared\":null,\"relay\":null,\"has_crypto\":false}",
   )
+}
+
+// ---------------------------------------------------------------------------
+// 10. 文件名白名单（C1-F2：防路径穿越）
+// ---------------------------------------------------------------------------
+
+///|
+/// 带本地根的单侧介质：按 `exists(".") / exists("..")` 回答「根/父目录是否存在」。
+///
+/// 产品侧对已知根的介质用 `exists` 做**无副作用**探测（`available()` 会建目录，
+/// 所以这里让 `available()` 恒 false —— 若产品仍依赖它，用例必然失败）。
+struct RootedPath {
+  files : Map[String, String]
+  dot : Bool
+  parent : Bool
+  label : String
+}
+
+///|
+fn RootedPath::new(label : String, dot : Bool, parent : Bool) -> RootedPath {
+  { files: Map([]), dot, parent, label, }
+}
+
+///|
+/// 故意恒 false：证明产品已不再用 available() 判本地根介质。
+impl @rp.SharedPath for RootedPath with fn available(self) {
+  false
+}
+
+///|
+impl @rp.SharedPath for RootedPath with fn write_text(self, filename, content) {
+  self.files[filename] = content
+  Ok(())
+}
+
+///|
+impl @rp.SharedPath for RootedPath with fn read_text(self, filename) {
+  match self.files.get(filename) {
+    Some(v) => Ok(v)
+    None => Err("rhop: 读取失败: " + self.label + ": no such file")
+  }
+}
+
+///|
+impl @rp.SharedPath for RootedPath with fn exists(self, filename) {
+  if filename == "." {
+    self.dot
+  } else if filename == ".." {
+    self.parent
+  } else {
+    self.files.contains(filename)
+  }
+}
+
+///|
+impl @rp.SharedPath for RootedPath with fn remove(self, filename) {
+  self.files.remove(filename)
+  Ok(())
+}
+
+///|
+impl @rp.SharedPath for RootedPath with fn name(self) {
+  "rooted:" + self.label
+}
+
+///|
+impl @rp.SharedPath for RootedPath with fn root(self) {
+  Some("/mem/" + self.label)
+}
+
+///|
+test "session · safe_filename：白名单放行，穿越/分隔符/空白/超长全部 Err" {
+  assert_eq(@rp.safe_filename("req_jump_probe.rhop"), Ok("req_jump_probe.rhop"))
+  assert_eq(@rp.safe_filename("a-b_c.9"), Ok("a-b_c.9"))
+  for
+    bad in [
+      "../escaped.rhop", "..", "./x.rhop", "a/b.rhop", "a\\b.rhop", "C:\\x.rhop",
+      "sub/../../x.rhop", "req a.rhop", "包.rhop",
+    ] {
+    match @rp.safe_filename(bad) {
+      Ok(v) => abort("非法文件名不应通过: " + v)
+      Err(e) => assert_true(e.length() > 0)
+    }
+  }
+  match @rp.safe_filename("") {
+    Ok(_) => abort("空文件名应当 Err")
+    Err(e) => assert_true(e.contains("不能为空"))
+  }
+  // 长度边界：128 通过，129 拒绝
+  let sb = StringBuilder()
+  for i in 0..<128 {
+    let _ = i
+    sb.write_char('a')
+  }
+  let s128 = sb.to_string()
+  assert_eq(@rp.safe_filename(s128), Ok(s128))
+  match @rp.safe_filename(s128 + "a") {
+    Ok(_) => abort("129 字符应当 Err")
+    Err(e) => assert_true(e.contains("过长"))
+  }
+}
+
+///|
+test "session · send/recv 拒绝非法文件名且不触碰介质（C1-F2）" {
+  let mem = MemPath::new("share", true)
+  let s = @rp.Session::new(
+    @rp.Role::Send,
+    Some(mem_view(mem)),
+    [],
+    None,
+    Some(@rp.RhopCrypto::from_key("k1")),
+    "",
+  )
+  match s.send_package("../escaped.rhop", Json::object(Map([]))) {
+    Ok(j) => abort("穿越文件名不应发送成功: " + Json::stringify(j))
+    Err(e) => assert_true(e.contains("包文件名"))
+  }
+  match s.send_package("sub/dir.rhop", Json::object(Map([]))) {
+    Ok(_) => abort("带分隔符的文件名不应发送成功")
+    Err(e) => assert_true(e.contains("包文件名"))
+  }
+  // 介质上没有任何写入（连临时键都没落）
+  let mut written = 0
+  for k in mem.files.keys() {
+    let _ = k
+    written = written + 1
+  }
+  assert_eq(written, 0)
+  // 接收侧同一规则
+  match s.recv_package("../escaped.rhop") {
+    Ok(_) => abort("穿越文件名不应读取成功")
+    Err(e) => assert_true(e.contains("包文件名"))
+  }
+}
+
+///|
+test "session · shared 读/写分开判定：只读介质不被判全不可达，发给出专门 Err（C1-F5）" {
+  let w = RootedPath::new("w", false, false)
+  let r = RootedPath::new("r", true, false)
+  let wp : &@rp.SharedPath = w
+  let rp : &@rp.SharedPath = r
+  let view = @rp.make_shared_path_from_views(wp, Some(rp))
+  // 读端预置一个包（模拟对端写入）；本用例只验证「读端通路」，不验证解密结果，
+  // 因此密文可以是任意串——wasm/native 下 RhopCrypto 无法解密，回执必然是
+  // status:error，但**不能**是「读端不可用」的 Err。
+  r.files["in.rhop"] = "dummy-token"
+  let recv = @rp.Session::new(
+    @rp.Role::Recv,
+    Some(view),
+    [],
+    None,
+    Some(@rp.RhopCrypto::from_key("k1")),
+    "",
+  )
+  // 读端可用 → 会真的去读介质（旧实现要求写端可建目录，整条通道被判全不可达）
+  match recv.recv_package("in.rhop") {
+    Ok(j) => assert_true(!Json::stringify(j).contains("读端不可用"))
+    Err(e) => abort("只读介质的读端应当可用，实际 Err: " + e)
+  }
+  // 读端可用 → 会话整体可用、并且选中 shared（旧实现会因写端建不了目录而判全不可达）
+  assert_true(recv.available())
+  assert_eq(recv.select().transport, "shared")
+  // 写端不可用时的发送错误（含「写端不可用」专门文案）需要先过加密，
+  // 非 js 目标 RhopCrypto 无法加密，因此该断言放在 js 端到端包 test-suit/rhop_interact。
+}
+
+///|
+test "session · remove_package：删除读视图包；空名/无介质可诊断 Err（C1-F1）" {
+  let mem = MemPath::new("share", true)
+  let s = @rp.Session::new(
+    @rp.Role::Send,
+    Some(mem_view(mem)),
+    [],
+    None,
+    Some(@rp.RhopCrypto::from_key("k1")),
+    "",
+  )
+  mem.files["pkg.rhop"] = "cipher"
+  assert_eq(s.remove_package("pkg.rhop"), Ok(()))
+  assert_true(!mem.files.contains("pkg.rhop"))
+  assert_eq(s.remove_package("pkg.rhop"), Ok(())) // 幂等
+  match s.remove_package("") {
+    Ok(_) => abort("空文件名应当 Err")
+    Err(e) => assert_true(e.contains("包文件名不能为空"))
+  }
+  match s.remove_package("../x.rhop") {
+    Ok(_) => abort("穿越名应当 Err")
+    Err(e) => assert_true(e.contains("包文件名"))
+  }
+  let no_shared = @rp.Session::empty(@rp.Role::Send)
+  match no_shared.remove_package("a.rhop") {
+    Ok(_) => abort("无介质应当 Err")
+    Err(e) => assert_true(e.contains("仅 shared path"))
+  }
 }

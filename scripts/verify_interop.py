@@ -399,7 +399,19 @@ def check_signer(fixtures, produced, v, report):
             report.add("signer", name, "FAIL", "实际=%r 期望=%r" % (got, expected))
 
 
-def check_flat_produced(produced, fixtures, v, report):
+# 扁平产物形状（key/envelope_json/secret/...）天然不含分节，因此这些分节里的
+# 检查点在扁平产物下永远没有机会被复核。--strict 模式下必须把它们逐个记成
+# SKIP（strict 把 SKIP 当失败），否则「只交一个密文」就能拿到零 SKIP 的全绿。
+FLAT_UNCHECKED_SECTIONS = (
+    ("canonical_json", "扁平产物不含 canonical_json 分节，--strict 要求分节 schema"),
+    ("digest", "扁平产物不含 digest 分节（sha256/md5/hmac/pbkdf2 均未复核）"),
+    ("envelope", "扁平产物不含 envelope 分节（to_rhop_bytes/checksum 字节级未复核）"),
+    ("crypto", "扁平产物不含 crypto 分节（encrypt_json/encrypt_secret 用例未复核）"),
+    ("signer", "扁平产物不含 signer 分节（file_hash 签名未复核）"),
+)
+
+
+def check_flat_produced(produced, fixtures, v, report, strict=False):
     """兼容 impl-crypto 的「扁平」产物形状（test-suit/rhop_js/fixtures/moonbit_vectors.json）。
 
     那个文件的形态是 ``{key, payload_json, envelope_json, secret, secret_plain,
@@ -472,9 +484,14 @@ def check_flat_produced(produced, fixtures, v, report):
         report.add("flat", field, "PASS", "vools 成功解密 MoonBit 密文并解析出 payload")
     if found == 0:
         report.add("flat", "*", "SKIP", "扁平产物里没有可复核的密文字段")
+    if strict:
+        # 扁平产物下这些分节的检查点未被执行；--strict 必须让它们计为 SKIP（→ 非零退出），
+        # 不允许「少交分节」因为形状扁平而静默通过。
+        for _section, _why in FLAT_UNCHECKED_SECTIONS:
+            report.add(_section, "*", "SKIP", _why + "（扁平产物未复核；--strict 判失败）")
 
 
-def run_checks(produced, fixtures, v, do_self_check=True):
+def run_checks(produced, fixtures, v, do_self_check=True, strict=False):
     """按产物形状分派到对应校验器，返回 Report（main 与 --self-test 共用）。"""
     report = Report()
     if do_self_check:
@@ -486,7 +503,7 @@ def run_checks(produced, fixtures, v, do_self_check=True):
     ) and any(k in produced for k in ("envelope_json", "secret", "payload_json", "envelope_nonjson"))
 
     if is_flat:
-        check_flat_produced(produced, fixtures, v, report)
+        check_flat_produced(produced, fixtures, v, report, strict=strict)
     else:
         check_canonical_json(fixtures, cases.get("canonical_json"), report)
         check_digest(fixtures, cases.get("digest"), report)
@@ -591,6 +608,22 @@ def self_test(fixtures, v):
     rep_partial = run_checks(partial, fixtures, v, do_self_check=False)
     scenarios.append(("部分产物：只有 canonical_json", rep_partial, "has-skip-no-fail"))
 
+    # F1 回归（4 组合：扁平/分节 × strict/非 strict）：
+    #   扁平 × 非 strict：密文仍要真解密（允许缺失分节以 SKIP 提示）；
+    #   扁平 × strict  ：缺失的 5 个分节必须记 SKIP（strict 下 → 非零退出）；
+    #   分节 × strict  ：完整分节产物不得有任何 SKIP。
+    flat_prod = {
+        "schema": "rhop-moonbit-output",
+        "key": fixtures.get("key"),
+        "envelope_json": fixtures["crypto"]["encrypt_json_cases"][0]["ciphertext_json_text"],
+    }
+    rep_flat = run_checks(flat_prod, fixtures, v, do_self_check=False)
+    scenarios.append(("扁平产物 × 非 strict（密文真解密，缺失分节不判红）", rep_flat, "no-fail"))
+    rep_flat_strict = run_checks(flat_prod, fixtures, v, do_self_check=False, strict=True)
+    scenarios.append(("扁平产物 × --strict（缺失分节必须记 SKIP）", rep_flat_strict, "strict-skip>=5"))
+    rep_sec_strict = run_checks(ok_produced, fixtures, v, do_self_check=False, strict=True)
+    scenarios.append(("分节产物 × --strict（完整产物零 SKIP）", rep_sec_strict, "strict-no-skip"))
+
     expected_fail_count = len(
         [1 for _ in injected]
     )
@@ -603,6 +636,10 @@ def self_test(fixtures, v):
             good = fails == 0 and rep.count("PASS") > 0
         elif expect == "has-fail":
             good = fails >= expected_fail_count
+        elif expect == "strict-skip>=5":
+            good = fails == 0 and skips >= 5
+        elif expect == "strict-no-skip":
+            good = fails == 0 and skips == 0
         else:
             good = fails == 0 and skips > 0
         print("  [%s] %s → PASS=%d FAIL=%d SKIP=%d（期望：%s）"
@@ -629,6 +666,87 @@ def load_json(path, what):
             raise gen.GenError("%s 不是合法 JSON（%s）：%s" % (what, exc, path))
 
 
+class _FlatCryptoStub(object):
+    """自测用的假 vools.crypto：flat 自测样例故意不含密文字段，解密路径不会被触达。"""
+
+    @staticmethod
+    def RhopCrypto(key):  # noqa: N802 - 对齐 vools 命名
+        return object()
+
+
+class _VoolsStub(object):
+    crypto = _FlatCryptoStub()
+
+
+def exit_code(report, strict):
+    """失败优先；--strict 下任何 SKIP 也算失败（C1 审计 F1 的判绿口径）。"""
+    if report.failed:
+        return 1
+    if strict and report.count("SKIP") > 0:
+        return 1
+    return 0
+
+
+def self_test_shapes(fixtures, v):
+    """C1 审计 F1 回归自测：产物形状 × --strict 四组合。
+
+    关键断言：扁平产物在 --strict 下必须把 5 个未复核分节记成 SKIP（→ rc=1），
+    不能因为形状扁平就"零 SKIP 全绿"；分节产物则绝不出现这些 sentinel SKIP。
+    """
+    sentinel = "扁平产物"
+    results = []
+
+    # (1) 扁平 + strict：必须有 5 条 sentinel SKIP，rc=1
+    flat = {"key": "selftest-key", "payload_json": "{}", "note": "自测用扁平产物"}
+    rep = check_flat_produced_and_collect(flat, {}, _VoolsStub(), strict=True)
+    _want_sections = set(name for name, _why in FLAT_UNCHECKED_SECTIONS)
+    flat_skips = [i for i in rep.items
+                  if i["status"] == "SKIP" and sentinel in i["detail"] and i["section"] in _want_sections]
+    results.append(("flat + --strict", set(i["section"] for i in flat_skips) == _want_sections,
+                    "覆盖分节 %d/%d：%s"
+                    % (len(set(i["section"] for i in flat_skips)), len(_want_sections),
+                       ",".join(sorted(set(i["section"] for i in flat_skips))))))
+    results.append(("flat + --strict rc", exit_code(rep, True) == 1,
+                    "rc=%d" % exit_code(rep, True)))
+
+    # (2) 扁平 + 非 strict：同样的 SKIP 仍在，但 rc 必须为 0（不误杀日常回归）
+    rep2 = check_flat_produced_and_collect(flat, {}, _VoolsStub(), strict=False)
+    results.append(("flat + 非 strict rc", exit_code(rep2, False) == 0,
+                    "rc=%d SKIP=%d" % (exit_code(rep2, False), rep2.count("SKIP"))))
+    results.append(("flat strict 增量", rep2.count("SKIP") + len(FLAT_UNCHECKED_SECTIONS) == rep.count("SKIP"),
+                    "非 strict SKIP=%d + %d == strict SKIP=%d"
+                    % (rep2.count("SKIP"), len(FLAT_UNCHECKED_SECTIONS), rep.count("SKIP"))))
+
+    # (3)(4) 分节产物 + strict/非 strict：绝不出现 flat sentinel SKIP
+    sectioned = {
+        "schema": "rhop-moonbit-output",
+        "produced_by": "self-test",
+        "cases": {name: {} for name, _why in FLAT_UNCHECKED_SECTIONS},
+    }
+    for strict in (False, True):
+        rep3 = run_checks(sectioned, fixtures, v, do_self_check=False, strict=strict)
+        bad = [i for i in rep3.items if i["status"] == "SKIP" and sentinel in i["detail"]]
+        results.append(("sectioned + %s：无 flat sentinel" % ("strict" if strict else "非 strict"),
+                        not bad, "sentinel SKIP=%d" % len(bad)))
+
+    print()
+    print(" 自测：产物形状 × --strict 四组合")
+    print("-" * 77)
+    ok = True
+    for name, passed, detail in results:
+        ok = ok and passed
+        print("  [%s] %-28s %s" % ("PASS" if passed else "FAIL", name, detail))
+    print("-" * 77)
+    print(" RESULT: %s -- 4 组合语义%s" % ("PASS" if ok else "FAIL", "正确" if ok else "不符合预期"))
+    return 0 if ok else 1
+
+
+def check_flat_produced_and_collect(produced, fixtures, v, strict):
+    rep = Report()
+    check_flat_produced(produced, fixtures, v, rep, strict=strict)
+    return rep
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="用真实 Python vools-rhop 反向复核 MoonBit 侧产物")
     parser.add_argument(
@@ -641,6 +759,10 @@ def main(argv=None):
     parser.add_argument("--strict", action="store_true", help="SKIP 也算失败（验收模式：要求每一项都有产物）")
     parser.add_argument("--no-self-check", action="store_true", help="跳过 fixture 自检")
     parser.add_argument("--self-test", action="store_true", help="自检校验器本身：正向放行 + 注入 5 类错误必须判红")
+    parser.add_argument(
+        "--self-test-shapes", action="store_true",
+        help="C1-F1 回归自测：扁平/分节两种产物形状 × strict/非 strict 四组合",
+    )
     parser.add_argument("--out", default=None, help="把逐项报告写成 JSON 文件")
     args = parser.parse_args(argv)
 
@@ -652,6 +774,8 @@ def main(argv=None):
         v = gen.import_vools(root)
         if args.self_test:
             return self_test(fixtures, v)
+        if args.self_test_shapes:
+            return self_test_shapes(fixtures, v)
         if not args.moonbit_output:
             sys.stderr.write("ERROR: 缺少 MoonBit 产物路径（或用 --self-test 自检校验器本身）\n")
             return 2
@@ -684,18 +808,14 @@ def main(argv=None):
     if is_flat:
         print(" [!] 产物是扁平形状（非分节 schema），走通用适配器复核")
 
-    report = run_checks(produced, fixtures, v, do_self_check=not args.no_self_check)
+    report = run_checks(produced, fixtures, v, do_self_check=not args.no_self_check, strict=args.strict)
 
     print()
     report.render_console()
 
     failed = report.failed
     skipped = [i for i in report.items if i["status"] == "SKIP"]
-    rc = 0
-    if failed:
-        rc = 1
-    elif args.strict and skipped:
-        rc = 1
+    rc = exit_code(report, args.strict)
 
     print()
     if rc == 0:

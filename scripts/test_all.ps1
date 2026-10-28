@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # scripts/test_all.ps1 - rx-mbt cross-platform test gate (native Windows entry)
 #
 # Same contract as scripts/test_all.sh (decision doc section 4.2), for callers that
@@ -36,6 +36,19 @@ Set-Location $ProjectDir
 
 # -File 调用时 "a,b" 会作为单个字符串进来，这里统一按逗号拆成数组
 $Skip = @($Skip | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+# ---- 参数校验（C1 审计 F4/F10）：非法值一律 usage error（rc=2），不得静默降级 ----
+$ValidSteps = @('check', 'wasm', 'js', 'native')
+$UnknownSkip = @($Skip | Where-Object { $ValidSteps -notcontains $_ })
+if ($UnknownSkip.Count -gt 0) {
+    Write-Host ("FATAL: -Skip 含未知步骤名「{0}」；可用：check,wasm,js,native" -f ($UnknownSkip -join ',')) -ForegroundColor Red
+    Write-Host '       注意：未知步骤名过去会被静默忽略（用户以为跳过了测试组），C1 审计 F10 后改为硬报错。' -ForegroundColor Yellow
+    exit 2
+}
+if ($TimeoutSec -le 0) {
+    Write-Host ("FATAL: -TimeoutSec 必须 > 0（收到 {0}；0 会关闭挂死保护，不允许）" -f $TimeoutSec) -ForegroundColor Red
+    exit 2
+}
 
 # ---------------------------------------------------------------------------
 # Platform + PATH fix
@@ -113,7 +126,8 @@ Write-Host (" moon       : {0} -> {1}" -f $MoonBin, $MoonVersion)
 Write-Host (" node       : {0} -> {1}" -f $NodeBin, $NodeVersion)
 Write-Host (" PATH head  : {0}" -f $env:PATH)
 Write-Host (" PATH note  : {0}" -f $PathNote)
-Write-Host (" timeout    : {0}s per step (-TimeoutSec)" -f $TimeoutSec)
+# C1 审计 F7：本入口【没有】实现硬超时，-TimeoutSec 只作提示/日志用途。
+Write-Host (" timeout    : N/A - PowerShell entry has NO built-in hard timeout (advisory -TimeoutSec={0}s)" -f $TimeoutSec) -ForegroundColor Yellow
 if ($Skip.Count -gt 0) { Write-Host (" skip       : {0}" -f ($Skip -join ',')) }
 Write-Host '============================================================================='
 
@@ -124,6 +138,22 @@ if ($NodeBin -like '*.cmd') {
 # ---------------------------------------------------------------------------
 # Step runner
 # ---------------------------------------------------------------------------
+# ---- 并发纪律（lead 2026-10-28 裁示）：moon 并发会污染共享 _build。
+# 仓库里有 scripts/with_moon_lock.sh 时，所有 moon 调用都套锁（bash 负责 mkdir 锁）。
+$MoonLockSh = Join-Path (Join-Path $ProjectDir 'scripts') 'with_moon_lock.sh'
+$BashBin = $null
+$LockNote = '未启用（找不到 bash 或 scripts/with_moon_lock.sh）'
+if (Test-Path $MoonLockSh) {
+    $cand = @()
+    $gitBash = Join-Path $env:ProgramFiles 'Gitinash.exe'
+    if (Test-Path $gitBash) { $cand += $gitBash }
+    $cmdBash = Get-Command bash -ErrorAction SilentlyContinue
+    if ($cmdBash) { $cand += $cmdBash.Source }
+    foreach ($c in $cand) { if ($c -and (Test-Path $c)) { $BashBin = $c; break } }
+}
+if ($BashBin) { $LockNote = "已启用：$BashBin $MoonLockSh（moon 串行持锁）" }
+Write-Host (" moon lock  : {0}" -f $LockNote)
+
 $Rows = New-Object System.Collections.ArrayList
 $OverallRc = 0
 
@@ -151,11 +181,19 @@ function Invoke-MoonStep {
     #   * New-Object System.Diagnostics.ProcessStartInfo 在本机受限宿主里也可能不可用。
     # 因此选择「直接调用 + $LASTEXITCODE」这条最可靠的路。
     #
-    # 硬超时：PowerShell 入口没有内建超时（js 测试二进制有挂死风险，实测有先例）。
-    # 需要超时保护时请用 `bash scripts/test_all.sh`（bash 版内置 timeout）或
-    # 在 run_check 侧设 timeout_ms。这里只在 -TimeoutSec 大于 0 时打印提醒。
+    # C1 审计 F7：这里【故意不实现】硬超时。
+    #   PS 5.1 在本机受限宿主里拿不到可靠的进程退出码（Start-Process -PassThru 的
+    #   ExitCode 实测为 $null），若用超时框架反而会引入"假 PASS"。
+    #   需要超时保护请走 bash 入口：`bash scripts/test_all.sh --timeout N`
+    #   （内置 timeout + 挂死清理），或在调用侧（run_check）设 timeout_ms。
+    #   故本文件不再有任何 $timedOut 分支/死代码。
     $captured = @()
-    & $MoonBin @MoonArgs 2>&1 | Tee-Object -Variable captured | Out-Null
+    if ($BashBin) {
+        & $BashBin $MoonLockSh $MoonBin @MoonArgs 2>&1 | Tee-Object -Variable captured | Out-Null
+    }
+    else {
+        & $MoonBin @MoonArgs 2>&1 | Tee-Object -Variable captured | Out-Null
+    }
     $rc = $LASTEXITCODE
     $timedOut = $false
     # 逐步骤耗时只在 bash 版里统计：本机受限宿主里 PS 的计时原语会变 $null，
@@ -173,10 +211,7 @@ function Invoke-MoonStep {
     $verdict = 'FAIL'
     $detail = ''
 
-    if ($timedOut) {
-        $detail = "step timed out after ${TimeoutSec}s (test binary may be hung; use -TimeoutSec to adjust)"
-    }
-    elseif ($Name -eq 'check') {
+    if ($Name -eq 'check') {
         if ($rc -ne 0) {
             $detail = "moon check exit code $rc"
         }
@@ -222,7 +257,19 @@ function Invoke-MoonStep {
     }
 
     $color = 'Green'
-    if ($verdict -eq 'FAIL') { $color = 'Red'; $script:OverallRc = 1 }
+    if ($verdict -eq 'FAIL') {
+        $color = 'Red'
+        $script:OverallRc = 1
+        # C1 审计 F5：失败步骤的完整输出落盘到 reports/run-logs/<timestamp>/
+        try {
+            $logDir = Join-Path (Join-Path (Join-Path $ProjectDir 'fist-mbt') 'reports') ('run-logs/' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-ps1')
+            if (-not (Test-Path $logDir)) { [void](New-Item -ItemType Directory -Path $logDir -Force) }
+            $logPath = Join-Path $logDir ("{0}.log" -f $Name)
+            ($captured | Out-String) | Set-Content -Path $logPath -Encoding UTF8
+            $script:LastFailLogDir = $logDir
+        }
+        catch { Write-Host ("    WARN: 失败日志落盘失败: {0}" -f $_.Exception.Message) -ForegroundColor Yellow }
+    }
     Write-Host ("    --> {0}  {1}" -f $verdict, $detail) -ForegroundColor $color
     [void]$Rows.Add([pscustomobject]@{ Step = $Name; Verdict = $verdict; Detail = $detail })
 }
@@ -247,11 +294,31 @@ foreach ($r in $Rows) {
     Write-Host (" {0,-8} {1,-6} {2}" -f $r.Step, $r.Verdict, $r.Detail) -ForegroundColor $c
 }
 Write-Host '-----------------------------------------------------------------------------'
-if ($OverallRc -eq 0) {
-    Write-Host ' RESULT: PASS - every executed step is green' -ForegroundColor Green
+# C1 审计 F3：全跳过 != 全绿。与 bash 版对齐：全 skip => RESULT: SKIP 且 rc=2
+# （"所有步骤都被跳过"意味着本轮等于没跑任何验证，绝不能算 PASS）。
+$SkipCount = 0
+$PassCount = 0
+$FailCount = 0
+foreach ($row in $Rows) {
+    switch ([string]$row.Verdict) {
+        'SKIP' { $SkipCount = $SkipCount + 1 }
+        'PASS' { $PassCount = $PassCount + 1 }
+        'FAIL' { $FailCount = $FailCount + 1 }
+    }
+}
+$TotalCount = $Rows.Count
+if ($script:LastFailLogDir) {
+    Write-Host (" fail logs  : {0}" -f $script:LastFailLogDir) -ForegroundColor Yellow
+}
+if ($OverallRc -ne 0) {
+    Write-Host ' RESULT: FAIL - see FAIL rows above' -ForegroundColor Red
+}
+elseif ($SkipCount -eq $Rows.Count) {
+    Write-Host (' RESULT: SKIP - every step was skipped ({0}/{0}), nothing verified' -f $Rows.Count) -ForegroundColor Yellow
+    $OverallRc = 2
 }
 else {
-    Write-Host ' RESULT: FAIL - see FAIL rows above' -ForegroundColor Red
+    Write-Host (' RESULT: PASS - every executed step is green ({0} pass, {1} skip)' -f $PassCount, $SkipCount) -ForegroundColor Green
 }
 Write-Host '============================================================================='
 exit $OverallRc

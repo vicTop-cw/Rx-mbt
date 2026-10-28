@@ -466,9 +466,9 @@ test "interact · roundtrip：单机闭环（发请求 → handle_request 执行
         }
         None => abort("roundtrip 缺 action_result")
       }
-      // 介质上确实留下了请求包与响应包
+      // 请求包留在介质上；响应包已被一次性消费（C1-F1：取回后删除，防陈旧回放）
       assert_true(ffi_exists(dir + "/req_jump_probe.rhop"))
-      assert_true(ffi_exists(dir + "/res_req_jump_probe.rhop"))
+      assert_true(!ffi_exists(dir + "/res_req_jump_probe.rhop"))
     }
     Err(e) => abort("roundtrip 应当成功: " + e)
   }
@@ -727,4 +727,268 @@ fn json_num_str(j : Json, key : String) -> String {
       }
     None => "<missing>"
   }
+}
+
+// ---------------------------------------------------------------------------
+// 14. C1-F2：包名白名单（穿越不可达）
+// ---------------------------------------------------------------------------
+
+///|
+test "interact · 包名白名单：穿越名 Err 不落盘、缺省名按 action 净化（C1-F2）" {
+  let dir = it_dir("rhop-it-fname")
+  let cfg = it_cfg(it_cfg_json(dir, "k"))
+  for bad in ["../escaped.rhop", "sub/dir.rhop", "..\\up.rhop"] {
+    match
+      @rp.interact(cfg, "jump.probe", None, "request", request_filename=bad) {
+      Ok(j) => abort("非法包名不应发送成功: " + Json::stringify(j))
+      Err(e) => assert_true(e.contains("包文件名"))
+    }
+  }
+  // 根目录外没有落下任何东西
+  assert_true(!ffi_exists(dir + "/../escaped.rhop"))
+  // 缺省名：动作名里的分隔符被净化成 _
+  match @rp.interact(cfg, "jump/probe", None, "request") {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "ok")
+      assert_eq(it_str(j, "filename"), "req_jump_probe.rhop")
+      assert_true(ffi_exists(dir + "/req_jump_probe.rhop"))
+    }
+    Err(e) => abort("带分隔符的动作名应净化后成功: " + e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 15. C1-F1：roundtrip 一次性语义（陈旧 res_ 不采信、取回即删）
+// ---------------------------------------------------------------------------
+
+///|
+test "interact · roundtrip：预置陈旧 res_ 不被采信，取回后删除（C1-F1）" {
+  let dir = it_dir("rhop-it-once")
+  let cfg = it_cfg(it_cfg_json(dir, "once-key"))
+  let crypto = @rp.RhopCrypto::from_key("once-key")
+  // 预置「上一轮」的合法密文响应（token 是旧的）
+  let stale_body = itj(
+    "{\"action\": \"rhop.echo\", \"result\": \"ok\", \"action_result\": {\"status\": \"ok\", \"marker\": \"stale-run\"}, \"token\": \"tok:0:req_rhop_echo.rhop:rhop.echo\"}",
+  )
+  let stale_cipher = match crypto.encrypt_json_result(stale_body) {
+    Ok(t) => t
+    Err(e) => abort("预置密文失败: " + e)
+  }
+  assert_true(ffi_write(dir + "/res_req_rhop_echo.rhop", stale_cipher))
+  // 连续两轮同文件名：每轮都必须拿到自己的 payload
+  for marker in ["fresh-run-1", "fresh-run-2"] {
+    let payload = itj("{\"marker\": \"" + marker + "\"}")
+    match @rp.interact(cfg, "rhop.echo", Some(payload), "roundtrip") {
+      Ok(j) => {
+        assert_eq(it_str(j, "status"), "ok")
+        match it_field(j, "action_result") {
+          Some(ar) =>
+            match it_field(ar, "payload") {
+              Some(p) => assert_eq(it_str(p, "marker"), marker)
+              None => abort("action_result 缺 payload")
+            }
+          None => abort("roundtrip 缺 action_result")
+        }
+        // 一次性消费：响应包不留存
+        assert_true(!ffi_exists(dir + "/res_req_rhop_echo.rhop"))
+      }
+      Err(e) => abort("roundtrip 应当成功: " + e)
+    }
+  }
+}
+
+///|
+test "interact · roundtrip：发送失败立即 error(phase=send)，不返回上一轮结果（C1-F1）" {
+  let dir = it_dir("rhop-it-sendfail")
+  // 用普通文件挡住写端：shared.write 的父路径是文件 → 写入必失败
+  assert_true(ffi_write(dir + "/blocker", "not-a-dir"))
+  let cfg = it_cfg(
+    itj(
+      "{\"key\": \"k\", \"role\": \"SEND\", \"shared\": {\"write\": \"" +
+      dir +
+      "/blocker/sub\"}}",
+    ),
+  )
+  let payload = itj("{\"marker\": \"run1\"}")
+  match @rp.interact(cfg, "rhop.echo", Some(payload), "roundtrip") {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_eq(it_str(j, "phase"), "send")
+      // 绝不能把上一轮（或预置）结果当本轮结果
+      assert_true(!Json::stringify(j).contains("run1"))
+      assert_eq(it_str2(j, "detail", "status"), "error")
+    }
+    Err(e) => abort("发送失败应走 status:error 收据而非 Err: " + e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 16. C1-F4：handle_request 回执写失败不得 status:ok
+// ---------------------------------------------------------------------------
+
+///|
+test "interact · handle_request：回执写失败 → status:error + phase=response（C1-F4）" {
+  let dir = it_dir("rhop-it-resfail")
+  let cfg = it_cfg(it_cfg_json(dir, "k"))
+  // 用正常写端准备请求包
+  let producer = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造发送会话失败: " + e)
+  }
+  let request = itj("{\"action\": \"jump.probe\", \"payload\": {}}")
+  match producer.send_package("req_x.rhop", request) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("请求包写入失败: " + e)
+  }
+  // 接收端：读端正常、写端落在「父路径是文件」的位置 → 回执写必然失败
+  assert_true(ffi_write(dir + "/blocker", "x"))
+  let read_sp : &@rp.SharedPath = @rp.LocalSharedPath::new(dir)
+  let write_sp : &@rp.SharedPath = @rp.LocalSharedPath::new(
+    dir + "/blocker/sub",
+  )
+  let view = @rp.make_shared_path_from_views(write_sp, Some(read_sp))
+  let receiver = @rp.Session::new(
+    @rp.Role::Recv,
+    Some(view),
+    [],
+    None,
+    Some(@rp.RhopCrypto::from_key("k")),
+    "b",
+  )
+  match @rp.handle_request(cfg, "req_x.rhop", session=receiver) {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_eq(it_str(j, "phase"), "response")
+      assert_eq(it_str2(j, "detail", "status"), "error")
+    }
+    Err(e) => abort("回执写失败应走 status:error 收据而非 Err: " + e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 17. C1-F5：探测无副作用 + 只读接收端可收
+// ---------------------------------------------------------------------------
+
+///|
+test "interact · available()/select() 不建目录；只读接收端可收（C1-F5）" {
+  let dir = it_dir("rhop-it-noside")
+  let fresh = dir + "/fresh"
+  let cfg = it_cfg(
+    itj(
+      "{\"key\": \"k\", \"role\": \"SEND\", \"shared\": {\"write\": \"" +
+      fresh +
+      "\"}}",
+    ),
+  )
+  let s = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造会话失败: " + e)
+  }
+  assert_true(!ffi_exists(fresh))
+  // 父目录存在 → 写端可用；但探测本身不能建目录
+  assert_true(s.available())
+  assert_true(!ffi_exists(fresh))
+  assert_eq(s.select().transport, "shared")
+  assert_true(!ffi_exists(fresh))
+  // 真正发送时才创建目录
+  match s.send_package("pkg.rhop", Json::object(Map([]))) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("发送失败: " + e)
+  }
+  assert_true(ffi_exists(fresh + "/pkg.rhop"))
+  // 只读接收端：read=dir 可读、write 指向「父路径是文件」的不可写位置
+  let producer = match
+    it_cfg(it_cfg_json(dir, "k")).build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造发送会话失败: " + e)
+  }
+  match producer.send_package("ro.rhop", Json::object(Map([]))) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("只读用例的请求包写入失败: " + e)
+  }
+  assert_true(ffi_write(dir + "/blocker2", "x"))
+  let ro_cfg = it_cfg(
+    itj(
+      "{\"key\": \"k\", \"role\": \"RECV\", \"shared\": {\"write\": \"" +
+      dir +
+      "/blocker2/sub\", \"read\": \"" +
+      dir +
+      "\"}}",
+    ),
+  )
+  let receiver = match ro_cfg.build_session(role=@rp.Role::Recv) {
+    Ok(s) => s
+    Err(e) => abort("构造接收会话失败: " + e)
+  }
+  match receiver.recv_package("ro.rhop") {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("只读介质应当能接收: " + e)
+  }
+}
+
+///|
+test "interact · 只读介质：接收端能收、发送端给出「写端不可用」专门 Err（C1-F5）" {
+  let dir = it_dir("rhop-it-readonly")
+  assert_true(ffi_write(dir + "/blocker3", "x"))
+  // read=dir 可读；write 落在「父路径是文件」的位置 → 写端不可用
+  let cfg = it_cfg(
+    itj(
+      "{\"key\": \"k\", \"role\": \"SEND\", \"shared\": {\"write\": \"" +
+      dir +
+      "/blocker3/sub\", \"read\": \"" +
+      dir +
+      "\"}}",
+    ),
+  )
+  // 先由正常写端投递一个包，再让只读接收端取
+  let producer = match
+    it_cfg(it_cfg_json(dir, "k")).build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造发送会话失败: " + e)
+  }
+  match producer.send_package("ro2.rhop", Json::object(Map([]))) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("请求包写入失败: " + e)
+  }
+  let recv = match cfg.build_session(role=@rp.Role::Recv) {
+    Ok(s) => s
+    Err(e) => abort("构造接收会话失败: " + e)
+  }
+  match recv.recv_package("ro2.rhop") {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("只读介质的接收端应当可用: " + e)
+  }
+  // 发送端：写端不可用 → 专门 Err（不是笼统的「全不可达」）
+  let send = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造发送会话失败: " + e)
+  }
+  // 写端父路径是文件：探测判「可写」，实际写入失败 → status:error 收据（不是 Err）
+  match send.send_package("out2.rhop", Json::object(Map([]))) {
+    Ok(j) => assert_eq(it_str(j, "status"), "error")
+    Err(e) => assert_true(!e.contains("全不可达")) // 不得笼统判全不可达
+  }
+  // 写端连父目录都不存在（且是本地端点）→ 专门 Err，且探测过程不建目录
+  let nodir_cfg = it_cfg(
+    itj(
+      "{\"key\": \"k\", \"role\": \"SEND\", \"shared\": {\"write\": \"" +
+      dir +
+      "/nodir/sub\", \"read\": \"" +
+      dir +
+      "\"}}",
+    ),
+  )
+  let send2 = match nodir_cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造发送会话失败: " + e)
+  }
+  match send2.send_package("out3.rhop", Json::object(Map([]))) {
+    Ok(j) =>
+      abort(
+        "写端不可用（父目录缺失）时不应发送成功: " +
+        Json::stringify(j),
+      )
+    Err(e) => assert_true(e.contains("写端不可用"))
+  }
+  assert_true(!ffi_exists(dir + "/nodir"))
 }

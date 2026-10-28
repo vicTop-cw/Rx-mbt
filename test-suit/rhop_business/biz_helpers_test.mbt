@@ -111,18 +111,15 @@ fn biz_action_payload(action : String) -> Json {
 }
 
 ///|
-/// 拿一个**唯一**临时工作目录（js：借 `MirrorDB::open_temp()` 的父目录，
-/// 每次调用都新建一个 `rhop-mirror-<rand>/`，跨运行不会串库）。
+/// 拿一个**唯一**临时工作目录（js：`rhop_temp_workspace`，每次调用新建
+/// `rhop-biz-<rand>/`；这些目录登记在进程退出钩子里统一递归删除）。
 ///
-/// 非 js 目标无文件系统 ⇒ `fail`（只在 js 测试文件里调用）。
+/// 非 js 目标无文件系统 ⇒ `abort`（只在 js 测试文件里调用）。
 fn biz_temp_workspace() -> String {
-  let probe = match @rp.MirrorDB::open_temp() {
-    Ok(db) => db
-    Err(e) => abort("open_temp 失败（需要 js 目标）: \{e}")
+  match @rp.rhop_temp_workspace("rhop-biz-") {
+    Ok(dir) => dir
+    Err(e) => abort("rhop_temp_workspace 失败（需要 js 目标）: \{e}")
   }
-  let dir = @rp.rhop_fs_parent(probe.path())
-  probe.close()
-  dir
 }
 
 ///|

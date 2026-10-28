@@ -232,14 +232,17 @@ extern "js" fn ffi_r_active_resources() -> String =
 
 ///|
 test "relay · 收尾：无遗留中转子进程（js 挂死兜底 + 回归断言）" {
+  // 断言对象：前面用例都走到 stop 之后仍然存活的中转子进程数。
+  // 必须先在 kill_all 之前取快照——「先 kill_all 再断言 count==0」是恒真断言（C1-F8）。
   let live = ffi_r_relay_live_count()
+  // 兜底清理：即使断言失败，也不把子进程留给后续用例/测试进程
+  ffi_r_relay_kill_all()
   if live > 0 {
     println(
-      "[relay] 发现 \{live.to_string()} 个未停止的中转子进程（有用例未走到 stop），兜底清理",
+      "[relay] 失败现场：收尾前仍有 \{live.to_string()} 个未停止的中转子进程（有用例未走到 stop）",
     )
   }
-  ffi_r_relay_kill_all()
-  assert_eq(ffi_r_relay_live_count(), 0)
+  assert_eq(live, 0)
   // 句柄快照打印出来，便于下次真的挂死时一眼定位（FSWatcher/Server/Socket/Timer…）
   println("[relay] active resources = " + ffi_r_active_resources())
 }

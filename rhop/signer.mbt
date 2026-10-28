@@ -83,19 +83,28 @@ pub impl AbstractSigner for FileHashSigner with fn verify(
 /// NPU 真机签名（vools `NPUSigner`）。
 ///
 /// 签名格式 `"<marker>:<serial>:<md5(preimage)>"`，其中 `serial` 由
-/// `serial_provider` 注入：
-///   - 默认 provider 返回 `None` ⇒ `sign` 返回 `None`（本机无 npu-smi 的真实语义）；
-///   - 测试/真机由调用方注入 provider，**本库不 spawn 子进程**，因此三目标一致、
-///     且不会在测试里真的调用 npu-smi。
+/// `serial_provider` 注入；**provider 返回 `None` 时按 vools 的 `UNKNOWN_NPU`
+/// 兜底**（`signer.py:52-74`：npu-smi 可执行但解析不到序列号 ⇒ 仍以
+/// `"UNKNOWN_NPU"` 签名）。
+///
+/// 因此 `NPUSigner::sign` **恒不为 `None`**：本库不 spawn 子进程、无法区分
+/// 「npu-smi 不存在」与「工具在但无序列号」，统一按可签名的 `UNKNOWN_NPU`
+/// 处理（vools 在『工具不存在』时返回 `None`，该分支无法在本抽象中表达，
+/// 见矩阵 §7 差异 17）。测试/真机由调用方注入 provider，三目标一致。
 pub struct NPUSigner {
   /// 签名前缀标记（默认 `NPU_MARKER`）
   marker : String
-  /// 序列号来源；返回 None 表示当前环境无 NPU
+  /// 序列号来源；返回 None ⇒ 使用 `UNKNOWN_NPU` 兜底
   serial_provider : () -> String?
 }
 
 ///|
-/// 以指定 marker 构造 NPU 签名器（serial provider 默认不可用 ⇒ sign 返回 None）。
+/// NPUSigner 解析不到序列号时的兜底字面量（vools `_get_npu_serial` 的
+/// `return "UNKNOWN_NPU"`）。
+pub const NPU_UNKNOWN_SERIAL : String = "UNKNOWN_NPU"
+
+///|
+/// 以指定 marker 构造 NPU 签名器（默认 provider 返回 None ⇒ `UNKNOWN_NPU` 兜底）。
 pub fn NPUSigner::new(marker : String) -> NPUSigner {
   { marker, serial_provider: fn() { None }, }
 }
@@ -109,8 +118,8 @@ pub fn NPUSigner::with_default_marker() -> NPUSigner {
 ///|
 /// 注入序列号来源（返回新对象，原对象不变）。
 ///
-/// provider 返回 `Some(serial)` 时 `sign` 产出
-/// `"<marker>:<serial>:<md5>"`；返回 `None` 时 `sign` 返回 `None`。
+/// provider 返回 `Some(serial)` 时 `sign` 产出 `"<marker>:<serial>:<md5>"`；
+/// 返回 `None` 时按 vools 语义用 `UNKNOWN_NPU` 兜底，仍可签名。
 pub fn NPUSigner::with_serial_provider(
   self : NPUSigner,
   provider : () -> String?,
@@ -125,7 +134,9 @@ pub fn NPUSigner::marker(self : NPUSigner) -> String {
 }
 
 ///|
-/// 是否有可用的序列号来源（precheck，不产生签名）。
+/// provider 是否提供了**真实**序列号（precheck，不产生签名）。
+///
+/// `false` 不代表不能签名——此时 `sign` 会走 `UNKNOWN_NPU` 兜底。
 pub fn NPUSigner::has_serial(self : NPUSigner) -> Bool {
   match (self.serial_provider)() {
     Some(_) => true
@@ -134,18 +145,23 @@ pub fn NPUSigner::has_serial(self : NPUSigner) -> Bool {
 }
 
 ///|
-pub impl AbstractSigner for NPUSigner with fn sign(self, task_id, result) {
+/// 解析实际参与签名的序列号：provider 的值，或 `UNKNOWN_NPU` 兜底。
+fn NPUSigner::resolved_serial(self : NPUSigner) -> String {
   match (self.serial_provider)() {
-    None => None
-    Some(serial) =>
-      Some(
-        self.marker +
-        ":" +
-        serial +
-        ":" +
-        md5_hex_of_utf8(signer_preimage(task_id, result)),
-      )
+    Some(serial) => serial
+    None => NPU_UNKNOWN_SERIAL
   }
+}
+
+///|
+pub impl AbstractSigner for NPUSigner with fn sign(self, task_id, result) {
+  Some(
+    self.marker +
+    ":" +
+    self.resolved_serial() +
+    ":" +
+    md5_hex_of_utf8(signer_preimage(task_id, result)),
+  )
 }
 
 ///|

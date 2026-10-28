@@ -52,6 +52,31 @@ for arg in "$@"; do
   esac
 done
 
+# ---- 参数校验（C1 审计 F4/F10）：非法值一律 usage error（rc=2），不得静默降级 ----
+if [ -n "${RX_MBT_STEP_TIMEOUT:-}" ]; then
+  case "$RX_MBT_STEP_TIMEOUT" in
+    ''|*[!0-9]*) echo "FATAL: --timeout 需正整数（秒），收到「$RX_MBT_STEP_TIMEOUT」" >&2; exit 2 ;;
+  esac
+  if [ "$RX_MBT_STEP_TIMEOUT" -le 0 ]; then
+    echo "FATAL: --timeout 必须 > 0（0 会关闭挂死保护，不允许）" >&2
+    exit 2
+  fi
+fi
+if [ -n "$SKIP_LIST" ]; then
+  _valid_steps=" check wasm js native "
+  for _tok in $(printf '%s' "$SKIP_LIST" | tr ',' ' '); do
+    [ -z "$_tok" ] && continue
+    case "$_valid_steps" in
+      *" $_tok "*) : ;;
+      *)
+        echo "FATAL: --skip 含未知步骤名「$_tok」；可用：check/ wasm/ js/ native" >&2
+        echo "       用法只支持等号形式：--skip=check,js（空格形式会被当成位置参数）" >&2
+        exit 2
+        ;;
+    esac
+  done
+fi
+
 is_skipped() {
   case ",$(echo "$SKIP_LIST" | tr -d ' ')," in
     *",$1,"*) return 0 ;;
@@ -218,15 +243,31 @@ cleanup_orphans() {
   case "$PLATFORM" in
     windows)
       command -v powershell >/dev/null 2>&1 || return 0
-      powershell -NoProfile -Command \
-        "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*${pattern}*' -and \$_.Name -match 'node' } | ForEach-Object { Stop-Process -Id \$_.ProcessID -Force }" \
-        >/dev/null 2>&1 || true
+      # 这里必须用 -match（正则）而不是 -like（通配符）：pattern 是正则形态
+      # （如 rhop_test_.*\.(js|wasm|mjs) 或 _build/js/debug/test），塞进 -like
+      # 会被当字面量 -> 恒 0 命中、静默 no-op（C1 审计 F2）。
+      # 另：PS 5.1 的 Get-Process 没有 CommandLine 属性，必须走 CIM 取命令行。
+      local killed
+      killed=$(powershell -NoProfile -Command         "\$pat='${pattern}'; \$n=0; Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { \$_.CommandLine -match \$pat } | ForEach-Object { \$n++; Stop-Process -Id \$_.ProcessID -Force -ErrorAction SilentlyContinue }; \$n"         2>/dev/null | tr -d '\r' | tail -1)
+      case "$killed" in ''|*[!0-9]*) killed=0 ;; esac
+      if [ "$killed" -gt 0 ]; then
+        echo "    (cleanup: 已清理 $killed 个残留 node 进程，pattern=$pattern)"
+      fi
       ;;
     wsl|linux)
       command -v pkill >/dev/null 2>&1 && pkill -f "$pattern" >/dev/null 2>&1 || true
       ;;
   esac
 }
+
+# ---- 并发纪律（lead 2026-10-28 裁示）：多个 lane 并行修，moon 并发会污染共享 _build
+# （实测：Out of memory / "Package rx not found" / "written 未绑定"）。仓库里若已有
+# scripts/with_moon_lock.sh，则本脚本的所有 moon 调用自动套锁（mkdir 锁 + 陈旧锁回收）。
+MOON_LOCK_SH="$PROJECT_DIR/scripts/with_moon_lock.sh"
+MOON_CMD=("$MOON_BIN")
+if [ -f "$MOON_LOCK_SH" ]; then
+  MOON_CMD=(bash "$MOON_LOCK_SH" "$MOON_BIN")
+fi
 
 # run_step <step-name> <label> <moon args...>
 run_step() {
@@ -247,11 +288,11 @@ run_step() {
   if [ "$QUIET" -eq 1 ]; then
     # --quiet：整段输出落盘，只回显末尾 40 行（MCP run_check 这类调用方更省时；
     # 汇总行仍从完整日志里解析，判绿不受影响）
-    run_with_timeout "$TIMEOUT_SECS" moon ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} "$@" > "$outfile" 2>&1
+    run_with_timeout "$TIMEOUT_SECS" ${MOON_CMD[@]+"${MOON_CMD[@]}"} ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} "$@" > "$outfile" 2>&1
     rc=$?
     tail -n 40 "$outfile"
   else
-    run_with_timeout "$TIMEOUT_SECS" moon ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} "$@" 2>&1 | tee "$outfile"
+    run_with_timeout "$TIMEOUT_SECS" ${MOON_CMD[@]+"${MOON_CMD[@]}"} ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"} "$@" 2>&1 | tee "$outfile"
     rc=${PIPESTATUS[0]}
   fi
   t1=$(now_ms)
@@ -336,4 +377,13 @@ else
   echo " RESULT: FAIL —— 见上表 FAIL 行"
 fi
 echo "============================================================================="
+
+# ---- F5: 失败时保留现场（否则 trap 会把 $TMPDIR_RUN/*.log 一起删掉） ----
+if [ "$OVERALL_RC" -ne 0 ] && [ -d "$TMPDIR_RUN" ]; then
+  _LOGDIR="$PROJECT_DIR/fist-mbt/reports/run-logs/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$_LOGDIR" 2>/dev/null || true
+  cp "$TMPDIR_RUN"/*.log "$_LOGDIR"/ 2>/dev/null || true
+  echo " 失败日志已保留：$_LOGDIR"
+fi
+
 exit "$OVERALL_RC"

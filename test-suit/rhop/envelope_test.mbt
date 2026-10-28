@@ -50,8 +50,8 @@ test "envelope: 与 Python 逐字节一致（向量 A：pending + 时间戳）" 
   )
   let expected = "{\"checksum\": \"sha256:f9d834bcd27ee379c0b852f30d073c3cb68284178719d098b1f0140b5fb2967e\", \"created_at\": \"2026-10-21T10:00:00Z\", \"error\": null, \"hops_seen\": [], \"payload\": {\"cmd\": \"echo hi\"}, \"result\": null, \"side\": \"requester\", \"signature\": null, \"status\": \"pending\", \"task_id\": \"job-001\", \"updated_at\": \"2026-10-21T10:00:00Z\", \"v\": 1, \"version\": 1}"
   let bytes = env.to_rhop_bytes()
-  assert_eq(@rp.bytes_of_utf8(expected).length(), bytes.length())
-  assert_eq(@rp.sha256_hex(bytes), @rp.sha256_hex(@rp.bytes_of_utf8(expected)))
+  // C1 审计 F9：直接比字节（原先两边各算 sha256 再比，若 sha256_hex 整体缺陷则断言永真）
+  assert_eq(bytes, @rp.bytes_of_utf8(expected))
   match @rp.Envelope::from_rhop_bytes(@rp.bytes_of_utf8(expected)) {
     Err(e) => fail("Python 向量反序列化失败: \{e}")
     Ok(restored) => {
@@ -515,4 +515,176 @@ test "envelope: 消费 qa fixture · tampered_checksum 必须报 checksum mismat
   let (ok, reason) = @rp.integrity_verify_bytes(@rp.bytes_of_utf8(broken))
   assert_false(ok)
   assert_true(reason.contains("checksum mismatch"))
+}
+
+// ============================================================================
+// C1 修复回归（PROTO-01 / PROTO-02）
+//
+// PROTO-01：`to_rhop_bytes` 每次序列化都按当前字段重算 checksum（vools
+// `envelope.py:79-83` 同），不再把已失效的旧 checksum 原样写出去。
+// PROTO-02：可选字段显式 `null` / 浮点 `version` 一律 `字段值非法`，
+// 不静默改值（vools 保留 None/2.7，本实现用 Int/String/数组无法无损表达）。
+// ============================================================================
+
+///|
+/// 由「去掉 checksum 的规范 JSON body」拼出合法的 .rhop 文本
+/// （body 必须已是 canonical 形态：键升序、`", "` / `": "` 分隔）。
+fn raw_with_checksum(body : String) -> String {
+  "{\"checksum\": \"sha256:" +
+  @rp.sha256_hex_of_utf8(body) +
+  "\", " +
+  body[1:].to_string()
+}
+
+///|
+test "envelope(PROTO-01): from_dict 带错 checksum → 写出时重算、自身可读回" {
+  let dict = @json.parse(
+    "{\"task_id\":\"job-fix\",\"status\":\"pending\",\"payload\":{},\"side\":\"requester\",\"checksum\":\"sha256:bad\"}",
+  ) catch {
+    _ => fail("dict 解析失败")
+  }
+  match @rp.Envelope::from_dict(dict) {
+    Err(e) => fail("from_dict 不校验 checksum（vools 语义）: \{e}")
+    Ok(env) => {
+      // 语义保留：对象上的 checksum 仍是传入的旧值（供 checksum_match 判假）
+      assert_eq(env.checksum, "sha256:bad")
+      let bytes = env.to_rhop_bytes()
+      let text = @rp.utf8_text(bytes)
+      // 写出的字节必须用重算值，而不是旧的 "sha256:bad"
+      assert_false(text.contains("sha256:bad"))
+      assert_true(text.contains(env.compute_checksum()))
+      match @rp.Envelope::from_rhop_bytes(bytes) {
+        Err(e) => fail("重算后写出的字节应可读回: \{e}")
+        Ok(restored) => {
+          assert_eq(restored.checksum, env.compute_checksum())
+          assert_eq(restored.task_id, "job-fix")
+        }
+      }
+    }
+  }
+}
+
+///|
+test "envelope(PROTO-01): 缺可选键的文件 → 回写补默认值并重算、可读回" {
+  // 只给必填 + v：缺 side/version/created_at/updated_at/hops_seen/result/error/signature
+  let body = "{\"payload\": {}, \"side\": \"requester\", \"status\": \"pending\", \"task_id\": \"job-m\", \"v\": 1}"
+  let raw = raw_with_checksum(body)
+  match @rp.Envelope::from_rhop_bytes(@rp.bytes_of_utf8(raw)) {
+    Err(e) => fail("缺可选键应被接受（与 Python 同）: \{e}")
+    Ok(env) => {
+      assert_eq(env.version, 1) // 补默认值
+      assert_eq(env.hops_seen.length(), 0)
+      let bytes = env.to_rhop_bytes()
+      let text = @rp.utf8_text(bytes)
+      // 文件的旧 checksum 是对「缺键 body」算的，回写后必须变成对补全后的 body 算的
+      assert_false(text.contains("sha256:" + @rp.sha256_hex_of_utf8(body)))
+      assert_true(text.contains(env.compute_checksum()))
+      match @rp.Envelope::from_rhop_bytes(bytes) {
+        Err(e) => fail("回写后应能读回: \{e}")
+        Ok(restored) => {
+          assert_eq(restored.checksum, env.compute_checksum())
+          assert_eq(restored.version, 1)
+        }
+      }
+    }
+  }
+}
+
+///|
+test "envelope(PROTO-01): 原地改 hops_seen / payload 后 to_rhop_bytes 重算" {
+  let env = make_env("job-mut", @rp.TaskStatus::Pending)
+  let stale = env.checksum
+  env.hops_seen.push("requester")
+  match env.payload {
+    Object(members) => members["injected"] = Json::string("yes")
+    _ => fail("payload 应为对象")
+  }
+  // 字段是 String，原地改集合不会同步 checksum
+  assert_eq(env.checksum, stale)
+  let bytes = env.to_rhop_bytes()
+  let text = @rp.utf8_text(bytes)
+  assert_true(text.contains("\"injected\""))
+  assert_true(text.contains(env.compute_checksum()))
+  assert_false(text.contains(stale))
+  match @rp.Envelope::from_rhop_bytes(bytes) {
+    Err(e) => fail("原地修改后回写应可读回: \{e}")
+    Ok(restored) => {
+      assert_eq(restored.hops_seen, ["requester"])
+      assert_eq(
+        @rp.canonical_json(restored.payload),
+        @rp.canonical_json(env.payload),
+      )
+    }
+  }
+}
+
+///|
+test "envelope(PROTO-01): 含未知字段 → 回写丢弃未知字段并重算、可读回" {
+  let body = "{\"extra\": \"keep-me\", \"payload\": {}, \"side\": \"requester\", \"status\": \"pending\", \"task_id\": \"job-u\", \"v\": 1}"
+  let raw = raw_with_checksum(body)
+  match @rp.Envelope::from_rhop_bytes(@rp.bytes_of_utf8(raw)) {
+    Err(e) => fail("未知字段参与校验，checksum 正确应通过: \{e}")
+    Ok(env) => {
+      let bytes = env.to_rhop_bytes()
+      let text = @rp.utf8_text(bytes)
+      assert_false(text.contains("\"extra\"")) // 未知字段被丢弃（vools 同）
+      match @rp.Envelope::from_rhop_bytes(bytes) {
+        Err(e) =>
+          fail("丢弃未知字段后 checksum 必须重算、可读回: \{e}")
+        Ok(restored) => assert_eq(restored.task_id, "job-u")
+      }
+    }
+  }
+}
+
+///|
+test "envelope(PROTO-02): 可选字段显式 null / 浮点 version → 字段值非法（不静默改值）" {
+  let cases : Array[(String, String, String)] = [
+    (
+      "side:null", "{\"payload\": {}, \"side\": null, \"status\": \"pending\", \"task_id\": \"x\", \"v\": 1}",
+      "None is not a valid Side",
+    ),
+    (
+      "version:null", "{\"payload\": {}, \"status\": \"pending\", \"task_id\": \"x\", \"version\": null}",
+      "version 不能为 null",
+    ),
+    (
+      "version:2.7", "{\"payload\": {}, \"status\": \"pending\", \"task_id\": \"x\", \"version\": 2.7}",
+      "version 必须是整数",
+    ),
+    (
+      "created_at:null", "{\"created_at\": null, \"payload\": {}, \"status\": \"pending\", \"task_id\": \"x\"}",
+      "created_at 不能为 null",
+    ),
+    (
+      "updated_at:null", "{\"payload\": {}, \"status\": \"pending\", \"task_id\": \"x\", \"updated_at\": null}",
+      "updated_at 不能为 null",
+    ),
+    (
+      "hops_seen:null", "{\"hops_seen\": null, \"payload\": {}, \"status\": \"pending\", \"task_id\": \"x\"}",
+      "hops_seen 不能为 null",
+    ),
+  ]
+  for case in cases {
+    let (label, body, needle) = case
+    let dict = @json.parse(body) catch { _ => fail("解析失败: \{label}") }
+    match @rp.Envelope::from_dict(dict) {
+      Ok(env) =>
+        fail(
+          "\{label} 应被拒绝，却得到 version=\{env.version} side=\{env.side.to_string()}",
+        )
+      Err(reason) => {
+        assert_true(reason.contains("字段值非法"))
+        assert_true(reason.contains(needle))
+      }
+    }
+  }
+  // from_rhop_bytes 同一解析路径：checksum 正确也必须拒绝
+  let raw = raw_with_checksum(
+    "{\"payload\": {}, \"side\": null, \"status\": \"pending\", \"task_id\": \"job-null\", \"v\": 1}",
+  )
+  match @rp.Envelope::from_rhop_bytes(@rp.bytes_of_utf8(raw)) {
+    Ok(_) => fail("side:null 应被拒绝（vools: None is not a valid Side）")
+    Err(reason) => assert_true(reason.contains("None is not a valid Side"))
+  }
 }

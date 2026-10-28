@@ -97,8 +97,9 @@ pub fn Requester::submit(
   task_id : String,
   payload : Json,
 ) -> Result[String, String] {
-  if task_id == "" {
-    return Err("submit 需要非空 task_id")
+  match validate_task_id(task_id) {
+    Err(msg) => return Err("submit 拒绝非法 task_id: \{msg}")
+    Ok(_) => ()
   }
   let now = rhop_now_iso()
   let env = Envelope::new_full(
@@ -111,10 +112,11 @@ pub fn Requester::submit(
     updated_at=now,
   )
   if self.data_dir != "" {
-    let inbox_path = rhop_join(
-      rhop_join(self.data_dir, "inbox"),
-      task_id + ".rhop",
-    )
+    let inbox_base = rhop_join(self.data_dir, "inbox")
+    let inbox_path = match rhop_join_checked(inbox_base, task_id + ".rhop") {
+      Ok(p) => p
+      Err(msg) => return Err("submit 拒绝非法 inbox 路径: \{msg}")
+    }
     match rhop_fs_write_text(inbox_path, utf8_text(env.to_rhop_bytes())) {
       Ok(_) => ()
       Err(msg) => return Err("submit 写 inbox 失败: \{msg}")

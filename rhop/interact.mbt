@@ -54,7 +54,7 @@ pub fn interact(
   if normalized != "request" && normalized != "roundtrip" {
     return Err("未知 mode: \{mode}（可用 execute/request/roundtrip）")
   }
-  let filename = match request_filename {
+  let requested = match request_filename {
     Some(f) =>
       if f.trim().length() == 0 {
         interact_default_filename(action)
@@ -63,16 +63,24 @@ pub fn interact(
       }
     None => interact_default_filename(action)
   }
+  // 安全边界：包名统一走白名单（防路径穿越；缺省名同样要过校验）
+  let filename = match safe_filename(requested) {
+    Ok(n) => n
+    Err(e) => return Err("rhop interact: " + e)
+  }
   let sender = match cfg.build_session(role=Role::Send) {
     Ok(s) => s
     Err(e) => return Err(e)
   }
+  // 一次性请求令牌：绑定「本次请求」，用于拒绝陈旧 res_ 回执（F1）
+  let token = interact_next_token(filename, action)
   let request = Json::object({
     "action": Json::string(action),
     "payload": match payload {
       Some(p) => p
       None => Json::object(Map([]))
     },
+    "token": Json::string(token),
   })
   let sent = match sender.send_package(filename, request) {
     Ok(v) => v
@@ -81,27 +89,64 @@ pub fn interact(
   if normalized == "request" {
     return Ok(sent)
   }
+  // F1：请求一旦投递失败必须立刻返回，绝不能继续用上一轮残留的 res_ 当本轮回执
+  if cfg_json_str(sent, "status") != Some("ok") {
+    return Ok(
+      Json::object({
+        "status": Json::string("error"),
+        "phase": Json::string("send"),
+        "filename": Json::string(filename),
+        "detail": sent,
+      }),
+    )
+  }
   // roundtrip：对端同进程模拟（B 端复用同一份介质/密钥取包执行并回传）
+  let resp_filename = "res_" + filename
+  // 清掉历史残留回执：陈旧 res_ 不得作为本轮结果
+  let _ = sender.remove_package(resp_filename)
   let response = match handle_request(cfg, filename) {
     Ok(v) => v
     Err(e) => return Err(e)
   }
   if cfg_json_str(response, "status") != Some("ok") {
     return Ok(
-      Json::object({ "status": Json::string("error"), "omega_gate": response }),
+      Json::object({
+        "status": Json::string("error"),
+        "phase": Json::string("request"),
+        "omega_gate": response,
+      }),
     )
   }
-  let resp_filename = "res_" + filename
   let fetched = match sender.recv_package(resp_filename) {
     Ok(v) => v
     Err(e) => return Err(e)
   }
   if cfg_json_str(fetched, "status") != Some("ok") {
     return Ok(
-      Json::object({ "status": Json::string("error"), "omega_gate": fetched }),
+      Json::object({
+        "status": Json::string("error"),
+        "phase": Json::string("receive"),
+        "omega_gate": fetched,
+      }),
     )
   }
   let payload_out = interact_payload_or_empty(fetched)
+  // 令牌校验：回执必须回显本次请求的 token，否则判为陈旧/串包响应
+  if cfg_json_str(payload_out, "token") != Some(token) {
+    let _ = sender.remove_package(resp_filename)
+    return Ok(
+      Json::object({
+        "status": Json::string("error"),
+        "phase": Json::string("response"),
+        "reason": Json::string(
+          "回执与本次请求不匹配（疑似陈旧 res_ 或串包）",
+        ),
+        "omega_gate": fetched,
+      }),
+    )
+  }
+  // 一次性消费：取回后删除响应包（防下一轮复用）
+  let _ = sender.remove_package(resp_filename)
   Ok(
     Json::object({
       "status": Json::string("ok"),
@@ -139,6 +184,18 @@ pub fn handle_request(
       }),
     )
   }
+  // 安全边界：入站包名同样过白名单（拒绝穿越路径）
+  let name = match safe_filename(filename) {
+    Ok(n) => n
+    Err(e) =>
+      return Ok(
+        Json::object({
+          "status": Json::string("error"),
+          "reason": Json::string("包文件名非法: " + e),
+          "transport": Json::null(),
+        }),
+      )
+  }
   let receiver = match session {
     Some(s) => s
     None =>
@@ -147,7 +204,7 @@ pub fn handle_request(
         Err(e) => return Err(e)
       }
   }
-  let received = match receiver.recv_package(filename) {
+  let received = match receiver.recv_package(name) {
     Ok(v) => v
     Err(e) => return Err(e)
   }
@@ -190,16 +247,31 @@ pub fn handle_request(
   )
   let unwrapped = omega_unwrap(result)
   // 回传处理结果：RELAY 无方向，SEND<->RECV 由 reverse() 换角色，介质原样复用
-  let resp_filename = "res_" + filename
+  let resp_filename = "res_" + name
   let sender = receiver.reverse()
   let response_body = Json::object({
     "action": Json::string(action),
     "result": interact_field_or_null(unwrapped, "status"),
     "action_result": unwrapped,
+    // 回显请求令牌：发起方据此拒绝陈旧/串包响应（F1）
+    "token": interact_field_or_null(request, "token"),
   })
   let sent = match sender.send_package(resp_filename, response_body) {
     Ok(v) => v
     Err(e) => return Err(e)
+  }
+  // F4：回执写失败必须报 error，不能把 sent 的失败藏进 response_sent 后仍报 ok
+  if cfg_json_str(sent, "status") != Some("ok") {
+    return Ok(
+      Json::object({
+        "status": Json::string("error"),
+        "phase": Json::string("response"),
+        "action": Json::string(action),
+        "transport": interact_field_or_null(received, "transport"),
+        "response_filename": Json::string(resp_filename),
+        "detail": sent,
+      }),
+    )
   }
   Ok(
     Json::object({
@@ -218,9 +290,50 @@ pub fn handle_request(
 // ---------------------------------------------------------------------------
 
 ///|
-/// 缺省动作包文件名：`req_<action>`，其中 action 里的 `.` 换成 `_`（vools 同规则）。
+/// 缺省动作包文件名：`req_<action>`，action 里的 `.` 换成 `_`（vools 同规则）。
+///
+/// 但 vools 直接拼进文件名，`jump/push` 这类带分隔符的动作名会拼出子目录路径；
+/// 这里把白名单外的字符统一换成 `_`，再兜底保证结果能过 `safe_filename`。
 fn interact_default_filename(action : String) -> String {
-  "req_" + action.replace(old=".", new="_") + ".rhop"
+  let dashed = action.replace(old=".", new="_")
+  let sb = StringBuilder::new()
+  for c in dashed {
+    let code = c.to_int()
+    let ok = (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      code == 95 ||
+      code == 45
+    sb.write_char(if ok { c } else { '_' })
+  }
+  let body = sb.to_string()
+  let stem = if body == "" { "action" } else { body }
+  match safe_filename("req_" + stem + ".rhop") {
+    Ok(n) => n
+    // 极端超长动作名：截断到白名单长度上限内
+    Err(_) => {
+      let cut = match stem.get_view(start=0, end=100) {
+        Some(v) => v.to_owned()
+        None => stem
+      }
+      "req_" + cut + ".rhop"
+    }
+  }
+}
+
+///|
+/// roundtrip 一次性请求令牌计数器（进程内单调递增）。
+let interact_nonce : Ref[Int32] = Ref::Ref(0)
+
+///|
+/// 生成一次性请求令牌：`tok:<nonce>:<filename>:<action>`。
+///
+/// 令牌随请求包一起投递，对端原样回显；发起端校验回执里的令牌与本次请求一致，
+/// 因此上一轮残留的 `res_` 永远不会被当成本轮结果（配合「发送前清理 + 消费后删除」）。
+fn interact_next_token(filename : String, action : String) -> String {
+  let n = interact_nonce.val
+  interact_nonce.val = n + 1
+  "tok:\{n}:\{filename}:\{action}"
 }
 
 ///|

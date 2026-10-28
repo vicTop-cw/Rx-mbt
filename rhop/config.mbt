@@ -130,8 +130,12 @@ pub fn _key_from_cfg(key_cfg : Json?) -> Result[String, String] {
       )
     }
     Number(_, ..) => Ok(Json::stringify(cfg))
-    True => Ok(Json::stringify(cfg))
-    False => Ok(Json::stringify(cfg))
+    // 布尔 key 明确拒绝：vools 会 str(True)="True"，与 MoonBit "true" 口径不一致，
+    // 静默接受会让同一份配置在两个实现下解出不同密钥（解密全失败且难排查）。
+    True | False =>
+      return Err(
+        "配置字段 key 不接受布尔值（请用字符串，或对象 {plain|cipher|path|env|source}）",
+      )
     _ =>
       Err(
         "配置字段 key 形态非法（应为字符串，或对象 {plain|cipher|path|env|source}）",
@@ -170,9 +174,14 @@ pub fn RhopConfig::from_dict(data : Json) -> Result[RhopConfig, String] {
         None => Role::Send
         Some(Null) => Role::Send
         Some(String(s)) =>
-          match Role::parse(s) {
-            Ok(r) => r
-            Err(e) => return Err(e)
+          // 复刻 vools `str(data.get("role") or Role.SEND)`：空串/纯空白按缺失处理
+          if s.trim().length() == 0 {
+            Role::Send
+          } else {
+            match Role::parse(s) {
+              Ok(r) => r
+              Err(e) => return Err(e)
+            }
           }
         Some(_) => return Err("配置字段 role 必须是字符串")
       }
@@ -218,18 +227,19 @@ pub fn RhopConfig::from_file(path : String) -> Result[RhopConfig, String] {
 ///|
 /// 导出配置 JSON 对象（密钥不落盘，仅回填存在性标记）。
 ///
-/// 掩码规则（对齐 vools）：`sftp.password` / `sftp.key_path` → `"***"`；
-/// 无 sftp 时输出空对象 `{}`（vools 的 `self.sftp` 缺省就是 `{}`）。
-/// 其余字段（online / shared / relay）原样透出。
+/// 掩码规则（比 vools 更严，安全优先）：`sftp` / `online` / `shared` / `relay`
+/// **递归**掩码敏感字段 —— `password` / `passwd` / `key_path` / `private_key` /
+/// `token` / `secret` / `api_key` 等一律替换成 `"***"`（大小写不敏感，支持嵌套对象与数组）。
+/// 无 sftp 时输出空对象 `{}`（vools 的 `self.sftp` 缺省就是 `{}`）；其余缺省为 null。
 pub fn RhopConfig::to_dict(self : RhopConfig) -> Json {
   Json::object({
     "name": Json::string(self.name),
     "role": Json::string(self.role.to_string()),
     "has_key": Json::boolean(self.key != ""),
     "sftp": cfg_mask_secrets(self.sftp),
-    "online": cfg_json_or_null(self.online),
-    "shared": cfg_json_or_null(self.shared),
-    "relay": cfg_json_or_null(self.relay),
+    "online": cfg_mask_deep_or_null(self.online),
+    "shared": cfg_mask_deep_or_null(self.shared),
+    "relay": cfg_mask_deep_or_null(self.relay),
   })
 }
 
@@ -314,7 +324,17 @@ pub fn RhopConfig::build_shared(
         Err(e) => Err("shared 配置非法: " + e)
       }
     }
-    Object(_) => ()
+    Object(fields) => {
+      // 复刻 vools `if not self.shared: return None`：空对象 {} 等价于未配置
+      let count = Ref::Ref(0)
+      for key in fields.keys() {
+        let _ = key
+        count.val = count.val + 1
+      }
+      if count.val == 0 {
+        return Ok(None)
+      }
+    }
     _ =>
       return Err(
         "配置字段 shared 必须是对象 {write, read?} 或地址字符串",
@@ -357,8 +377,9 @@ pub fn RhopConfig::build_relay(
         "配置字段 relay 必须是对象 {host, port, token?, timeout?}",
       )
   }
-  let host = cfg_str_or(spec, "host", "127.0.0.1")
-  let port = cfg_json_int(spec, "port", 0)
+  // Python `or` 语义：host 空串回退 127.0.0.1，port 0 回退 0（仍表示"未定端口"）
+  let host = cfg_str_or_nonblank(spec, "host", "127.0.0.1")
+  let port = cfg_json_int_pos(spec, "port", 0)
   let token = cfg_json_str(spec, "token")
   Ok(Some(RelayChannel::new(host, port, token, cfg_timeout_ms(spec, 3000))))
 }
@@ -441,6 +462,15 @@ pub fn load_config(item : Json) -> Result[RhopConfig, String] {
 ///|
 /// 单条在线通道 spec → 通道对象（kind: sftp / git / relay）。
 fn cfg_channel_from_spec(spec : Json) -> Result[&OnlineChannel, String] {
+  // 类型不符必须报错：静默造空通道会让「配了 3 条却只探到 2 条」更难查
+  match spec {
+    Object(_) => ()
+    _ =>
+      return Err(
+        "在线通道配置必须是对象（kind 缺省 sftp）: " +
+        Json::stringify(spec),
+      )
+  }
   let kind = match cfg_json_str(spec, "kind") {
     Some(k) =>
       if k.trim().length() == 0 {
@@ -461,7 +491,8 @@ fn cfg_channel_from_spec(spec : Json) -> Result[&OnlineChannel, String] {
         Some(u) => u
         None => cfg_str_or(spec, "username", "")
       }
-      let port = cfg_json_int(spec, "port", 22)
+      // Python `or 22`：port 缺失 / 0 / 负数都回退 22
+      let port = cfg_json_int_pos(spec, "port", 22)
       let ch : &OnlineChannel = SftpChannel::new(host, port, dir).with_username(
         user,
       )
@@ -477,8 +508,8 @@ fn cfg_channel_from_spec(spec : Json) -> Result[&OnlineChannel, String] {
       Ok(ch)
     }
     "relay" => {
-      let host = cfg_str_or(spec, "host", "127.0.0.1")
-      let port = cfg_json_int(spec, "port", 0)
+      let host = cfg_str_or_nonblank(spec, "host", "127.0.0.1")
+      let port = cfg_json_int_pos(spec, "port", 0)
       let token = cfg_json_str(spec, "token")
       let ch : &OnlineChannel = RelayChannel::new(
         host,
@@ -494,28 +525,66 @@ fn cfg_channel_from_spec(spec : Json) -> Result[&OnlineChannel, String] {
 }
 
 ///|
-/// 掩码敏感字段：`password` / `key_path` → `"***"`；非对象原样透出；无值给 `{}`。
+/// 敏感键名判定（大小写不敏感）：命中即整体替换成 `"***"`，不保留任何片段。
+fn cfg_is_secret_key(key : String) -> Bool {
+  let k = key.to_lower()
+  k == "password" ||
+  k == "passwd" ||
+  k == "key_path" ||
+  k == "private_key" ||
+  k == "secret" ||
+  k == "token" ||
+  k == "api_key" ||
+  k == "access_token" ||
+  k == "refresh_token"
+}
+
+///|
+/// 递归掩码：对象里命中敏感键 → `"***"`；对象/数组递归下钻；标量原样透出。
+fn cfg_mask_deep(value : Json) -> Json {
+  match value {
+    Object(fields) => {
+      let out : Map[String, Json] = Map([])
+      for key in fields.keys() {
+        if cfg_is_secret_key(key) {
+          out[key] = Json::string("***")
+        } else {
+          out[key] = match fields.get(key) {
+            Some(v) => cfg_mask_deep(v)
+            None => Json::null()
+          }
+        }
+      }
+      Json::object(out)
+    }
+    Array(items) => {
+      let out : Array[Json] = []
+      for item in items {
+        out.push(cfg_mask_deep(item))
+      }
+      Json::array(out)
+    }
+    _ => value
+  }
+}
+
+///|
+/// `Json?` 版递归掩码：None → null（保持 `to_dict` 的键位形态）。
+fn cfg_mask_deep_or_null(value : Json?) -> Json {
+  match value {
+    Some(v) => cfg_mask_deep(v)
+    None => Json::null()
+  }
+}
+
+///|
+/// sftp 专用掩码入口：无值给 `{}`（vools 的 `self.sftp` 缺省即 `{}`）；有值递归掩码。
 fn cfg_mask_secrets(sftp : Json?) -> Json {
   let empty = Json::object(Map([]))
   match sftp {
     None => empty
     Some(Null) => empty
-    Some(Object(fields)) => {
-      let out : Map[String, Json] = Map([])
-      for key in fields.keys() {
-        let value = match fields.get(key) {
-          Some(v) => v
-          None => Json::null()
-        }
-        if key == "password" || key == "key_path" {
-          out[key] = Json::string("***")
-        } else {
-          out[key] = value
-        }
-      }
-      Json::object(out)
-    }
-    Some(other) => other
+    Some(v) => cfg_mask_deep(v)
   }
 }
 
@@ -556,6 +625,18 @@ fn cfg_str_or(j : Json, key : String, default : String) -> String {
 }
 
 ///|
+/// 取字符串字段，**缺失 / 空串 / 纯空白**都回退默认值。
+///
+/// 复刻 Python 的 `spec.get(key) or default` 语义：`relay.host = ""` 与缺省等价，
+/// 不能拼出 `http://:9000` 这种没有主机的基地址。
+fn cfg_str_or_nonblank(j : Json, key : String, default : String) -> String {
+  match cfg_json_str(j, key) {
+    Some(s) => if s.trim().length() == 0 { default } else { s }
+    None => default
+  }
+}
+
+///|
 /// 取整数字段（数字或数字字符串），缺失/非法时回退 `default`。
 fn cfg_json_int(j : Json, key : String, default : Int32) -> Int32 {
   match cfg_json_field(j, key) {
@@ -572,15 +653,34 @@ fn cfg_json_int(j : Json, key : String, default : Int32) -> Int32 {
 }
 
 ///|
+/// 取正整数字段：缺失 / 非法 / `<= 0` 一律回退 `default`
+/// （复刻 Python `int(spec.get("port", d) or d)` —— `port: 0` 不是合法端口）。
+fn cfg_json_int_pos(j : Json, key : String, default : Int32) -> Int32 {
+  let v = cfg_json_int(j, key, default)
+  if v <= 0 {
+    default
+  } else {
+    v
+  }
+}
+
+///|
 /// 取超时毫秒：`timeout_ms` 优先；`timeout` 按**秒**换算（vools 口径）。
+///
+/// 复刻 Python `or` 语义：0 / 负数视为未配置，回退 `default`。
 fn cfg_timeout_ms(spec : Json, default : Int32) -> Int32 {
-  match cfg_json_field(spec, "timeout_ms") {
+  let ms = match cfg_json_field(spec, "timeout_ms") {
     Some(Number(ms, ..)) => ms.to_int()
     _ =>
       match cfg_json_field(spec, "timeout") {
         Some(Number(sec, ..)) => (sec * 1000.0).to_int()
         _ => default
       }
+  }
+  if ms <= 0 {
+    default
+  } else {
+    ms
   }
 }
 

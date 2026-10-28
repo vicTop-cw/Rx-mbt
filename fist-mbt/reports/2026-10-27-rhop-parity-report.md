@@ -262,9 +262,35 @@ $ python scripts/verify_interop.py test-suit/rhop_js/fixtures/moonbit_vectors.js
 **双向闭环现状（诚实边界）**：
 - **Python → MoonBit**：impl-core 的测试**直接消费 fixture 值**做断言（canonical_json / digest / envelope /
   signer 四节），`moon test` 三目标全绿 ⇒ 这些期望值在 MoonBit 侧逐字一致。
-  可量化覆盖：fixture 的 34 条硬判据中有 **27 条（79.4%）** 在 MoonBit 测试里被硬编码引用
-  （canonical 2/7、sha256 5/5、md5 5/5、hmac 2/2、pbkdf2 1/1、envelope checksum 2/2、signer 3/3、
-  crypto 负向 reason 7/7；剩余 7 条是 canonical 中文/转义型用例与 envelope 字节 sha256，未见硬编码）。
+  覆盖口径（2026-10-28 修订，C1 审计 F6）：**不再使用单一百分比**——原「27/34 = 79.4%」的统计
+  依赖「期望值字面量是否出现在 .mbt 源码里」这种可被源码转义/运行时读取干扰的度量，独立重算会漂到
+  64.3%~67.9%，口径不成立。改为**逐项断言清单**（下表），每条给出「MoonBit 侧断言形态」与位置：
+
+  **A. 硬编码断言（期望值逐字写进测试；三目标 wasm/js/native 都跑）**
+
+| # | fixture 用例 | MoonBit 断言形态 | 位置 |
+|---|---|---|---|
+| 1-7 | `canonical_json` 全 7 例（`empty_object`/`empty_array`/`nested_unicode`/`escapes`/`scalars`/`key_order`/`deep_nest`） | 全等（`assert_eq(canonical_json(input), expected)`，中文/转义/深层嵌套逐字节） | `test-suit/rhop/json_canonical_test.mbt`（fixture 对齐段） |
+| 8-12 | `digest.sha256` 5 例（`empty`/`abc`/`unicode`/`long`200B/`json`） | 全等（hex 串逐字） | `test-suit/rhop/digest_test.mbt` |
+| 13-17 | `digest.md5` 5 例 | 全等 | `test-suit/rhop/digest_test.mbt` |
+| 18-19 | `digest.hmac_sha256` 2 例 | 全等 | `test-suit/rhop/digest_test.mbt` |
+| 20 | `digest.pbkdf2_hmac_sha256.basic` | 全等 | `test-suit/rhop/digest_test.mbt` |
+| 21-22 | `envelope.minimal_pending` / `full_done` | 全等（`to_rhop_bytes()` 字节 hex + `checksum` 双判据） | `test-suit/rhop/envelope_test.mbt` |
+| 23 | `envelope.tampered_checksum` | 反向断言（篡改字节后必须拒绝/不相等） | `test-suit/rhop/envelope_test.mbt` |
+| 24-26 | `signer.file_hash` 3 例（`ascii`/`unicode`/`nested`） | 全等（`sha256:` 前缀签名串逐字，preimage 按 vools 默认 `ensure_ascii=True`） | `test-suit/rhop/signer_test.mbt` |
+
+  **B. 运行时消费（测试直接读 fixture 文件，Python 值 → MoonBit 解密/getter，逐字段比对）**
+
+| # | fixture 用例 | MoonBit 断言形态 | 位置 | 目标限制 |
+|---|---|---|---|---|
+| 27-29 | `crypto.encrypt_json_cases` 3 例（`simple_obj`/`unicode_nested`/`plain_string_payload`） | 语义互证：vools 密文 → `decrypt_verify` 必须 OK，且 payload 逐字段 `assert_eq`；先核对 fixture 自带 `vools_decrypt.reason=="OK"` | `test-suit/rhop_js/crypto_test.mbt`「互操作 · 消费 qa fixtures/vools_vectors.json」 | **仅 js**（文件读取走 FFI） |
+| 30-31 | `crypto.encrypt_secret_cases` 2 例（`password_ascii`/`token_unicode`） | 语义互证：`decrypt_secret` 明文逐字相等 | `test-suit/rhop_js/crypto_test.mbt` | **仅 js** |
+
+  **C. 未覆盖/已知边界（诚实登记，不折算成百分比）**
+- `envelope` 的 `bytes_sha256` 细项：`to_rhop_bytes()` 的 sha256 只在 Python 侧（`verify_interop --self-test` 的 fixture 自检）核对，MoonBit 侧只判 checksum/hex，未单独断言 sha256。
+- B 组的 5 条 `crypto` 用例只在 js 目标执行；wasm/native 无文件读取 FFI，靠 A 组 + Python 侧等价证据。
+- `status_flow` 节（表驱动状态机）为文档性向量，无对应 MoonBit 断言。
+
 - **MoonBit → Python**：`moonbit_vectors.json`（impl-crypto 的 js 测试写出）经真实 vools 解密/校验 20/20 通过。
 - ⚠ **未达成**：`--strict` 的五分节产物需要 MoonBit 侧写出一份 `canonical/digest/envelope/signer` 齐全的 JSON
   （当前只有扁平 crypto 产物）。这需要新增一个测试，属于 impl-core/impl-crypto 的写作用域，本执行体不越界；

@@ -1,0 +1,10 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/json",
+}
+
+options(
+  targets: {
+    "producer_test.mbt": [ "js" ],
+  },
+)

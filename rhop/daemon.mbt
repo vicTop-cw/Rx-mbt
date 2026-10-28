@@ -290,6 +290,32 @@ pub fn RelayDaemon::pull_remote(self : RelayDaemon) -> Result[Json, String] {
 }
 
 ///|
+/// 把镜像库里某个任务的**当前**行信封写进 outbox（成功/失败共用同一条路径）。
+///
+/// 返回值带上下文，调用方直接 push 进 `errors` 即可。
+fn RelayDaemon::write_outbox_result(
+  self : RelayDaemon,
+  task_id : String,
+) -> Result[Unit, String] {
+  let mirror = self.executor.mirror()
+  let after = match mirror.get_task(task_id) {
+    Some(v) => v
+    None =>
+      return Err("写结果信封失败 \{task_id}: 执行后读不回任务")
+  }
+  // P1-6 防御：outbox 文件名由 task_id 拼成，必须过「单层文件名 + 前缀断言」
+  let path = match
+    rhop_join_checked(rhop_join(self.data_dir, "outbox"), task_id + ".rhop") {
+    Ok(p) => p
+    Err(msg) => return Err("写结果信封失败 \{task_id}: \{msg}")
+  }
+  match rhop_fs_write_text(path, utf8_text(after.to_rhop_bytes())) {
+    Ok(_) => Ok(())
+    Err(msg) => Err("写结果信封失败 \{task_id}: \{msg}")
+  }
+}
+
+///|
 /// 处理本地 `inbox/*.rhop`：解码（明文优先，失败再尝试解密）→ 写镜像库 → executor 侧执行
 /// → 信封移入 `outbox/`。坏信封移入 `failed/` 并计入 `failed`（不中断循环）。
 pub fn RelayDaemon::process_inbox(self : RelayDaemon) -> Result[Json, String] {
@@ -343,26 +369,34 @@ pub fn RelayDaemon::process_inbox(self : RelayDaemon) -> Result[Json, String] {
       match self.executor.execute(env) {
         Ok(_) => {
           processed = processed + 1
-          match mirror.get_task(env.task_id) {
-            Some(after) =>
-              match
-                rhop_fs_write_text(
-                  rhop_join(
-                    rhop_join(self.data_dir, "outbox"),
-                    env.task_id + ".rhop",
-                  ),
-                  utf8_text(after.to_rhop_bytes()),
-                ) {
-                Ok(_) => ()
-                Err(msg) =>
-                  errors.push("写结果信封失败 \{env.task_id}: \{msg}")
-              }
-            None => errors.push("执行后读不回任务 \{env.task_id}")
+          match self.write_outbox_result(env.task_id) {
+            Ok(_) => ()
+            Err(msg) => errors.push(msg)
           }
         }
         Err(msg) => {
           errors.push("执行失败 \{env.task_id}: \{msg}")
           failed = failed + 1
+          // P1-5：失败也**必须**回传结果信封（Failed），否则需求端 `wait_result` 永久超时
+          // （vools `daemon.py:218-222` 是无条件把信封移入 outbox，只是它不带错误原因）。
+          // `execute` 在 Running 阶段就失败时行还没到终态 → 先显式落 Failed 再回传。
+          match mirror.get_task(env.task_id) {
+            Some(after) =>
+              if !after.status.is_terminal() {
+                match self.executor.report_failure(env.task_id, msg) {
+                  Ok(_) => ()
+                  Err(fmsg) =>
+                    errors.push(
+                      "失败状态落库失败 \{env.task_id}: \{fmsg}",
+                    )
+                }
+              }
+            None => errors.push("执行失败后读不回任务 \{env.task_id}")
+          }
+          match self.write_outbox_result(env.task_id) {
+            Ok(_) => ()
+            Err(wmsg) => errors.push(wmsg)
+          }
         }
       }
       // 原始（Pending）信封入 processed 留档，避免回环重复投递
@@ -468,6 +502,26 @@ pub fn RelayDaemon::close(self : RelayDaemon) -> Unit {
 /// 失败且配置有 key 时尝试 `decrypt_verify`（`{"v":1,"alg":"fernet","ct":…}` 形态），
 /// 解密成功再把 payload 当信封字典解析。
 fn decode_envelope(
+  config : RhopConfig,
+  text : String,
+) -> Result[Envelope, String] {
+  let env = match decode_envelope_raw(config, text) {
+    Ok(v) => v
+    Err(msg) => return Err(msg)
+  }
+  // P1-6：`task_id` 来自**对端**（不可信），解码成功的第一时间统一收敛为白名单形态；
+  // 非法 id 走「坏信封」通道（调用方 move 到 failed/ 并计数），绝不允许进入落盘路径。
+  match validate_task_id(env.task_id) {
+    Err(msg) => Err("信封 task_id 非法: " + msg)
+    Ok(_) => Ok(env)
+  }
+}
+
+///|
+/// 原始解码（不做 `task_id` 校验）：优先按明文 `.rhop`（`Envelope::from_rhop_bytes`，
+/// 含 checksum 校验）；失败且配置有 key 时尝试 `decrypt_verify`
+/// （`{"v":1,"alg":"fernet","ct":…}` 形态），解密成功再把 payload 当信封字典解析。
+fn decode_envelope_raw(
   config : RhopConfig,
   text : String,
 ) -> Result[Envelope, String] {
