@@ -1036,6 +1036,7 @@ schema 列级契约（**C3 核对**，三表 28 列 = vools 26 + 2）：
 - `tasks` **13** 列 = vools 11 列 + `envelope`（整信封规范 JSON，读回时校验 checksum ⇒ 坏行必报 Err）
   + `claimed_by`（领取者审计）；`version` 为 `INTEGER NOT NULL DEFAULT 1`（vools 允许 NULL 缺省 1）。
 - `events` 7 列、`sync_log` 8 列与 vools 逐列一致；索引 3 条（vools 2 条，多 `idx_tasks_status`）。
+- **读回语义（C4-01）**：`status`/`version`/`side` 同时存在于列与 `envelope` 列；外部写入方（另一进程直接 SQL / vools 式实现）可能只更新列 ⇒ 读路径**以列为准**（保留 envelope 的 checksum 校验，撕裂时重算 checksum），避免「列已 claim、读回仍 pending」造成重复执行/丢更新（回归 `c4-3c`）。
 - 列数由 `test-suit/rhop_business/c3_regression_test.mbt` 的 `c3-2`（pragma 实测 13/7/8）锁死；
   与 vools 共用同一库文件**不兼容**（只保证同库同语义），详见矩阵 §5.1.1 / §7 #27。
 

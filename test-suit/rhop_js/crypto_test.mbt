@@ -832,3 +832,49 @@ test "互操作 · fixture KDF 参数与实现口径一致（salt/PBKDF2 参数�
     _ => fail("fixture kdf 缺 fk_b64url / salt_hex")
   }
 }
+
+// ---------------------------------------------------------------------------
+// C4 P1 回归：密钥里的 UTF-8 BOM 必须被剥掉
+//
+// 背景：Windows 记事本 / PowerShell `Set-Content -Encoding utf8` 会在文件头写 BOM。
+// 若把 BOM 当密钥的一部分，PBKDF2 派生出的 key32 与真实密钥不同 ⇒ Fernet HMAC 失败，
+// 报错像"密钥不符/密文被篡改"（极难定位）。本用例锁定三种入口都被归一。
+// ---------------------------------------------------------------------------
+
+///|
+test "key · C4 P1：文件/字符串/环境变量里的 UTF-8 BOM 均被剥掉" {
+  let bom = "\u{FEFF}"
+  let key = "bom-test-key-42"
+  // ① source 字符串带 BOM
+  assert_eq(@rp.load_key(Some(bom + key), None, "RHOP_BOM_ABSENT"), Ok(key))
+  // ② 真实 BOM 文件
+  let f = ffi_tmp_dir() + "/rhop_bom_key.txt"
+  assert_true(ffi_write_text(f, bom + key + "\n"))
+  assert_eq(@rp.load_key_from_path(f), Ok(key))
+  // ③ 换行 + BOM + 前后空白
+  assert_true(ffi_write_text(f, "\n" + bom + "  " + key + "  \n"))
+  assert_eq(@rp.load_key_from_path(f), Ok(key))
+  // ④ 语义级验证：BOM 文件必须能解开"干净 key"加密的信封
+  //    （若 BOM 混进密钥，PBKDF2 派生不同 → 这里是 BAD_TOKEN）
+  let clean = @rp.RhopCrypto::from_key(key)
+  let payload = @json.parse("{\"a\": 1}") catch { _ => fail("x") }
+  let env = clean.encrypt_json(payload)
+  match @rp.RhopCrypto::from_path(f) {
+    Ok(c) => assert_eq(c.decrypt_verify(env).reason, "OK")
+    Err(e) => fail("from_path(BOM 文件) 失败: \{e}")
+  }
+  // ⑤ 环境变量带 BOM
+  @env.set_env_var("RHOP_TEST_KEY_BOM", bom + key)
+  assert_eq(@rp.load_key_from_env("RHOP_TEST_KEY_BOM"), Ok(key))
+  assert_eq(@rp.load_key(None, None, "RHOP_TEST_KEY_BOM"), Ok(key))
+  @env.unset_env_var("RHOP_TEST_KEY_BOM")
+  ffi_remove(f)
+  // ⑥ 纯 BOM 视为空 ⇒ 可诊断 Err（不能派生出"BOM 密钥"）
+  let g = ffi_tmp_dir() + "/rhop_bom_only.txt"
+  assert_true(ffi_write_text(g, bom))
+  match @rp.load_key_from_path(g) {
+    Err(e) => assert_true(e.contains("密钥文件内容为空"))
+    Ok(_) => fail("纯 BOM 文件应当 Err")
+  }
+  ffi_remove(g)
+}

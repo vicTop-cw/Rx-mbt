@@ -79,6 +79,37 @@ pub fn VerifyResult::to_string(self : VerifyResult) -> String {
 }
 
 ///|
+/// 去掉 UTF-8 BOM（U+FEFF）与首尾空白。
+///
+/// 为什么必须做：Windows 记事本 / PowerShell `Set-Content -Encoding utf8` 等工具会在文件头写 BOM，
+/// 若把 BOM+密钥 整体当密钥，PBKDF2 派生出的 key32 与真实密钥不同 ⇒ Fernet HMAC 校验失败，
+/// 报错看起来像「密钥不符 / 密文被篡改」，极难定位（C4 P1）。
+/// 这里对「文件内容 / source 字符串 / 环境变量」统一归一：先 trim、再剥 BOM、循环到稳定，
+/// 覆盖 BOM+key、换行+BOM+key、多个 BOM 等真实污形态。
+fn normalize_key_text(raw : String) -> String {
+  let mut cur = raw
+  let mut steps = 0
+  while steps < 8 {
+    let trimmed = cur.trim().to_owned()
+    let bom = "\u{FEFF}"
+    let stripped = if trimmed.has_prefix(bom) {
+      match trimmed.get_view(start=1) {
+        Some(v) => v.to_owned()
+        None => trimmed
+      }
+    } else {
+      trimmed
+    }
+    if stripped == cur {
+      return stripped
+    }
+    cur = stripped
+    steps = steps + 1
+  }
+  cur
+}
+
+///|
 /// 判断字符串是否为空或纯空白（空白串视为「未提供」）。
 fn is_blank(s : String) -> Bool {
   s.trim().length() == 0
@@ -111,7 +142,7 @@ pub fn load_key(
   env_name : String,
 ) -> Result[String, String] {
   match non_blank(source) {
-    Some(s) => return Ok(s)
+    Some(s) => return Ok(normalize_key_text(s))
     None => ()
   }
   match non_blank(path) {
@@ -139,11 +170,12 @@ pub fn load_key_from_path(path : String) -> Result[String, String] {
   match read_text_file(path) {
     Err(e) => Err("rhop: 读取密钥文件失败: \{path}: \{e}")
     Ok(text) => {
-      let k = text.trim()
+      // C4 P1：文件内容统一剥 BOM + 空白（否则 BOM 会混进密钥，PBKDF2 派生错位）
+      let k = normalize_key_text(text)
       if k.length() == 0 {
         Err("rhop: 密钥文件内容为空: \{path}")
       } else {
-        Ok(k.to_owned())
+        Ok(k)
       }
     }
   }
@@ -155,12 +187,14 @@ pub fn load_key_from_path(path : String) -> Result[String, String] {
 /// 可用性：三目标全可用（`@env.get_env_var`）。
 pub fn load_key_from_env(env_name : String) -> Result[String, String] {
   match @env.get_env_var(env_name) {
-    Some(v) =>
-      if is_blank(v) {
+    Some(v) => {
+      let k = normalize_key_text(v)
+      if k.length() == 0 {
         Err("rhop: 环境变量 \{env_name} 为空")
       } else {
-        Ok(v)
+        Ok(k)
       }
+    }
     None => Err("rhop: 环境变量 \{env_name} 未设置")
   }
 }

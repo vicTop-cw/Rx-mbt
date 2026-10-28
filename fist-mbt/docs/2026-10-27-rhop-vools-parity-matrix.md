@@ -330,6 +330,8 @@
 | `sync_log` | 8（id/direction/transport/task_id/success/error/bytes_xfer/created_at） | 8 | 一致 |
 | 合计 | 26 | **28** | 仅 `tasks` 多 2 列；另索引 3 条（vools 2 条，多 `idx_tasks_status`） |
 
+**读回语义（C4-01，重要）**：`status`/`version`/`side` 同时存在于「列」与 `envelope` 列。本项目自身写入始终让两者一致；但**外部写入方**（另一进程直接 SQL / vools 式实现 / 运维手改）可能只更新列，导致两者撕裂。读路径（`get_task`/`list_tasks`/`try_*`）因此**一律以列为准**：解析 `envelope`（保留 checksum 校验）后用列的 `status/version/side/updated_at` 覆盖，撕裂时重算 checksum 保证返回的信封自洽。理由：乐观锁（`update_status`/`claim_task`）只读列，若读回用 envelope 旧快照，会出现「子进程已 claim、父进程仍读到 pending v1」⇒ 重复执行/丢更新。回归用例 `c4-3c`。
+
 类型/约束差异：`version` 本项目 `INTEGER NOT NULL DEFAULT 1`（vools `INTEGER DEFAULT 1`）；`payload` 本项目 `TEXT NOT NULL`（vools 允许 NULL）。两个额外列由 `mirror_test.mbt` 的往返/坏行用例覆盖；列数由 `test-suit/rhop_business/c3_regression_test.mbt` 的 `c3-2`（pragma 实测 13/7/8）锁死。
 
 ### 5.2 `daemon.py` → `rhop/daemon.mbt`（4：3 ✅ / 1 ⛔ CLI + 4 个增量方法）
@@ -590,7 +592,7 @@ vools `task/` 共 **264** 个公开符号，本项目**按模块级对位 21 个
 | 25 | **同步判据用 sha256 而非 size+mtime**：vools `compute_sync_plan` 用 `size` + `mtime 差 <2s` 判「相同」；本项目用内容 sha256（更强、跨平台一致，且与 `sync_folder` 的 manifest 判据统一） | 与 vools 的 sync plan 逐字节对比 | 有意改进；`jump.sync` 的 remote_files 结构因此为 `{sha256,size}` |
 | 26 | **glob 无字符类**：vools `fnmatch` 支持 `[seq]`/`[!seq]`；本项目 `sync_glob_match` 只支持 `*` / `?` | `sync_folder(pattern)`、`jump.* exclude` 的过滤能力 | 有意取舍（够用 + 可全目标测）；`[seq]` 需求出现再扩 |
 | 27 | **共享介质是单消费者语义**：`pull_remote` 读到即从共享目录删除（无 ack/租约），同一共享目录不能被两个执行端同时消费 | 多执行端部署 | 明确不做（MVP）；丢包分析：先写本地 inbox 再删远端 ⇒ 不丢包，只可能重复投递（版本去重 + C2 幂等守卫消解）；多消费者需 ack 协议，列入 P2 后续 |
-| 28 | **镜像库列级增量**：`tasks` 比 vools 多 `envelope`（整信封 + checksum 校验）与 `claimed_by`（领取者），故 13 列 vs 11 列（合计 28 vs 26）；`update_status` 额外要求传入已知 `version`（vools 无乐观锁参数） | 与 vools 共用同一 SQLite 文件 | 不兼容 vools 直连共享同一库（只保证「同库同语义」，不做跨实现文件级共享）；详见 §5.1.1 与 §5.1 备注 |
+| 28 | **镜像库列级增量**：`tasks` 比 vools 多 `envelope`（整信封 + checksum 校验）与 `claimed_by`（领取者），故 13 列 vs 11 列（合计 28 vs 26）；`update_status` 额外要求传入已知 `version`（vools 无乐观锁参数） | 与 vools 共用同一 SQLite 文件 | 不兼容 vools 直连共享同一库（只保证「同库同语义」，不做跨实现文件级共享）；**读回以列为准**（见 §5.1.1），因此外部只写列的写入方不会让本实现读到过期快照；详见 §5.1.1 与 §5.1 备注 |
 | 29 | **Session 不持有 relay_server（D3）**：vools `Session` 内含 relay 服务对象；本项目拆成独立 `RelayServer` + `RelayChannel` | 会话层组成 | 更易单独启停/测试；`Session.relay` 只存通道 |
 | 30 | **文件名白名单是纯增量（D6）**：vools 无 `safe_filename` 校验；本项目拒绝路径穿越/纯点号/结尾点/Windows 设备名 | 收发/删除包 | 纯增量安全加固，拒绝时给可诊断 Err |
 | 31 | **删除契约是增量（D7）**：vools 无 `Session::remove_package`；本项目为一次性 `res_` 清理而加 | 收件箱清理 | 增量 API；语义为「删除成功或不存在都算成功」 |
@@ -651,7 +653,7 @@ moon test -p test-suit/rhop_business --target js
 moon test -p test-suit/rhop_task --target js
 ```
 
-**复核时刻实测状态（C3 轮修复后快照 2026-10-28 15:3x，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧对照同数字）**
+**复核时刻实测状态（C4 轮修复后快照 2026-10-28 17:4x，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧对照同数字）**
 
 > ⚠️ C2 并行 lane（crypto/session/business）仍在追加测试，**跨 lane 总数持续变化**；下表为本域快照，
 > 跨 lane / 项目级数字以 `bash scripts/test_all.sh`（qa 终验）为准。
@@ -660,10 +662,10 @@ moon test -p test-suit/rhop_task --target js
 |---|---|
 | `moon check`（项目级，三目标） | wasm / js / native 均 **0 error**（`moon check` 实测 0） |
 | `moon check -p rhop`（wasm / js / native） | 三目标均 **0 error** |
-| `moon test test-suit/rhop`（wasm） | `Total tests: 156, passed: 156, failed: 0.` |
-| `moon test test-suit/rhop --target js` | `Total tests: 160, passed: 160, failed: 0.` |
-| `moon test test-suit/rhop --target native` | `Total tests: 156, passed: 156, failed: 0.` |
-| `moon test test-suit/rhop_vectors --target js` | `Total tests: 2, passed: 2, failed: 0.`（互操作产物生产者；含 tampered 负向断言） |
+| `moon test test-suit/rhop`（wasm） | `Total tests: 159, passed: 159, failed: 0.` |
+| `moon test test-suit/rhop --target js` | `Total tests: 163, passed: 163, failed: 0.` |
+| `moon test test-suit/rhop --target native` | `Total tests: 159, passed: 159, failed: 0.` |
+| `moon test test-suit/rhop_vectors --target js` | `Total tests: 3, passed: 3, failed: 0.`（互操作产物生产者；含 tampered 负向与确定性回归） |
 | `moon test -p test-suit/rhop_js --target js` | `Total tests: 56, passed: 56, failed: 0.` |
 | `moon test -p test-suit/rhop_clipboard --target js` | `Total tests: 25, passed: 25, failed: 0.` |
 | `moon test -p test-suit/rhop_interact --target js` | `Total tests: 23, passed: 23, failed: 0.` |
@@ -671,9 +673,9 @@ moon test -p test-suit/rhop_task --target js
 | `moon test test-suit/rhop_business --target js` | `Total tests: 57, passed: 57, failed: 0.` |
 | `moon test test-suit/rhop_task`（wasm/native） | `Total tests: 46, passed: 46, failed: 0.`（P2a 纯逻辑部分）|
 | `moon test test-suit/rhop_task --target js` | `Total tests: 102, passed: 102, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
-| 项目级 `moon test`（wasm） | `Total tests: 612, passed: 612, failed: 0.`（快照）|
-| 项目级 `moon test --target native` | `Total tests: 612, passed: 612, failed: 0.`（快照）|
-| 项目级 `moon test --target js` | `Total tests: 825, passed: 825, failed: 0.`（C3 终版快照）|
+| 项目级 `moon test`（wasm） | `Total tests: 615, passed: 615, failed: 0.`（C4 快照）|
+| 项目级 `moon test --target native` | `Total tests: 615, passed: 615, failed: 0.`（C4 快照）|
+| 项目级 `moon test --target js` | `Total tests: 849, passed: 849, failed: 0.`（C4 快照）|
 
 > 判绿纪律：只认 `moon test` 汇总行（`Total tests: N, passed: N, failed: 0`），不认 exit code。
 > 本表所有数字均在表格标注时刻实际运行得到；P2 / Batch D 在途项恢复后应重跑并把 `rhop_business` 一行改为 38/38。
@@ -692,7 +694,7 @@ moon test -p test-suit/rhop_task --target js
 | `test-suit/rhop/session_test.mbt` | 15 | `session.py` | wasm/js/native |
 | `test-suit/rhop/actions_test.mbt` | 10 | `actions/__init__.py` + `jump.probe` | wasm/js/native |
 | `test-suit/rhop/rhop_test.mbt` + `rhop_js_test.mbt` | 7 + 4 | **既有** RX-MBT 的 `RhopPacket`/`RhopEnvelope`/`RhopCipherNone`（非 vools 对照面） | 默认 / js |
-| **`test-suit/rhop` 小计** | **156（wasm/native）/ 160（js）** | — | — |
+| **`test-suit/rhop` 小计** | **159（wasm/native）/ 163（js）** | — | — |
 | `test-suit/rhop_js/crypto_test.mbt` | 24 | `crypto.py`（Fernet 双向互解、三态 reason、`RHOP-ENC`） | js |
 | `test-suit/rhop_js/transport_test.mbt` | 16 | `transport/{base,local,endpoint,selector,shared}.py` | js |
 | `test-suit/rhop_js/watch_test.mbt` | 6 | `watch.py` | js |
@@ -711,9 +713,9 @@ moon test -p test-suit/rhop_task --target js
 
 **rhop 相关合计**
 
-- **js 口径**：160(rhop) + 2(vectors) + 56(rhop_js) + 25(clipboard) + 23(interact) + 57(business) + 102(task) = **425 例**（C3 快照）
-- **wasm / native 口径**：156(rhop) + 10(business) + 46(task) = **212 例**（不含 js-only 包）
-- **全模块（项目级，C3 快照）**：wasm **612** / js **825** / native **612**，三目标全绿
+- **js 口径**：163(rhop) + 3(vectors) + 56(rhop_js) + 25(clipboard) + 23(interact) + 57(business) + 102(task) = **429 例**（C4 快照）
+- **wasm / native 口径**：159(rhop) + 10(business) + 46(task) = **215 例**（不含 js-only 包）
+- **全模块（项目级，C4 快照）**：wasm **615** / js **849** / native **615**，三目标全绿
 - 其中 vools 契约范围（A–D + clipboard）约 323 例（js），P2 占 102 例（js）
 
 ## 11. 本轮完成情况与「待终轮更新」清单

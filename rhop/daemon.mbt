@@ -257,15 +257,34 @@ pub fn RelayDaemon::pull_remote(self : RelayDaemon) -> Result[Json, String] {
     if !fname.has_suffix(".rhop") {
       continue
     }
+    // C4-02：fname 来自**共享介质**（不可信边界）。虽然 `readdir` 只会返回单层名字，
+    // 这里仍走 `rhop_join_checked` 做词法前缀断言（与 task_id 落盘同一套防御）。
+    let remote_path = match
+      rhop_join_checked(rhop_join(root, inbox_rel), fname) {
+      Ok(v) => v
+      Err(msg) => {
+        errors.push(
+          "拒绝可疑文件名的共享介质条目 \{fname}: \{msg}",
+        )
+        continue
+      }
+    }
     let rel = inbox_rel + "/" + fname
-    let text = match rhop_fs_read_text(rhop_join(root, rel)) {
+    let text = match rhop_fs_read_text(remote_path) {
       Ok(t) => t
       Err(msg) => {
         errors.push("读取共享介质失败 \{fname}: \{msg}")
         continue
       }
     }
-    let local_path = rhop_join(rhop_join(self.data_dir, "inbox"), fname)
+    let local_path = match
+      rhop_join_checked(rhop_join(self.data_dir, "inbox"), fname) {
+      Ok(v) => v
+      Err(msg) => {
+        errors.push("拒绝可疑文件名的本地落盘 \{fname}: \{msg}")
+        continue
+      }
+    }
     match rhop_fs_write_text(local_path, text) {
       Ok(_) => ()
       Err(msg) => {
@@ -475,7 +494,15 @@ pub fn RelayDaemon::push_local(self : RelayDaemon) -> Result[Json, String] {
         continue
       }
     }
+    // C4-02：投递路径同样做词法前缀断言（防御纵深，避免异常 fname 逃逸目标目录）。
     let rel = remote_dir + "/" + fname
+    let _ = match rhop_join_checked(rhop_join(root, remote_dir), fname) {
+      Ok(_) => ()
+      Err(msg) => {
+        errors.push("拒绝可疑文件名的投递 \{fname}: \{msg}")
+        continue
+      }
+    }
     match rhop_fs_write_text(rhop_join(root, rel), text) {
       Ok(_) => {
         ignore(rhop_fs_remove(path))

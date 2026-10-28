@@ -584,6 +584,11 @@ pub fn Session::select(self : Session) -> TransportSelection {
 ///
 /// 分流原则（全包统一，勿再反复）：**调用方传错参数 / 配置不成立 → `Err(String)`；
 /// 介质在对侧"尽力了但失败"（读不到、写不进、解密不通过）→ `Ok({status:"error"})` 收据**。
+///
+/// 边界补充（C4 实测）：**探测阶段**就判定"没有可用通道"（`select()` 给 `none`，
+/// 例如中转/http 端点不可达、shared 写端不可用）→ `Err`；只有选定介质之后**投递阶段**
+/// 的失败才走 `status:"error"` 收据。`interact` 的 `phase` 字段（send/request/receive/response）
+/// 只描述投递阶段。
 pub fn Session::send_package(
   self : Session,
   filename : String,

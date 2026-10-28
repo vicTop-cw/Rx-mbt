@@ -321,6 +321,9 @@ pub impl EndpointView for HttpEndpoint with fn exists(self, filename) {
 }
 
 ///|
+/// 非破坏性读取（与 vools 一致）：这里是普通 GET，读后不删除远端对象；
+/// 删除是独立的 remove()（DELETE）。因此 http 端点不是 relay 那种「取走即删」语义，
+/// at-most-once / 去重需要上层自己做幂等（C4 审计结论，vools HttpEndpoint 同此语义）。
 pub impl EndpointView for HttpEndpoint with fn read_text(self, filename) {
   let u = self.url_of(filename)
   match http_request("GET", u, self.token, "", self.timeout_ms) {

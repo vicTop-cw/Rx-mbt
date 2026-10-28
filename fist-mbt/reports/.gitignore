@@ -1,0 +1,13 @@
+# C4 ①：本目录下这几类是**生成物**（每次测试/复核都会重写），不入库。
+# 注意：.gitignore 对**已 tracked** 的文件无效 —— 需要先 `git rm --cached <file>`（见 C4 fix 报告）。
+#
+# 互操作生产者产物（含 Fernet 随机 IV ⇒ 每次运行 sha 都变）
+moonbit_vectors_full.json
+# verify_interop.py 的机器可读报告（--out 产物）
+interop-verify.json
+c2-interop-verify.json
+c3-interop-verify.json
+c4-interop-verify.json
+c*-interop-verify.json
+# 性能基线 JSON（scripts/bench_baseline.sh --json 的默认落点）
+*bench*.json

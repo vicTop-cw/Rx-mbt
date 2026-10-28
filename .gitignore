@@ -36,3 +36,7 @@ fist-mbt.db-wal
 rhop-data/
 .moon-build.lock/
 fist-mbt/reports/run-logs/
+
+# C4: 运行时生成的互操作产物（含随机 IV，不入库；见 fist-mbt/reports/.gitignore）
+test-suit/rhop_js/fixtures/moonbit_vectors.json
+fist-mbt/reports/moonbit_vectors_full.json

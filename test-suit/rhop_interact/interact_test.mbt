@@ -1188,3 +1188,301 @@ test "interact · C3-06：CRLF 外层密钥文件两平台都能解锁主密钥"
     Err(e) => assert_true(e.contains("key.cipher 解密失败"))
   }
 }
+
+// ---------------------------------------------------------------------------
+// C4 轮回归：真实第三方介质的 E2E（relay / http 端点）+ 安全审计 + 互操作
+// ---------------------------------------------------------------------------
+
+///|
+extern "js" fn ffi_c4_sleep(ms : Int32) -> Unit =
+  #| (ms) => { try { const sab = new SharedArrayBuffer(4); Atomics.wait(new Int32Array(sab), 0, 0, Number(ms)); } catch (_e) { const t0 = Date.now(); while (Date.now() - t0 < Number(ms)) {} } }
+
+///|
+/// 起一个「内存 WebDAV 风格」HTTP 文件服务子进程（PUT/GET/DELETE），端口写 port_file。
+extern "js" fn ffi_c4_http_server(port_file : String) -> Int64 =
+  #| (portFile) => { const G = globalThis; try { const cp = process.getBuiltinModule("node:child_process"); if (G.__c4_http === undefined) { G.__c4_http = new Map(); G.__c4_http_seq = 1; } const script = 'const http=process.getBuiltinModule("node:http");const fs=process.getBuiltinModule("node:fs");const store=new Map();const srv=http.createServer((req,res)=>{const u=String(req.url||"/");let name=u.startsWith("/")?u.slice(1):u;try{name=decodeURIComponent(name);}catch(e){}if(req.method==="PUT"){const chunks=[];req.on("data",(c)=>chunks.push(c));req.on("end",()=>{store.set(name,Buffer.concat(chunks).toString("utf8"));res.writeHead(201);res.end();});return;}if(req.method==="GET"){if(u==="/"){res.writeHead(200);res.end("ok");return;}if(!store.has(name)){res.writeHead(404);res.end();return;}res.writeHead(200,{"Content-Type":"application/octet-stream"});res.end(store.get(name));return;}if(req.method==="DELETE"){store.delete(name);res.writeHead(200);res.end();return;}res.writeHead(405);res.end();});srv.listen(0,"127.0.0.1",()=>{try{fs.writeFileSync(process.env.RHOP_HTTP_PORT_FILE,JSON.stringify({port:srv.address().port}));}catch(e){}});'; const child = cp.spawn(process.execPath, ["-e", script], { env: Object.assign({}, process.env, { RHOP_HTTP_PORT_FILE: String(portFile) }), stdio: "ignore", detached: true, windowsHide: true }); try { child.unref(); } catch (_e) {} const id = G.__c4_http_seq++; G.__c4_http.set(id, child); return BigInt(id); } catch (e) { return -1n; } }
+
+///|
+extern "js" fn ffi_c4_kill(id : Int64) -> Unit =
+  #| (id) => { const G = globalThis; if (G.__c4_http === undefined) { return; } const c = G.__c4_http.get(Number(id)); if (c !== undefined) { try { c.kill(); } catch (_e) {} G.__c4_http.delete(Number(id)); } }
+
+///|
+test "interact · C4-01：深掩码键表收紧——裸 key / secret_key / passphrase / sftp.key 都不外泄" {
+  // ① rhop.echo（链路自检动作，结果常被直接打日志）
+  let cfg_json = Json::object({
+    "key": Json::string("LEAK-KEY"),
+    "secret_key": Json::string("LEAK-SECRETKEY"),
+    "passphrase": Json::string("LEAK-PASS"),
+    "password": Json::string("LEAK-PW"),
+    "sftp": Json::object({
+      "host": Json::string("h"),
+      "key": Json::string("LEAK-SFTPKEY"),
+      "passphrase": Json::string("LEAK-SFTPPASS"),
+      "public_key": Json::string("/pub/id.pub"),
+    }),
+    "relay": Json::object({
+      "host": Json::string("r"),
+      "key": Json::string("LEAK-RELAYKEY"),
+      "token": Json::string("LEAK-TOK"),
+    }),
+  })
+  let echo_text = Json::stringify(@rp.run_action("rhop.echo", cfg_json, None))
+  for
+    secret in [
+      "LEAK-KEY", "LEAK-SECRETKEY", "LEAK-PASS", "LEAK-PW", "LEAK-SFTPKEY", "LEAK-SFTPPASS",
+      "LEAK-RELAYKEY", "LEAK-TOK",
+    ] {
+    assert_false(echo_text.contains(secret))
+  }
+  // 非敏感字段必须保留（掩码不是删字段）：public_key / host 仍在
+  assert_true(echo_text.contains("/pub/id.pub"))
+  assert_true(echo_text.contains("host"))
+  // ② to_dict：relay.key / sftp.key 这类「裸 key」也必须 ***
+  let cfg = it_cfg(
+    Json::object({
+      "key": Json::string("CONFIG-KEY"),
+      "relay": Json::object({
+        "host": Json::string("127.0.0.1"),
+        "port": Json::number(9.0),
+        "key": Json::string("LEAK-RELAY-KEY2"),
+        "token": Json::string("TOK2"),
+      }),
+      "sftp": Json::object({
+        "host": Json::string("h"),
+        "key": Json::string("LEAK-SFTP-KEY2"),
+        "public_key": Json::string("/pub/k.pub"),
+      }),
+    }),
+  )
+  let d = Json::stringify(cfg.to_dict())
+  assert_false(d.contains("CONFIG-KEY"))
+  assert_false(d.contains("LEAK-RELAY-KEY2"))
+  assert_false(d.contains("LEAK-SFTP-KEY2"))
+  assert_true(d.contains("/pub/k.pub"))
+}
+
+///|
+test "interact · C4-02：BOM 密钥文件（Windows 记事本产物）跨平台可解锁" {
+  let dir = it_dir("rhop-c4-bom")
+  let outer = "outer-key-bom"
+  let inner = "inner-key-bom"
+  let cipher = @rp.RhopCrypto::from_key(outer).encrypt_secret(inner)
+  let bom_path = dir + "/bom.key"
+  assert_true(ffi_write(bom_path, "\u{FEFF}" + outer + "\n"))
+  let cfg = it_cfg(
+    Json::object({
+      "key": Json::object({
+        "cipher": Json::string(cipher),
+        "path": Json::string(bom_path),
+      }),
+    }),
+  )
+  assert_eq(cfg.build_crypto().key_material(), inner)
+  // 纯字符串形态的 BOM 同样被剥掉
+  let cfg2 = it_cfg(
+    Json::object({ "key": Json::string("\u{FEFF}plain-key-bom") }),
+  )
+  assert_eq(cfg2.build_crypto().key_material(), "plain-key-bom")
+}
+
+///|
+test "interact · C4-03：relay 中转端到端 roundtrip + 重放/坏包失败面" {
+  let token = "c4-relay-token"
+  let server = @rp.RelayServer::new("127.0.0.1", 0, Some(token), 30000)
+  match server.start() {
+    Err(e) => abort("中转启动失败: " + e)
+    Ok(_) => ()
+  }
+  let port = server.port()
+  let dir = it_dir("rhop-c4-relay")
+  let cfg = it_cfg(
+    Json::object({
+      "key": Json::string("c4-relay-key"),
+      "shared": Json::object({ "write": Json::string(dir) }),
+      "relay": Json::object({
+        "host": Json::string("127.0.0.1"),
+        "port": Json::number(port.to_double()),
+        "token": Json::string(token),
+        "timeout": Json::number(3.0),
+      }),
+    }),
+  )
+  // ① 真中介质 roundtrip：两个方向都走 relay（不是同进程文件）
+  match
+    @rp.interact(
+      cfg,
+      "rhop.echo",
+      Some(Json::object({ "tag": Json::string("c4relay") })),
+      "roundtrip",
+    ) {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "ok")
+      assert_eq(it_str(j, "transport"), "relay")
+      assert_eq(it_str(j, "response_transport"), "relay")
+      assert_eq(it_str(j, "result"), "ok")
+    }
+    Err(e) => abort("relay roundtrip 失败: " + e)
+  }
+  // ② 重放保护：中转「取走即删」→ 同一请求包第二次处理必须失败（不是重复执行）
+  match
+    @rp.interact(
+      cfg,
+      "rhop.echo",
+      None,
+      "request",
+      request_filename="replay.rhop",
+    ) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("relay request 失败: " + e)
+  }
+  match @rp.handle_request(cfg, "replay.rhop") {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("handle#1 失败: " + e)
+  }
+  match @rp.handle_request(cfg, "replay.rhop") {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_true(it_str(j, "reason").contains("无包"))
+    }
+    Err(e) => abort("重放应走 status:error 收据而非 Err: " + e)
+  }
+  // ③ 坏包：非信封内容 → MALFORMED（四态 reason）
+  let ch = @rp.RelayChannel::new("127.0.0.1", port, Some(token), 3000)
+  let och : &@rp.OnlineChannel = ch
+  match @rp.OnlineChannel::send(och, "badpkg.rhop", "not-an-envelope") {
+    Ok(_) => ()
+    Err(e) => abort("注入坏包失败: " + e)
+  }
+  match @rp.handle_request(cfg, "badpkg.rhop") {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_eq(it_str(j, "reason"), "MALFORMED")
+    }
+    Err(e) => abort("坏包应走 status:error 收据: " + e)
+  }
+  server.stop()
+}
+
+///|
+test "interact · C4-04：http 端点介质（真实 HTTP 文件服务）端到端 roundtrip" {
+  let dir = it_dir("rhop-c4-http")
+  let port_file = dir + "/port.json"
+  let child = ffi_c4_http_server(port_file)
+  if child < 0L {
+    abort("启动 http 文件服务失败")
+  }
+  let mut port = 0
+  let mut waited = 0
+  while waited < 200 && port == 0 {
+    if ffi_exists(port_file) {
+      let text = ffi_read(port_file)
+      if text != "" {
+        let parsed = @json.parse(text) catch { _ => Json::null() }
+        match parsed {
+          Object(f) =>
+            match f.get("port") {
+              Some(Number(n, ..)) => port = n.to_int()
+              _ => ()
+            }
+          _ => ()
+        }
+      }
+    }
+    if port == 0 {
+      ffi_c4_sleep(25)
+      waited = waited + 1
+    }
+  }
+  if port == 0 {
+    ffi_c4_kill(child)
+    abort("http 文件服务端口未就绪")
+  }
+  let url = "http://127.0.0.1:" + port.to_string() + "/"
+  let cfg = it_cfg(
+    Json::object({
+      "key": Json::string("c4-http-key"),
+      "shared": Json::object({
+        "write": Json::string(url),
+        "read": Json::string(url),
+      }),
+    }),
+  )
+  match
+    @rp.interact(
+      cfg,
+      "rhop.echo",
+      Some(Json::object({ "via": Json::string("http") })),
+      "roundtrip",
+    ) {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "ok")
+      // HttpEndpoint 属 shared path（不是 OnlineChannel）→ transport 标签为 shared
+      assert_eq(it_str(j, "transport"), "shared")
+      assert_eq(it_str(j, "response_transport"), "shared")
+      assert_eq(it_str(j, "result"), "ok")
+    }
+    Err(e) => {
+      ffi_c4_kill(child)
+      abort("http 端点 roundtrip 失败: " + e)
+    }
+  }
+  // 服务停掉：探测期失败 → Err（通道链全不可达）；这是与「投递期失败走 status:error 收据」的分界
+  ffi_c4_kill(child)
+  ffi_c4_sleep(200)
+  match
+    @rp.interact(
+      cfg,
+      "rhop.echo",
+      None,
+      "roundtrip",
+      request_filename="down.rhop",
+    ) {
+    Ok(_) => abort("http 服务已停，roundtrip 不应成功")
+    Err(e) => assert_true(e.contains("无可用的传输介质"))
+  }
+}
+
+///|
+test "interact · C4-05：同名包并发互踩——拿不到别人结果（token + 一次性删除守卫）" {
+  let dir = it_dir("rhop-c4-race")
+  let cfg = it_cfg(
+    Json::object({
+      "key": Json::string("c4-race-key"),
+      "shared": Json::object({ "write": Json::string(dir) }),
+    }),
+  )
+  // A：手工投递一个请求（模拟「进程 A 已发送，尚未取回执」）
+  let a = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("A 会话: " + e)
+  }
+  let req_a = Json::object({
+    "action": Json::string("rhop.echo"),
+    "payload": Json::object({ "who": Json::string("AAA") }),
+    "token": Json::string("tok:0:req_race.rhop:rhop.echo"),
+  })
+  match a.send_package("req_race.rhop", req_a) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("A 发送: " + e)
+  }
+  // B：同一缺省包名跑完整 roundtrip（会覆盖 A 的请求、并消费自己的 res_）
+  match
+    @rp.interact(
+      cfg,
+      "rhop.echo",
+      Some(Json::object({ "who": Json::string("BBB") })),
+      "roundtrip",
+      request_filename="req_race.rhop",
+    ) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("B roundtrip: " + e)
+  }
+  // A 取回执：B 已把 res_ 消费掉 → A 必须拿到 error 收据，绝不能把 B 的结果当自己的
+  match a.recv_package("res_req_race.rhop") {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_eq(it_str(j, "transport"), "shared")
+    }
+    Err(e) => abort("A 取回执应当是 status:error 收据: " + e)
+  }
+}

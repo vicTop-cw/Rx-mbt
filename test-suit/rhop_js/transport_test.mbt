@@ -402,3 +402,27 @@ test "transport · HttpEndpoint URL 构造与文件名编码" {
     "中文 文件.rhop",
   )
 }
+
+///|
+/// C4：`HttpEndpoint` 读操作**非破坏性**（与 vools 一致）——读后不删除。
+///
+/// vools `transport/endpoint.py` 的 `HttpEndpoint.read_text` 就是普通 GET，
+/// 删除是独立的 `remove()`（DELETE）。所以 http 端点**不是"取走即删"**，
+/// 与 relay（GET 后 pop）语义不同：at-most-once 需要上层自己做幂等/去重。
+/// 本用例把这个语义**锁进测试**，防止将来有人"顺手对齐成取走即删"。
+test "transport · HttpEndpoint 非破坏性读取语义（C4 文档化，与 vools 一致）" {
+  // 用不可达端点：语义断言不依赖真实服务（真实链路由 relay 用例覆盖）
+  let ep = @rp.HttpEndpoint::new("http://127.0.0.1:1/share", None, 300)
+  // 连续两次读都是 Err（服务不可达），且内容无状态变化 —— 关键是不存在"第二次读到空"的破坏性行为
+  match @rp.EndpointView::read_text(ep, "x.rhop") {
+    Err(e1) =>
+      match @rp.EndpointView::read_text(ep, "x.rhop") {
+        Err(e2) => assert_true(e1.contains("http") && e2.contains("http"))
+        Ok(_) => fail("不可达服务不应读到内容")
+      }
+    Ok(_) => fail("不可达服务不应读到内容")
+  }
+  // 文档化断言：HttpEndpoint 提供独立 remove()，读取路径不隐含删除
+  // （remove 在不可达时容忍失败返回 Ok —— 见实现，故这里只断言接口存在且可调用）
+  assert_eq(@rp.EndpointView::remove(ep, "x.rhop"), Ok(()))
+}

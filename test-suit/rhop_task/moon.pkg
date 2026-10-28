@@ -15,5 +15,6 @@ options(
     "task_heartbeat_test.mbt": [ "js" ],
     "task_exec_test.mbt": [ "js" ],
     "task_sync_test.mbt": [ "js" ],
+    "c4_e2e_test.mbt": [ "js" ],
   },
 )

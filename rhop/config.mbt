@@ -72,11 +72,11 @@ pub fn RhopConfig::new(
 /// 4. **`{"path": …}` / `{"env": …}` / `{"source": …}`**：交给 `load_key`
 ///    （优先级 source > path > env，env 缺省 `RHOP_KEY`）。
 ///
-/// 其它形态（数组 / null）返回可诊断 Err；数字与布尔按 **JSON 文本**当密钥。
+/// 其它形态（数组 / null）返回可诊断 Err；数字按 JSON 文本当密钥，**布尔明确拒绝**。
 ///
-/// **与 vools 的差异（D10）**：vools 走 Python `str(key_cfg)`，布尔会得到 `"True"/"False"`
-/// （首字母大写），本项目得到 JSON 文本 `"true"/"false"`；数字两者一致（`"12345"`）。
-/// 这是边界形态（正常配置不会拿布尔当密钥），**不建议依赖**，仅为与 vools 的错差留档。
+/// **与 vools 的差异（D10，C4 修正）**：vools 走 Python `str(key_cfg)`，布尔会静默得到
+/// `"True"/"False"`；本项目直接拒绝布尔（`Err`）。理由：两侧口径不一致时静默接受会让
+/// 同一份配置在两个实现下解出不同密钥（解密全失败且极难排查）。数字两侧一致（`"12345"`）。
 pub fn _key_from_cfg(key_cfg : Json?) -> Result[String, String] {
   let cfg = match key_cfg {
     None =>
@@ -96,12 +96,12 @@ pub fn _key_from_cfg(key_cfg : Json?) -> Result[String, String] {
           "配置 key 为空字符串（明文、key.cipher、key.path 或 key.env 三者其一）",
         )
       } else {
-        Ok(s)
+        Ok(cfg_strip_bom(s))
       }
     Object(_) => {
       // 分支 2：明文字段
       match cfg_json_str(cfg, "plain") {
-        Some(plain) => if plain != "" { return Ok(plain) }
+        Some(plain) => if plain != "" { return Ok(cfg_strip_bom(plain)) }
         None => ()
       }
       // 分支 3：密文主密钥 —— 用外层密钥解开
@@ -114,23 +114,29 @@ pub fn _key_from_cfg(key_cfg : Json?) -> Result[String, String] {
                 cfg_json_str(cfg, "path"),
                 cfg_env_name(cfg),
               ) {
-              Ok(k) => k
+              // C4-02：外层密钥同样剥 BOM（密钥文件常由 Windows 编辑器写出）
+              Ok(k) => cfg_strip_bom(k)
               Err(e) => return Err("key.cipher 需要外层密钥解锁: " + e)
             }
             let crypto = RhopCrypto::from_key(unlock)
             return match crypto.decrypt_secret(cipher) {
-              Ok(plain) => Ok(plain)
+              Ok(plain) => Ok(cfg_strip_bom(plain))
               Err(e) => Err("key.cipher 解密失败: " + e)
             }
           }
         None => ()
       }
       // 分支 4：path / env / source → load_key（source > path > env）
-      load_key(
-        cfg_json_str(cfg, "source"),
-        cfg_json_str(cfg, "path"),
-        cfg_env_name(cfg),
-      )
+      // C4-02：文件 / 环境变量来源统一剥 BOM（Windows 记事本产物跨平台可用）
+      match
+        load_key(
+          cfg_json_str(cfg, "source"),
+          cfg_json_str(cfg, "path"),
+          cfg_env_name(cfg),
+        ) {
+        Ok(k) => Ok(cfg_strip_bom(k))
+        Err(e) => Err(e)
+      }
     }
     Number(_, ..) => Ok(Json::stringify(cfg))
     // 布尔 key 明确拒绝：vools 会 str(True)="True"，与 MoonBit "true" 口径不一致，
@@ -143,6 +149,24 @@ pub fn _key_from_cfg(key_cfg : Json?) -> Result[String, String] {
       Err(
         "配置字段 key 形态非法（应为字符串，或对象 {plain|cipher|path|env|source}）",
       )
+  }
+}
+
+///|
+/// 去掉密钥文本开头的 UTF-8 BOM（U+FEFF）——**只去 BOM，不 trim**。
+///
+/// 为什么需要（C4 互操作审计）：Windows 记事本 / PowerShell `Out-File` 写出的密钥文件常带
+/// UTF-8 BOM；`load_key_from_path` 只做 `trim()`（BOM 不是空白），于是密钥变成
+/// `"\u{FEFF}<key>"` → PBKDF2 派生不同 → **跨平台解密静默失败**（fernet hmac 不符）。
+/// 这里在配置层统一剥掉，保证「Windows 生成密钥 / WSL 使用」与「反之」都能解。
+fn cfg_strip_bom(value : String) -> String {
+  if value.has_prefix("\u{FEFF}") {
+    match value.get_view(start=1) {
+      Some(v) => v.to_owned()
+      None => value
+    }
+  } else {
+    value
   }
 }
 
@@ -621,17 +645,39 @@ fn cfg_channel_from_spec(spec : Json) -> Result[&OnlineChannel, String] {
 
 ///|
 /// 敏感键名判定（大小写不敏感）：命中即整体替换成 `"***"`，不保留任何片段。
+///
+/// 口径（C4 安全审计后收紧）：**精确匹配**一张显式键表，不做「后缀猜测」——
+/// 后缀规则（如 `*_key`）会误伤 `has_key` 这类语义相反的布尔键，宁可列全。
+///
+/// 覆盖族：口令（`password/passwd/pass/passphrase/secret`）、
+/// 密钥（`key/key_path/private_key/secret_key/signing_key/encryption_key/master_key/session_key/api_key`）、
+/// 票据（`token/auth_token/access_token/refresh_token/bearer_token`）、
+/// 凭据（`credential/credentials/client_secret`）。
+/// 有意不掩码：`public_key`（公开）、`has_key`（布尔存在性标记）等。
 fn cfg_is_secret_key(key : String) -> Bool {
   let k = key.to_lower()
   k == "password" ||
   k == "passwd" ||
+  k == "pass" ||
+  k == "passphrase" ||
+  k == "secret" ||
+  k == "key" ||
   k == "key_path" ||
   k == "private_key" ||
-  k == "secret" ||
-  k == "token" ||
+  k == "secret_key" ||
+  k == "signing_key" ||
+  k == "encryption_key" ||
+  k == "master_key" ||
+  k == "session_key" ||
   k == "api_key" ||
+  k == "token" ||
+  k == "auth_token" ||
   k == "access_token" ||
-  k == "refresh_token"
+  k == "refresh_token" ||
+  k == "bearer_token" ||
+  k == "credential" ||
+  k == "credentials" ||
+  k == "client_secret"
 }
 
 ///|

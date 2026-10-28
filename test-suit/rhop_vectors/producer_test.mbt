@@ -374,6 +374,30 @@ fn build_signer(fx : Json) -> (Json, Int32) {
 }
 
 ///|
+/// 确定性分节摘要：对「非随机」的四节做 canonical_json 后 sha256。
+///
+/// C4：产物里的 `crypto` 分节因 Fernet 随机 IV/时间戳**每次运行都变**（volatile）；
+/// 其余四节必须可复现。把它们的规范化摘要固化进产物，任何人重跑一次即可用同一值
+/// 验证「确定性部分没漂移」。
+fn deterministic_digest(
+  canonical_json : Array[Json],
+  digest : Json,
+  envelope : Array[Json],
+  signer : Json,
+) -> String {
+  @rp.sha256_hex_of_utf8(
+    @rp.canonical_json(
+      Json::object({
+        "canonical_json": Json::array(canonical_json),
+        "digest": digest,
+        "envelope": Json::array(envelope),
+        "signer": signer,
+      }),
+    ),
+  )
+}
+
+///|
 /// 读回产物并返回 cases 对象；非法 JSON 直接 fail。
 fn read_back_cases(path : String) -> Json {
   let text = ffi_read_text(path)
@@ -407,6 +431,16 @@ test "vectors · 用真实 rhop API 生成五分节产物并写盘" {
   let doc = Json::object({
     "schema": Json::string("rhop-moonbit-output"),
     "schema_version": Json::number(1.0),
+    "deterministic_sections": Json::array([
+      Json::string("canonical_json"),
+      Json::string("digest"),
+      Json::string("envelope"),
+      Json::string("signer"),
+    ]),
+    "volatile_sections": Json::array([Json::string("crypto")]),
+    "deterministic_digest": Json::string(
+      deterministic_digest(canonical_json, digest, envelope, signer),
+    ),
     "produced_by": Json::string(
       "moon test --target js (test-suit/rhop_vectors/producer_test.mbt)",
     ),
@@ -440,6 +474,9 @@ test "vectors · 用真实 rhop API 生成五分节产物并写盘" {
   assert_true(back_envelope.length() > 0)
   println(
     "[vectors] 写出 \{path}：canonical=\{canonical_n} digest=\{digest_n} envelope=\{envelope_n} crypto=\{crypto_json_n}+\{crypto_secret_n} signer=\{signer_n}",
+  )
+  println(
+    "[vectors] deterministic_digest=\{deterministic_digest(canonical_json, digest, envelope, signer)}（crypto 为 volatile，不参与）",
   )
 }
 
@@ -563,4 +600,38 @@ test "vectors · 产物文件五节非空且条数 == fixture 对应条数" {
   println(
     "[vectors] 读回校验通过：canonical=\{back_canonical}/\{expected_canonical} digest=\{back_digest_n}/\{expected_digest} envelope=\{back_envelope_n}/\{expected_envelope} crypto=\{back_crypto_json_n}+\{back_crypto_secret_n} signer=\{back_signer_n}",
   )
+}
+
+///|
+/// C4 生成物卫生回归：确定性分节必须可复现；crypto 分节必须每次不同（随机 IV/时间戳）。
+///
+/// 把「产物能否复现」变成可执行判据：任何人引入时间戳/不稳定排序都会红。
+test "vectors · 确定性分节可复现（crypto 为 volatile）" {
+  let fx = load_fixture()
+  let (c1, _) = build_canonical(fx)
+  let (d1, _) = build_digest(fx)
+  let (e1, _) = build_envelope(fx)
+  let (s1, _) = build_signer(fx)
+  let (c2, _) = build_canonical(fx)
+  let (d2, _) = build_digest(fx)
+  let (e2, _) = build_envelope(fx)
+  let (s2, _) = build_signer(fx)
+  assert_eq(
+    @rp.canonical_json(Json::array(c1)),
+    @rp.canonical_json(Json::array(c2)),
+  )
+  assert_eq(@rp.canonical_json(d1), @rp.canonical_json(d2))
+  assert_eq(
+    @rp.canonical_json(Json::array(e1)),
+    @rp.canonical_json(Json::array(e2)),
+  )
+  assert_eq(@rp.canonical_json(s1), @rp.canonical_json(s2))
+  assert_eq(
+    deterministic_digest(c1, d1, e1, s1),
+    deterministic_digest(c2, d2, e2, s2),
+  )
+  // crypto 是 volatile：两次构建必须不同（Fernet 随机 IV / 时间戳）
+  let (k1, _, _) = build_crypto(fx)
+  let (k2, _, _) = build_crypto(fx)
+  assert_true(@rp.canonical_json(k1) != @rp.canonical_json(k2))
 }

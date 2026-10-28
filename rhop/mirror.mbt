@@ -1607,9 +1607,19 @@ fn mir_row_int(row : Json, key : String, fallback : Int32) -> Int32 {
 }
 
 ///|
-/// 行对象 → Envelope：走 `envelope` 序列化列 + `from_rhop_bytes`（含 checksum 校验）。
+/// 行对象 → Envelope：**以列为准**，用 `envelope` 列补齐列里没有的字段。
 ///
-/// 缺列（老库/坏库）返回可诊断 Err，而不是伪造一个空信封。
+/// C4-01（多进程/跨实现一致性）：镜像库把状态同时存放在「列」（status/version/side）
+/// 与「envelope 列」（整信封规范 JSON）。本类自己的写入始终让两者一致，但**任何**
+/// 只更新列的写入方（另一个进程直接跑 SQL、vools 式实现、运维手改）都会让两者撕裂：
+///   - 列 = 最新真相（`update_status`/`claim_task`/乐观锁都只读列）；
+///   - envelope 列 = 旧快照。
+/// 若读回时以 envelope 为准，调用方会拿到「过期的 status/version」——实测表现为
+/// 「子进程 claim 成功后父进程仍读到 pending v1」，进而可能重复领取/丢更新。
+///
+/// 因此这里：解析 envelope（保留 checksum 校验）→ 用**列**覆盖 status/version/side
+/// （以及列里有的 updated_at）→ 若发生覆盖则用 `new_full` 重算 checksum，保证返回的
+/// 信封自洽；未撕裂时行为与旧版逐字节一致（既有往返/checksum 用例不受影响）。
 fn mir_row_to_envelope(row : Json) -> Result[Envelope, String] {
   let text = match mir_row_str(row, "envelope") {
     Some(t) => t
@@ -1621,7 +1631,66 @@ fn mir_row_to_envelope(row : Json) -> Result[Envelope, String] {
   if text == "" {
     return Err("镜像行 envelope 列为空（行已损坏）")
   }
-  Envelope::from_rhop_bytes(bytes_of_utf8(text))
+  let env = match Envelope::from_rhop_bytes(bytes_of_utf8(text)) {
+    Ok(v) => v
+    Err(msg) => return Err(msg)
+  }
+  // 列侧真相
+  let col_status = match mir_row_str(row, "status") {
+    Some(name) =>
+      match TaskStatus::parse(name) {
+        Ok(st) => Some(st)
+        Err(msg) => return Err("镜像行 status 列非法: " + msg)
+      }
+    None => None
+  }
+  let col_version = match mir_row_str(row, "version") {
+    Some(_) => mir_row_int(row, "version", env.version)
+    None => mir_row_int(row, "version", env.version)
+  }
+  let col_side = match mir_row_str(row, "side") {
+    Some(name) =>
+      match Side::parse(name) {
+        Ok(sd) => Some(sd)
+        Err(msg) => return Err("镜像行 side 列非法: " + msg)
+      }
+    None => None
+  }
+  let col_updated_at = match mir_row_str(row, "updated_at") {
+    Some(ts) => ts
+    None => env.updated_at
+  }
+  let status = match col_status {
+    Some(st) => st
+    None => env.status
+  }
+  let side = match col_side {
+    Some(sd) => sd
+    None => env.side
+  }
+  let torn = status != env.status ||
+    col_version != env.version ||
+    side != env.side ||
+    col_updated_at != env.updated_at
+  if !torn {
+    return Ok(env)
+  }
+  // 撕裂：以列为准重建（checksum 由 new_full 重算，保证自洽）
+  Ok(
+    Envelope::new_full(
+      env.task_id,
+      status,
+      env.payload,
+      side,
+      result?=env.result,
+      error?=env.error,
+      version=col_version,
+      created_at=env.created_at,
+      updated_at=col_updated_at,
+      hops_seen=env.hops_seen.copy(),
+      signature?=env.signature,
+    ),
+  )
 }
 
 ///|

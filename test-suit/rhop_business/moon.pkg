@@ -13,6 +13,7 @@ options(
     "actions_fs_test.mbt": [ "js" ],
     "c2_regression_test.mbt": [ "js" ],
     "c3_regression_test.mbt": [ "js" ],
+    "c4_e2e_test.mbt": [ "js" ],
     "p1_fix_regression_test.mbt": [ "js" ],
     "nonjs_test.mbt": [ "wasm", "native" ],
   },

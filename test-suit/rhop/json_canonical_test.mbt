@@ -377,3 +377,74 @@ test "canonical: 深嵌套 20000 层（更深的资源边界，仍不崩）" {
   let text = @rp.canonical_json(deeply_nested(depth))
   assert_eq(text.length(), depth + 4 + depth)
 }
+
+// ============================================================================
+// C4 性能回归：字符串转义改为「普通字符 run 批量写入」后，转义语义必须保持。
+// 覆盖：长纯文本（bulk 路径）、run 边界紧邻转义、ASCII 口径下的非 ASCII 与代理对。
+// ============================================================================
+
+///|
+test "canonical: 长纯文本走 bulk 路径且字节数正确（1MB）" {
+  let s = "x".repeat(1000000)
+  let text = @rp.canonical_json(Json::string(s))
+  assert_eq(text.length(), 1000000 + 2) // 两端引号
+  assert_true(text.has_prefix("\"xxx"))
+  // 1MB 内容里不应出现任何转义反斜杠
+  assert_false(text.contains("\\"))
+}
+
+///|
+test "canonical: run 边界转义正确（纯文本与转义字符交替）" {
+  let b = bs()
+  // 长 run + 每类转义 + 再长 run，验证切分不吞字符、不重复字符
+  let s = "a".repeat(1000) +
+    "\u{01}" +
+    "b".repeat(1000) +
+    "\"" +
+    "c".repeat(1000) +
+    "\\" +
+    "d".repeat(1000) +
+    "\n\t\r\u{08}\u{0C}" +
+    "e".repeat(1000)
+  let text = @rp.canonical_json(Json::string(s))
+  // 期望用 b（反斜杠）拼接，避免源码层面的转义被二次解释
+  let expected = "\"" +
+    "a".repeat(1000) +
+    b +
+    "u0001" +
+    "b".repeat(1000) +
+    b +
+    "\"" +
+    "c".repeat(1000) +
+    b +
+    b +
+    "d".repeat(1000) +
+    b +
+    "n" +
+    b +
+    "t" +
+    b +
+    "r" +
+    b +
+    "b" +
+    b +
+    "f" +
+    "e".repeat(1000) +
+    "\""
+  assert_eq(text, expected)
+}
+
+///|
+test "canonical: bulk 路径与非 ASCII / 代理对（两种口径）" {
+  let b = bs()
+  // ensure_ascii=false：原样（含 4 字节 emoji，走 bulk 分支）
+  let s = "中".repeat(1000) + "\u{1F600}" + "文".repeat(1000)
+  let plain = @rp.canonical_json(Json::string(s))
+  assert_eq(plain, "\"" + s + "\"")
+  // ensure_ascii=true：中文逐码元 uXXXX + emoji 代理对（用 b 拼，避免源码转义歧义）
+  let ascii = @rp.canonical_json_ascii(Json::string(s))
+  assert_true(ascii.contains(b + "u4e2d"))
+  assert_true(ascii.contains(b + "ud83d" + b + "ude00"))
+  // 转义数量可核对：2000 个中文 × 6 字符 + emoji 代理对 12 字符 + 两端引号
+  assert_eq(ascii.length(), 2 + 2000 * 6 + 12)
+}

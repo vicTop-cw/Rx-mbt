@@ -68,40 +68,63 @@ fn write_canonical_string(
   ascii_only : Bool,
 ) -> Unit {
   buf.write_char('"')
-  for c in text {
-    let code = c.to_int()
-    if c == '"' {
-      buf.write_char('\\')
-      buf.write_char('"')
-    } else if c == '\\' {
-      buf.write_char('\\')
-      buf.write_char('\\')
-    } else if c == '\n' {
-      buf.write_string("\\n")
-    } else if c == '\t' {
-      buf.write_string("\\t")
-    } else if c == '\r' {
-      buf.write_string("\\r")
-    } else if c == '\u{08}' {
-      buf.write_string("\\b")
-    } else if c == '\u{0C}' {
-      buf.write_string("\\f")
-    } else if code < 0x20 {
-      write_canonical_control(buf, code)
-    } else if ascii_only && code > 0x7F {
-      if code <= 0xFFFF {
-        write_unicode_escape(buf, code)
-      } else {
-        // U+10000..U+10FFFF → UTF-16 代理对
-        let v = code - 0x10000
-        write_unicode_escape(buf, 0xD800 + (v >> 10))
-        write_unicode_escape(buf, 0xDC00 + (v & 0x3FF))
-      }
+  // 性能（C4）：按「需要转义的码元」切分，连续普通字符一次性 bulk 写入。
+  // 旧实现每字符一次 write_char，10MB 纯文本 = 1000 万次调用（实测 checksum ≈3.5 s）；
+  // 改成 run 合并后同一场景退化为几次 substring 写入。
+  let n = text.length()
+  let mut i = 0
+  let mut run_start = 0
+  while i < n {
+    let unit = text[i]
+    let code = unit.to_int()
+    let plain = code >= 0x20 &&
+      code != 0x22 &&
+      code != 0x5C &&
+      !(ascii_only && code > 0x7F)
+    if plain {
+      i = i + 1
     } else {
-      buf.write_char(c)
+      if i > run_start {
+        buf.write_string(text.substring(start=run_start, end=i))
+      }
+      write_canonical_escape_unit(buf, code)
+      i = i + 1
+      run_start = i
     }
   }
+  if run_start < n {
+    buf.write_string(text.substring(start=run_start, end=n))
+  }
   buf.write_char('"')
+}
+
+///|
+/// 写出单个码元的转义形式（`"` / 反斜杠 / 短转义 / `\u00XX` / `\uXXXX`）。
+///
+/// 按 **UTF-16 码元** 处理：`ascii_only` 时补充平面字符被拆成两个代理码元，
+/// 分别输出 `\uD83D\uDE80`，与 Python `ensure_ascii=True` 的代理对写法逐字节一致。
+fn write_canonical_escape_unit(buf : StringBuilder, code : Int32) -> Unit {
+  if code == 0x22 {
+    buf.write_char('\\')
+    buf.write_char('"')
+  } else if code == 0x5C {
+    buf.write_char('\\')
+    buf.write_char('\\')
+  } else if code == 0x0A {
+    buf.write_string("\\n")
+  } else if code == 0x09 {
+    buf.write_string("\\t")
+  } else if code == 0x0D {
+    buf.write_string("\\r")
+  } else if code == 0x08 {
+    buf.write_string("\\b")
+  } else if code == 0x0C {
+    buf.write_string("\\f")
+  } else if code < 0x20 {
+    write_canonical_control(buf, code)
+  } else {
+    write_unicode_escape(buf, code)
+  }
 }
 
 ///|

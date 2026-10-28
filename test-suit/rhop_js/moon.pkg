@@ -12,5 +12,6 @@ options(
     "transport_test.mbt": [ "js" ],
     "watch_test.mbt": [ "js" ],
     "relay_test.mbt": [ "js" ],
+    "c4_e2e_test.mbt": [ "js" ],
   },
 )
