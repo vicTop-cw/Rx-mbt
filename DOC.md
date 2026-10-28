@@ -1,7 +1,7 @@
 # RX-MBT API 文档
 
 > 本文档由 `rx/pkg.generated.mbti`（`moon info` 生成）与源码注释整理，列出全部公开 API 的签名与语义说明。
-> 库版本：`vicTop-cw/RX-MBT@0.3.1`　工具链：`moon 0.1.20261016`　编译目标：`wasm`（rhop 相关 API 另见各条目标标注）
+> 库版本：`vicTop-cw/RX-MBT@0.4.0`　工具链：`moon 0.1.20261016`　编译目标：`wasm`（rhop 相关 API 另见各条目标标注）
 
 ## 目录
 
@@ -1056,8 +1056,6 @@ pub fn Requester::close(Self) -> Unit
 
 pub struct Executor { … }
 pub fn Executor::new(RhopConfig) -> Result[Self, String]
-pub fn Executor::from_config_dir(RhopConfig, String, worker_id? : String) -> Result[Self, String]
-pub fn Executor::from_mirror_path(RhopConfig, String, String, worker_id? : String) -> Result[Self, String]
 pub fn Executor::from_config_dir(RhopConfig, String, worker_id? : String) -> Result[Self, String]
 pub fn Executor::from_mirror_path(RhopConfig, String, String, worker_id? : String) -> Result[Self, String]
 pub fn Executor::claim(Self) -> Result[Envelope?, String]
