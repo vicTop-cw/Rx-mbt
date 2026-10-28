@@ -211,15 +211,33 @@ pub fn RhopConfig::from_dict(data : Json) -> Result[RhopConfig, String] {
 ///|
 /// 从 JSON 文件构造（可用性：**仅 js 目标**；wasm/native 返回可诊断 Err）。
 pub fn RhopConfig::from_file(path : String) -> Result[RhopConfig, String] {
-  if path.trim().length() == 0 {
+  let p = path.trim().to_owned()
+  if p.length() == 0 {
     return Err("配置文件路径不能为空")
   }
-  let text = match cfg_read_text(path) {
+  // C2-01 加固：超长字符串不交给 OS（避免 ENAMETOOLONG 泄漏），错误串一律截断
+  if p.length() > CFG_PATH_MAX_LEN {
+    return Err(
+      "配置文件路径过长（" +
+      p.length().to_string() +
+      " 字符，上限 " +
+      CFG_PATH_MAX_LEN.to_string() +
+      "）: " +
+      cfg_snippet(p, 80),
+    )
+  }
+  let text = match cfg_read_text(p) {
     Ok(t) => t
-    Err(e) => return Err("读取配置文件失败: \{path}: \{e}")
+    Err(e) =>
+      return Err(
+        "读取配置文件失败: " +
+        cfg_snippet(p, 200) +
+        ": " +
+        cfg_snippet(e, 200),
+      )
   }
   let data = @json.parse(text) catch {
-    _ => return Err("配置文件不是合法 JSON: \{path}")
+    _ => return Err("配置文件不是合法 JSON: " + cfg_snippet(p, 200))
   }
   RhopConfig::from_dict(data)
 }
@@ -431,25 +449,89 @@ pub fn RhopConfig::action_cfg(self : RhopConfig) -> Json {
 }
 
 ///|
-/// 便捷入口：配置对象 JSON 或 JSON 文件路径 → `RhopConfig`。
+/// 配置文件路径长度上限（C2-01）。
 ///
-/// 判定规则：字符串先尝试按 JSON 解析，解析结果是对象则当配置正文，
-/// 否则当文件路径（对照 vools `load_config(path_or_dict)` 的双形态语义）。
+/// 为什么要设上限：`load_config` 会把「看起来像路径」的字符串交给 `from_file`，
+/// 而 `fs.readFileSync` 会把整段字符串交给 OS —— 12KB 的配置文本因此触发
+/// `ENAMETOOLONG`，且错误信息会回显整段输入（日志/内存放大）。4096 覆盖
+/// POSIX/PATH_MAX 与 Windows 长路径，超出即判「不是可用路径」。
+const CFG_PATH_MAX_LEN : Int32 = 4096
+
+///|
+/// 错误信息里的片段截断 + 控制字符归一（C2-01：不让整段用户输入进错误串）。
+///
+/// 换行/回车/制表符统一换成空格（防日志注入），再从头部截 `max` 个字符，末尾加 `…`。
+fn cfg_snippet(raw : String, max : Int32) -> String {
+  let sb = StringBuilder::new()
+  let limit = if raw.length() < max { raw.length() } else { max }
+  for i in 0..<limit {
+    match raw.get_char(i) {
+      Some('\n') => sb.write_char(' ')
+      Some('\r') => sb.write_char(' ')
+      Some('\t') => sb.write_char(' ')
+      Some(c) => sb.write_char(c)
+      None => ()
+    }
+  }
+  if raw.length() > max {
+    sb.write_string("…")
+  }
+  sb.to_string()
+}
+
+///|
+/// 便捷入口：配置对象 JSON / JSON 文本 / JSON 文件路径 → `RhopConfig`。
+///
+/// 形态判定（**顺序敏感**，见 C2-01）：
+/// 1. JSON 对象 → 直接 `from_dict`；
+/// 2. 字符串：
+///    - 以 `{` / `[` 开头 ⇒ 当**配置文本**解析。`[` 或非对象结果给「必须是对象」，
+///      解析失败给「不是合法 JSON」—— 都不再回落成文件路径（否则整段文本会被当文件名）；
+///    - 含换行或长度 > `CFG_PATH_MAX_LEN` ⇒ 判「既不是配置对象也不是可用路径」
+///      （这类输入不可能是合法路径，且回显会放大日志）；
+///    - 其余才当文件路径交给 `from_file`。
+/// 3. 其它类型 → 可诊断 Err。
+///
+/// 所有错误信息里的用户输入都经 `cfg_snippet` 截断归一（≤120 字符）。
 pub fn load_config(item : Json) -> Result[RhopConfig, String] {
   match item {
     Object(_) => RhopConfig::from_dict(item)
-    String(s) => {
-      let trimmed = s.trim().to_owned()
+    String(raw) => {
+      let trimmed = raw.trim().to_owned()
       if trimmed == "" {
         return Err(
           "cfg 不能为空（应为配置对象 JSON 或 JSON 文件路径）",
         )
       }
-      let parsed = @json.parse(trimmed) catch { _ => Json::null() }
-      match parsed {
-        Object(_) => RhopConfig::from_dict(parsed)
-        _ => RhopConfig::from_file(trimmed)
+      let first = trimmed.get_char(0)
+      if first == Some('{') || first == Some('[') {
+        let parsed = @json.parse(trimmed) catch { _ => Json::null() }
+        match parsed {
+          Object(_) => return RhopConfig::from_dict(parsed)
+          Null =>
+            return Err(
+              "cfg 不是合法 JSON（片段: " +
+              cfg_snippet(trimmed, 120) +
+              "）",
+            )
+          _ =>
+            return Err(
+              "配置必须是 dict/JSON 对象（收到: " +
+              cfg_snippet(trimmed, 60) +
+              "）",
+            )
+        }
       }
+      if trimmed.length() > CFG_PATH_MAX_LEN || trimmed.contains("\n") {
+        return Err(
+          "cfg 既不是配置对象 JSON 也不是可用的文件路径（长度 " +
+          trimmed.length().to_string() +
+          "，片段: " +
+          cfg_snippet(trimmed, 80) +
+          "）",
+        )
+      }
+      RhopConfig::from_file(trimmed)
     }
     _ => Err("cfg 必须是配置对象 JSON 或 JSON 文件路径")
   }

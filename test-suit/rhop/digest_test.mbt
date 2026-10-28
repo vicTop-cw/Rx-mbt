@@ -355,3 +355,46 @@ test "digest: 资源边界 · 1MB 输入的 SHA-256（NIST 向量）" {
     "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
   )
 }
+
+// ============================================================================
+// C2 资源审计回归：PBKDF2 优化路径（ipad/opad 预压缩 + 免分配内层循环）
+// 必须与旧实现/RFC 向量逐字节一致；含多轮迭代与超 64 字节 salt 分支。
+// ============================================================================
+
+///|
+test "digest: PBKDF2 优化路径与 hashlib 一致（多轮迭代 c=2000 / 20000）" {
+  let password = @rp.bytes_of_utf8("password")
+  let salt = @rp.bytes_of_utf8("salt")
+  assert_eq(
+    @rp.pbkdf2_hmac_sha256_hex(password, salt, 2000, 32),
+    "9209a0c90243e88b89488f99cd7ea010c244cc7a9d4bf65c157f2d8f642eb952",
+  )
+  assert_eq(
+    @rp.pbkdf2_hmac_sha256_hex(password, salt, 20000, 32),
+    "2a6a4f0832d046838f4a22cbadc94dff08a5bcc328467ee3cade8db8c5d93b87",
+  )
+}
+
+///|
+test "digest: PBKDF2 超 64 字节 salt（跨块 salt + 多轮）" {
+  // salt 长度 100 > SHA256 块 64：验证优化路径下「完整块 + 尾块」拼接正确
+  let password = @rp.bytes_of_utf8("pass")
+  let salt = @rp.bytes_of_utf8("a".repeat(100))
+  assert_eq(
+    @rp.pbkdf2_hmac_sha256_hex(password, salt, 3, 32),
+    "d1054b68c897351c4fdc46a6b445143cd7333415394e9bf927917257a579aeb5",
+  )
+}
+
+///|
+test "digest: PBKDF2 优化路径与 hashlib 一致（iterations=1 边界）" {
+  assert_eq(
+    @rp.pbkdf2_hmac_sha256_hex(
+      @rp.bytes_of_utf8("pw"),
+      @rp.bytes_of_utf8("salty"),
+      1,
+      32,
+    ),
+    "8bcb1a7f7f2780f2dec9028702fc6cd3bef846a719b927ebffdcc1117828d857",
+  )
+}

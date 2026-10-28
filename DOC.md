@@ -666,6 +666,10 @@ pub fn bytes_from_hex(String) -> Result[Bytes, String]              // fixture �
 
 **边界语义**：`iterations < 1` 或 `dk_len <= 0` 返回零长度 `Bytes`（不 panic；vools 抛 `ValueError`）。
 
+**资源特性（C2 审计后）**：PBKDF2 的 ipad/opad 只压缩一次、内层循环零 `bytes_concat` 分配；
+200000 轮（Fernet KDF 官方参数）实测 js ≈0.8 s / wasm ≈1.8 s / native ≈2.0 s（旧实现 2.4–3.8 s，约 1.6–3× 提速）。
+算法语义与 RFC 向量逐字节不变。
+
 ### json_canonical.mbt —— 两套 JSON 规范口径（三目标）
 
 ```moonbit
@@ -675,6 +679,9 @@ pub fn canonical_json_ascii(Json) -> String            // ensure_ascii=true（si
 pub fn canonical_json_ascii_utf8(Json) -> Bytes
 pub fn canonical_object(Array[(String, Json)]) -> Json // 便捷构造（输出按键升序）
 ```
+
+**资源特性（C2 审计后）**：writer 为**显式栈迭代**（非递归），深嵌套只受堆内存限制（实测 20000 层数组可稳定序列化；
+旧递归实现约 2500–5000 层即 `RangeError`）；键排序先一次性 UTF-8 编码再比较（5000 键实测 ~22 ms，旧实现 68–135 ms）。
 
 口径 = Python `json.dumps(x, sort_keys=True)`：键按码点升序、分隔符 `", "` / `": "`、控制字符按 CPython 规则转义；
 `ensure_ascii=false` 时非 ASCII 原样，`true` 时转 `\uXXXX`（U+FFFF 以上输出代理对）。
@@ -708,6 +715,16 @@ pub fn Envelope::with_signature(Self, String?) -> Self                          
 **checksum 规则**：`"sha256:" + hex(sha256(canonical_json({v:1, task_id, status, payload, result, error, side, version,
 created_at, updated_at, hops_seen, signature})))`——不含 `checksum` 自身；未知字段也参与校验（与 vools `pop("checksum")` 后 re-dump 同口径）。
 `from_rhop_bytes` 对坏 JSON / 非法 UTF-8 / checksum 不匹配 / 缺必填字段 / 非法 status|side 全部返回 `Err(中文原因)`。
+
+**载荷契约（C2 审计补充）**：
+- `payload` / `result` / `hops_seen` 的**引用语义**：`hops_seen` 在构造时**防御性复制**（外部 push 不影响已封信封的 checksum）；
+  `payload` / `result` 的 `Json` 仍按**不可变值**使用（多个信封共享同一引用且与 vools 行为一致），
+  **不得原地修改其内层 `Array`/`Map`**，否则所有持有方的 `checksum` 会与实际内容脱钩。需要变更时构造新 `Json` 再用 wither 替换。
+- **嵌套深度不对称（已知限制）**：`to_rhop_bytes` 走迭代序列化、深度只受内存限制；`from_rhop_bytes` 受
+  `MAX_ENVELOPE_NESTING_DEPTH = 1000` 约束（显式常量，避免核心默认漂移）。深度 1000–2000+ 的 payload 可写出但读不回，
+  属 out-of-contract（应拆层或改为外部引用）。
+- **峰值内存**：`to_rhop_bytes`/`compute_checksum` 为 O(n) 时间、峰值约 2–3× payload（String + UTF-8 Bytes 双份）；
+  1MB payload 实测 checksum 65 ms / 写 135 ms / 读 70 ms。
 
 ### signer.mbt —— 签名（三目标）
 

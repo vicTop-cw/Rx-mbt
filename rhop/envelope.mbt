@@ -11,6 +11,14 @@
 // ============================================================================
 
 ///|
+/// 信封反序列化允许的最大 JSON 嵌套深度。
+///
+/// 显式取值（而非依赖 `@json.parse` 的默认值）以免核心库默认值变化导致行为漂移；
+/// 与写入侧的**不对称**是已知限制：`to_rhop_bytes` 走迭代序列化、深度只受内存限制，
+/// 而读入受此上限约束。超过该深度的 payload 属 out-of-contract（应拆层或改为外部引用）。
+pub const MAX_ENVELOPE_NESTING_DEPTH : Int32 = 1000
+
+///|
 /// 信封字段解析错误（内部用 `raise` 传播，出口统一转成 `Result[_, String]`）。
 priv suberror EnvelopeError {
   EnvelopeError(String)
@@ -27,6 +35,11 @@ pub struct Envelope {
   /// 任务状态
   status : TaskStatus
   /// 任务载荷（任意 JSON）
+  ///
+  /// **契约**：按不可变值使用。构造/接收后不得原地修改其内层 `Array`/`Map`
+  /// （`Json` 内部容器可变，多个信封会共享同一 `payload` 引用；原地改数会
+  /// 让所有持有方的 `checksum` 与实际内容脱钩）。需要变更时请构造新的 `Json`
+  /// 并通过 wither 替换，而不是就地改。
   payload : Json
   /// 执行结果（无则 None ⇒ 序列化为 null）
   result : Json?
@@ -74,7 +87,10 @@ fn assemble(
     version,
     created_at,
     updated_at,
-    hops_seen,
+    // 防御性复制：调用方后续 push 不得影响「已封信封」的内容与 checksum
+    //（C2 审计：旧实现直接持有入参数组，构造后 append 会让 checksum 静默失效、
+    // 且两个信封共享数组时互相串扰）。
+    hops_seen: hops_seen.copy(),
     signature,
     checksum,
   }
@@ -200,7 +216,11 @@ pub fn Envelope::from_rhop_bytes(raw : Bytes) -> Result[Envelope, String] {
   let text = @utf8.decode(raw) catch {
     _ => return Err("envelope JSON 解析失败: 非法 UTF-8 字节")
   }
-  let parsed = @json.parse(text, preserve_number_repr=true) catch {
+  let parsed = @json.parse(
+    text,
+    preserve_number_repr=true,
+    max_nesting_depth=MAX_ENVELOPE_NESTING_DEPTH,
+  ) catch {
     err => return Err("envelope JSON 解析失败: \{err.to_string()}")
   }
   let fields = match parsed {

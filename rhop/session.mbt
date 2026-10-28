@@ -112,7 +112,70 @@ pub fn safe_filename(name : String) -> Result[String, String] {
       )
     }
   }
+  // C2-03：纯点号不是文件名（"." 会让介质层把目录当目标，报错还很难懂）
+  let mut only_dots = true
+  for c in name {
+    if c != '.' {
+      only_dots = false
+    }
+  }
+  if only_dots {
+    return Err("包文件名不能是纯点号（\{name}）")
+  }
+  // C2-03：结尾点在 Win32 会被静默抹掉、在 POSIX 保留 → 同一逻辑名两平台指向不同文件
+  if name.has_suffix(".") {
+    return Err(
+      "包文件名不能以 \".\" 结尾（Windows 会静默抹掉结尾点，导致跨平台指向不同文件）: " +
+      name,
+    )
+  }
+  // C2-03：Windows 保留设备名（base = 第一个 "." 之前那段，大小写不敏感）。
+  // Node 走 \?\ 长路径形式会把它建成真实文件，但 cmd/PowerShell/普通 Win32/运维脚本
+  // 会解析成设备（写入被丢弃、读取可能挂起）—— 跨工具会「假成功丢数据」，直接拒绝。
+  if is_windows_device_name(name) {
+    return Err(
+      "包文件名不能是 Windows 保留设备名（CON/PRN/AUX/NUL/COM1-9/LPT1-9）: " +
+      name,
+    )
+  }
   Ok(name)
+}
+
+///|
+/// 是否为 Windows 保留设备名（判定 base = 第一个 `.` 之前那段，大小写不敏感）。
+///
+/// 覆盖 CON / PRN / AUX / NUL / CLOCK$ 与 COM1..COM9 / LPT1..LPT9（DOS 设备名规则）。
+fn is_windows_device_name(name : String) -> Bool {
+  let base = match name.find(".") {
+    Some(i) =>
+      match name.get_view(start=0, end=i) {
+        Some(v) => v.to_owned()
+        None => name
+      }
+    None => name
+  }
+  let lower = base.to_lower()
+  if lower == "con" ||
+    lower == "prn" ||
+    lower == "aux" ||
+    lower == "nul" ||
+    lower == "clock$" {
+    return true
+  }
+  if lower.length() == 4 {
+    let head = match lower.get_view(start=0, end=3) {
+      Some(v) => v.to_owned()
+      None => ""
+    }
+    let digit = lower.get_char(3)
+    if head == "com" || head == "lpt" {
+      match digit {
+        Some(d) => if d.to_int() >= 49 && d.to_int() <= 57 { return true }
+        None => ()
+      }
+    }
+  }
+  false
 }
 
 ///|

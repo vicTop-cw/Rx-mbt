@@ -270,3 +270,56 @@ test "watch · stop() 真正关闭 fs.watch 句柄（dispose 回归）" {
   )
   ffi_w_rmrf(dir)
 }
+
+// ---------------------------------------------------------------------------
+// C2（资源与并发）回归：watch 的「丢消息」两类路径
+// ---------------------------------------------------------------------------
+
+///|
+test "watch · 半写文件不登记 seen：写完后能被重新处理（C2 BUG-2 回归）" {
+  let dir = ffi_w_mkdtemp("rhop-w7")
+  let crypto = @rp.RhopCrypto::from_key("watch-test-key")
+  let w = @rp.RhopWatcher::new(dir, crypto)
+  let path = @rp.join_shared(dir, "partial.rhop")
+  // 先写半截（非法 JSON）：读得到但解析必失败
+  assert_true(ffi_w_write(path, "{\"v\": 1, \"alg\""))
+  assert_true(w.process_file(path) is None)
+  assert_eq(w.bad_files(), 1)
+  // 再写完整密文：旧实现会把路径永久留在 seen 里而丢弃，这里必须能被再次处理
+  let payload = @json.parse("{\"ok\": true}") catch { _ => fail("x") }
+  assert_true(ffi_w_write(path, crypto.encrypt_json(payload)))
+  match w.process_file(path) {
+    Some(r) => assert_true(r.ok)
+    None =>
+      fail(
+        "半写后写完整应能被重新处理（旧实现会永久丢消息）",
+      )
+  }
+  // 坏文件计数保留（诊断用），但不再重复累加
+  assert_eq(w.bad_files(), 1)
+  ffi_w_rmrf(dir)
+}
+
+///|
+test "watch · stop() 清空 seen：重启后同名文件可再次处理（C2 BUG-3 回归）" {
+  let dir = ffi_w_mkdtemp("rhop-w8")
+  let crypto = @rp.RhopCrypto::from_key("watch-test-key")
+  let env = crypto.encrypt_json(
+    @json.parse("{\"n\": 1}") catch {
+      _ => fail("x")
+    },
+  )
+  let path = @rp.join_shared(dir, "again.rhop")
+  assert_true(ffi_w_write(path, env))
+  let w = @rp.RhopWatcher::new(dir, crypto)
+  assert_eq(w.start(), Ok(()))
+  assert_true(w.process_file(path) is Some(_))
+  // 同一观察窗口内仍然去重
+  assert_true(w.process_file(path) is None)
+  w.stop()
+  assert_eq(w.start(), Ok(()))
+  // 重启 = 新观察窗口：旧路径应可再次处理（旧实现会被 seen 永久压制）
+  assert_true(w.process_file(path) is Some(_))
+  w.stop()
+  ffi_w_rmrf(dir)
+}

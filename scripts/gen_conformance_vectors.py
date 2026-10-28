@@ -856,13 +856,31 @@ def generate(explicit_root=None, skip_crypto=False, deterministic=True):
 
 
 def write_text(path, text):
-    parent = os.path.dirname(path)
+    """原子写入：唯一临时名 + fsync + os.replace。
+
+    C2 审计 Q7：原实现用固定的 `<path>.tmp`，两条并发生成会互相覆盖同一个临时文件
+    （不同参数时就是 last-writer-wins / 潜在半截写）。改用同目录唯一临时名 + fsync，
+    并发安全；失败路径必定清理临时文件。
+    """
+    import tempfile
+
+    parent = os.path.dirname(os.path.abspath(path))
     if parent and not os.path.isdir(parent):
         os.makedirs(parent)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix=".vools_vectors-", suffix=".tmp", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+        tmp = None
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def cmd_generate(args):

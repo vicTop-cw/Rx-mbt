@@ -78,7 +78,13 @@ pub fn RelayServer::process_alive(self : RelayServer) -> Bool {
 /// 失败：子进程起不来 / 端口文件迟迟不出现 → 可诊断 Err（并已清理子进程）。
 pub fn RelayServer::start(self : RelayServer) -> Result[Unit, String] {
   if self.child != 0L {
-    return Ok(())
+    // C2 BUG-5：不能只看「有过 child」。TTL 到期或子进程崩溃后 child 仍是旧 id，
+    // 直接返回 Ok 会让调用方以为服务可用，直到 send/receive 才失败。
+    // 旧进程还活着才算幂等命中；否则先清理（杀僵尸 + 删端口文件/临时目录）再重新拉起。
+    if relay_alive(self.child) {
+      return Ok(())
+    }
+    self.stop()
   }
   let pf = unique_tmp_path("rhop-relay")
   if pf == "" {
@@ -102,24 +108,32 @@ pub fn RelayServer::start(self : RelayServer) -> Result[Unit, String] {
   self.child = id
   self.port_file = pf
   // 轮询端口文件（子进程 bind 后写入真实端口）
+  //
+  // C2 BUG-10：这里是**跨进程文件握手**，有两个经典竞态：
+  //   ① 文件刚被创建、内容还没落盘 → 读到空串/半截 JSON；
+  //   ② 读到的 JSON 缺 port 字段（理论上不会，但防御）。
+  // 旧实现遇到 ① 会立刻 `return Err`（WSL/9p 上实测偶发失败：
+  // `端口文件内容不是合法 JSON: `），而不是继续等 —— 这是**假失败**。
+  // 现在：内容不可解析 == 还没准备好，继续轮询；只有超时才报错，并带上最后观察到的内容便于诊断。
+  // 根因侧同步修：子进程改为「tmp + rename」原子写端口文件（见 ffi_relay_spawn 里的脚本）。
   let mut waited = 0
+  let mut last_seen = ""
   while waited < 100 {
     if fs_path_exists(pf) {
       match fs_read_text(pf) {
         Ok(t) => {
-          let j = @json.parse(t) catch {
-            _ =>
-              return Err(
-                "rhop relay: 端口文件内容不是合法 JSON: " + t,
-              )
-          }
-          match j {
-            { "port": Number(p, ..), .. } =>
-              if p.to_int() > 0 {
-                self.port = p.to_int()
-                return Ok(())
-              }
-            _ => ()
+          let text = t.trim().to_owned()
+          if text != "" {
+            last_seen = text
+            let parsed = @json.parse(text) catch { _ => continue }
+            match parsed {
+              { "port": Number(p, ..), .. } =>
+                if p.to_int() > 0 {
+                  self.port = p.to_int()
+                  return Ok(())
+                }
+              _ => ()
+            }
           }
         }
         Err(_) => ()
@@ -129,22 +143,69 @@ pub fn RelayServer::start(self : RelayServer) -> Result[Unit, String] {
     waited = waited + 1
   }
   let _ = self.stop()
-  Err(
-    "rhop relay: 等待中转服务就绪超时（5s 内未拿到监听端口）",
-  )
+  if last_seen == "" {
+    Err(
+      "rhop relay: 等待中转服务就绪超时（5s 内未拿到监听端口）",
+    )
+  } else {
+    Err(
+      "rhop relay: 等待中转服务就绪超时（5s 内未拿到监听端口）；最后一次读到: " +
+      last_seen,
+    )
+  }
 }
 
 ///|
-/// 停止中转服务并清理（幂等）：杀子进程、删端口文件、清空端口。
+/// 停止中转服务并清理（幂等）：杀子进程、删端口文件**与临时目录**、清空状态。
 pub fn RelayServer::stop(self : RelayServer) -> Unit {
   if self.child != 0L {
     relay_kill(self.child)
     self.child = 0L
   }
   if self.port_file != "" {
+    // C2 BUG-1：`unique_tmp_path` 用 mkdtemp 建过一个目录，只删端口文件会留下空目录，
+    // 每起停一次就在 os.tmpdir() 积一个 —— 这里连目录一起清掉。
+    let dir = parent_dir_of(self.port_file)
     let _ = fs_remove(self.port_file)
+    if dir != "" {
+      let _ = fs_remove_dir(dir)
+    }
     self.port_file = ""
   }
+}
+
+///|
+/// 取路径的父目录（兼容 "\\" 与 "/"；无分隔符返回 ""）。
+fn parent_dir_of(path : String) -> String {
+  let p = path.replace_all(old="\\", new="/")
+  match p.rev_split_once("/") {
+    Some(pair) => if pair.0 == "" { "" } else { pair.0.to_owned() }
+    None => ""
+  }
+}
+
+///|
+/// 删目录（仅 js；失败返回 Err，由调用方决定是否忽略）。
+#cfg(target="js")
+extern "js" fn ffi_remove_dir(path : String) -> Bool =
+  #| (path) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); fs.rmSync(String(path), { recursive: true, force: true }); G.__rxmbt_fs_err = ""; return true; } catch (e) { G.__rxmbt_fs_err = String((e && e.message) || e); return false; } }
+
+///|
+/// js：删目录。
+#cfg(target="js")
+fn fs_remove_dir(path : String) -> Result[Unit, String] {
+  if ffi_remove_dir(path) {
+    Ok(())
+  } else {
+    Err("rhop: 删目录失败: " + path)
+  }
+}
+
+///|
+/// 非 js：无文件系统，返回可诊断 Err。
+#cfg(not(target="js"))
+fn fs_remove_dir(path : String) -> Result[Unit, String] {
+  Err("rhop: 删目录仅 js 目标可用（wasm/native 无文件系统 API）")
 }
 
 ///|
@@ -236,7 +297,7 @@ pub impl OnlineChannel for RelayChannel with fn receive(self, filename) {
 /// 读 env.RHOP_RELAY_SPEC（host/port/token/ttl_ms/port_file），bind 后把端口写进 port_file。
 #cfg(target="js")
 extern "js" fn ffi_relay_spawn(spec_json : String) -> Int64 =
-  #| (specJson) => { const G = globalThis; try { const cp = process.getBuiltinModule("node:child_process"); if (G.__rxmbt_relay === undefined) { G.__rxmbt_relay = new Map(); G.__rxmbt_relay_seq = 1; } const script = 'const http=process.getBuiltinModule("node:http");const fs=process.getBuiltinModule("node:fs");const spec=JSON.parse(process.env.RHOP_RELAY_SPEC);const pkgs=new Map();const tok=spec.token;const send=(res,code,body)=>{const b=(body===undefined||body===null)?"":body;res.writeHead(code,{"Content-Length":Buffer.byteLength(b)});res.end(b);};const srv=http.createServer((req,res)=>{try{const u=String(req.url||"/");if(u==="/health"){send(res,200,"ok");return;}if(tok&&req.headers["x-rhop-token"]!==tok){send(res,403,"");return;}const pre="/pkg/";if(!u.startsWith(pre)){send(res,400,"");return;}const name=decodeURIComponent(u.slice(pre.length));if(!name||name.indexOf("/")>=0||name.indexOf(String.fromCharCode(92))>=0){send(res,400,"");return;}if(req.method==="PUT"){const chunks=[];req.on("data",(c)=>chunks.push(c));req.on("end",()=>{pkgs.set(name,Buffer.concat(chunks));send(res,201,"");});return;}if(req.method==="GET"){const v=pkgs.get(name);if(v===undefined){send(res,404,"");return;}pkgs.delete(name);const s=v.toString("utf8");res.writeHead(200,{"Content-Type":"application/octet-stream","Content-Length":Buffer.byteLength(s)});res.end(s);return;}send(res,405,"");}catch(e){try{send(res,500,"");}catch(_e){}}});srv.listen(spec.port||0,spec.host||"127.0.0.1",()=>{try{fs.writeFileSync(spec.port_file,JSON.stringify({port:srv.address().port}));}catch(_e){}});if(spec.ttl_ms>0){setTimeout(()=>{try{srv.close();}catch(_e){}process.exit(0);},spec.ttl_ms);}'; const child = cp.spawn(process.execPath, ["-e", script], { env: Object.assign({}, process.env, { RHOP_RELAY_SPEC: String(specJson) }), stdio: "ignore", detached: true, windowsHide: true }); try { child.unref(); } catch (_e) {} const id = G.__rxmbt_relay_seq++; G.__rxmbt_relay.set(id, child); return BigInt(id); } catch (e) { return BigInt(-1); } }
+  #| (specJson) => { const G = globalThis; try { const cp = process.getBuiltinModule("node:child_process"); if (G.__rxmbt_relay === undefined) { G.__rxmbt_relay = new Map(); G.__rxmbt_relay_seq = 1; } const script = 'const http=process.getBuiltinModule("node:http");const fs=process.getBuiltinModule("node:fs");const spec=JSON.parse(process.env.RHOP_RELAY_SPEC);const pkgs=new Map();const tok=spec.token;const send=(res,code,body)=>{const b=(body===undefined||body===null)?"":body;res.writeHead(code,{"Content-Length":Buffer.byteLength(b)});res.end(b);};const srv=http.createServer((req,res)=>{try{const u=String(req.url||"/");if(u==="/health"){send(res,200,"ok");return;}if(tok&&req.headers["x-rhop-token"]!==tok){send(res,403,"");return;}const pre="/pkg/";if(!u.startsWith(pre)){send(res,400,"");return;}const name=decodeURIComponent(u.slice(pre.length));if(!name||name.indexOf("/")>=0||name.indexOf(String.fromCharCode(92))>=0){send(res,400,"");return;}if(req.method==="PUT"){const chunks=[];req.on("data",(c)=>chunks.push(c));req.on("end",()=>{pkgs.set(name,Buffer.concat(chunks));send(res,201,"");});return;}if(req.method==="GET"){const v=pkgs.get(name);if(v===undefined){send(res,404,"");return;}pkgs.delete(name);const s=v.toString("utf8");res.writeHead(200,{"Content-Type":"application/octet-stream","Content-Length":Buffer.byteLength(s)});res.end(s);return;}send(res,405,"");}catch(e){try{send(res,500,"");}catch(_e){}}});srv.listen(spec.port||0,spec.host||"127.0.0.1",()=>{try{const tmpf=spec.port_file+".tmp";fs.writeFileSync(tmpf,JSON.stringify({port:srv.address().port}));fs.renameSync(tmpf,spec.port_file);}catch(_e){}});if(spec.ttl_ms>0){setTimeout(()=>{try{srv.close();}catch(_e){}process.exit(0);},spec.ttl_ms);}'; const child = cp.spawn(process.execPath, ["-e", script], { env: Object.assign({}, process.env, { RHOP_RELAY_SPEC: String(specJson) }), stdio: "ignore", detached: true, windowsHide: true }); try { child.unref(); } catch (_e) {} const id = G.__rxmbt_relay_seq++; G.__rxmbt_relay.set(id, child); return BigInt(id); } catch (e) { return BigInt(-1); } }
 
 ///|
 /// 杀掉中转子进程并从注册表移除（幂等）。

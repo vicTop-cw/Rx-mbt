@@ -276,14 +276,30 @@ pub fn SqliteTaskStore::path(self : SqliteTaskStore) -> String {
 }
 
 ///|
-/// 后端自描述（含实际生效的 journal_mode，便于诊断共享盘问题）。
+/// 后端自描述（含**实际生效**的 journal_mode，便于诊断共享盘/WAL 降级）。
+///
+/// C2 BUG-6 配套：`ffi_sqlite_open` 在 WAL 设置失败时会降级到 DELETE，
+/// 所以这里不能只回显配置值——`journal_mode` 是实测值，`journal_mode_configured`
+/// 才是配置里写的值；两者不同即说明发生了降级（9p/网络盘上常见）。
 pub fn SqliteTaskStore::describe(self : SqliteTaskStore) -> Json {
+  // 注意：SQLite 的 `PRAGMA journal_mode` 返回**小写**（wal/delete/memory…），
+  // 而配置侧用的是大写常量，这里统一归一成大写再对外，避免"看起来降级了"的假象。
+  let actual = match self.query_one("PRAGMA journal_mode", []) {
+    Ok(Some(j)) =>
+      match j {
+        { "journal_mode": String(s), .. } => s.to_upper()
+        _ => self.spec.journal_mode
+      }
+    _ => self.spec.journal_mode
+  }
   Json::object({
     "kind": Json::string("sqlite"),
     "topology": Json::string(self.spec.kind),
     "path": Json::string(self.spec.path),
     "table": Json::string(self.spec.table),
-    "journal_mode": Json::string(self.spec.journal_mode),
+    "journal_mode": Json::string(actual),
+    "journal_mode_configured": Json::string(self.spec.journal_mode),
+    "journal_mode_degraded": Json::boolean(actual != self.spec.journal_mode),
     "synchronous": Json::string(self.spec.synchronous),
     "busy_timeout_sec": Json::number(self.spec.busy_timeout_sec),
     "lock_ttl_sec": Json::number(self.spec.lock_ttl_sec),
@@ -827,10 +843,20 @@ pub fn SqliteTaskStore::clean_stale_locks(
     Ok(v) => v
   }
   let mut n = 0
+  let mut failed = 0
+  let mut first_err = ""
+  let mut skipped = 0
   for row in rows {
     let rec = match TaskRecord::from_dict(row) {
       Ok(v) => v
-      Err(_) => continue
+      Err(e) => {
+        // 行本身非法（schema 被外部改坏）：算失败并留证据，不要静默略过
+        failed = failed + 1
+        if first_err == "" {
+          first_err = "记录不合法: " + e
+        }
+        continue
+      }
     }
     let next = if rec.retry_count < rec.max_retries {
       TaskState::RetryPending
@@ -844,12 +870,31 @@ pub fn SqliteTaskStore::clean_stale_locks(
       "last_err": Json::string("锁过期回收（expire_time 已过）"),
     })
     match self.set_state(rec.task_name, next, None, true, extra, now) {
-      Err(_) => ()
+      Err(e) => {
+        // C2 BUG-4：旧实现静默吞掉回收失败，上层只看到 Ok(0) 会误以为「没有要回收的」
+        failed = failed + 1
+        if first_err == "" {
+          first_err = e
+        }
+      }
       Ok(true) => n = n + 1
-      Ok(false) => ()
+      Ok(false) => skipped = skipped + 1
     }
   }
-  Ok(n)
+  if failed > 0 {
+    Err(
+      "回收失效锁部分失败：成功 " +
+      n.to_string() +
+      " 条，失败 " +
+      failed.to_string() +
+      " 条，跳过 " +
+      skipped.to_string() +
+      " 条；首个原因: " +
+      first_err,
+    )
+  } else {
+    Ok(n)
+  }
 }
 
 ///|
@@ -1149,6 +1194,13 @@ pub fn SqliteTaskStore::apply_task(
 
 ///|
 /// 打开数据库（返回句柄 id；失败 -1）。
+///
+/// C2 BUG-6 两处加固：
+///  1. **失败路径必须关句柄**：PRAGMA 阶段抛错时 `db` 已创建，旧实现直接 catch 返回 -1
+///     会把原生句柄漏在进程里（P-1 探针证实不阻塞退出，但属句柄泄漏）。
+///  2. **journal_mode 降级**：`sqlite-local` 默认 WAL，而 WAL 依赖共享内存映射与可靠文件锁，
+///     在 9p/drvfs（WSL 的 /mnt/*）与网络盘上可能设置失败。这里 WAL 失败自动降级 DELETE，
+///     不再让整个打开过程硬失败；实际生效值可用 `describe()` 查看。
 #cfg(target="js")
 extern "js" fn ffi_sqlite_open(
   path : String,
@@ -1156,7 +1208,7 @@ extern "js" fn ffi_sqlite_open(
   synchronous : String,
   busy_timeout_ms : Int32,
 ) -> Int64 =
-  #| (path, journal, synch, busy) => { const G = globalThis; try { if (!G.__rxmbt_sqlite_reg) { G.__rxmbt_sqlite_reg = new Map(); G.__rxmbt_sqlite_seq = 1; } const sqlite = process.getBuiltinModule("node:sqlite"); const db = new sqlite.DatabaseSync(String(path)); db.exec("PRAGMA busy_timeout = " + Number(busy)); db.exec("PRAGMA journal_mode = " + String(journal)); db.exec("PRAGMA synchronous = " + String(synch)); const id = G.__rxmbt_sqlite_seq++; G.__rxmbt_sqlite_reg.set(id, db); G.__rxmbt_sqlite_err = ""; return BigInt(id); } catch (e) { G.__rxmbt_sqlite_err = String((e && e.message) || e); return BigInt(-1); } }
+  #| (path, journal, synch, busy) => { const G = globalThis; let db = null; try { if (!G.__rxmbt_sqlite_reg) { G.__rxmbt_sqlite_reg = new Map(); G.__rxmbt_sqlite_seq = 1; } const sqlite = process.getBuiltinModule("node:sqlite"); db = new sqlite.DatabaseSync(String(path)); try { db.exec("PRAGMA busy_timeout = " + Number(busy)); } catch (_e1) {} let journal_ok = true; try { db.exec("PRAGMA journal_mode = " + String(journal)); } catch (_e2) { journal_ok = false; } if (!journal_ok) { try { db.exec("PRAGMA journal_mode = DELETE"); } catch (_e3) {} } try { db.exec("PRAGMA synchronous = " + String(synch)); } catch (_e4) {} const id = G.__rxmbt_sqlite_seq++; G.__rxmbt_sqlite_reg.set(id, db); G.__rxmbt_sqlite_err = ""; return BigInt(id); } catch (e) { if (db) { try { db.close(); } catch (_e5) {} db = null; } G.__rxmbt_sqlite_err = String((e && e.message) || e); return BigInt(-1); } }
 
 ///|
 /// 执行无参数 SQL。

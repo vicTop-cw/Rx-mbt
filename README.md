@@ -326,27 +326,33 @@ let result = req.get_result(task_id)
 
 ```bash
 moon check                         # 主包类型检查（rhop 包三目标 0 error）
-moon test                          # 默认 wasm 后端（rhop 相关 131 例，全绿）
-moon test --target js              # js 后端（rhop 相关 135 + 52 + 25 + 13 + 38 = 263 例 + P2 57 例）
-moon test --target native          # native 后端（rhop 相关 131 例，全绿）
+moon test                          # 默认 wasm 后端（rhop 相关 156 例，全绿）
+moon test --target js              # js 后端（本域包合计见下方计数表）
+moon test --target native          # native 后端（rhop 相关 156 例，全绿）
 moon test -p test-suit/rhop_clipboard --target js   # 剪贴板 25 例
-moon test test-suit/rhop_business --target js       # 业务层 41 例（wasm/native 10 例）
-moon test test-suit/rhop_task --target js           # P2 任务队列 99 例（wasm/native 46 例）
+moon test -p test-suit/rhop_vectors --target js     # 互操作产物生产者 2 例
+moon test test-suit/rhop_business --target js       # 业务层 53 例（wasm/native 10 例）
+moon test test-suit/rhop_task --target js           # P2 任务队列 101 例（wasm/native 46 例）
 moon run demo/rhop_demo --target js -- send <共享目录>   # 端到端 demo（发 5 条加密包）
 bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓三目标汇总行）
 ```
 
-**最新实测计数（2026-10-28 11:3x 终版，Windows 11 / moon 0.1.20261016 / node v25.2.1；Windows 与 WSL 的 `scripts/test_all.sh` 双平台均 PASS）**
+**最新实测计数（2026-10-28 14:2x 快照，Windows 11 / moon 0.1.20261016 / node v25.2.1）**
+
+> ⚠️ C2 轮并行 lane（crypto/session/business）仍在持续追加测试，**跨 lane 总数会继续变化**；
+> 本表数字为上述快照时点实测，最终数字以 `bash scripts/test_all.sh`（qa 终验）输出为准；
+> 本域（`test-suit/rhop` / `rhop_vectors`）数字在本轮修复后自洽。
 
 | 测试包 | 用例数 | 结果 |
 |---|---:|---|
-| `test-suit/rhop`（wasm / js / native） | 131 / 135 / 131 | 全绿 |
-| `test-suit/rhop_js`（js） | 52 | 全绿 |
+| `test-suit/rhop`（wasm / js / native） | 156 / 160 / 156 | 全绿 |
+| `test-suit/rhop_vectors`（js，互操作产物生产者） | 0 / 2 / 0 | 全绿 |
+| `test-suit/rhop_js`（js） | 56 | 全绿 |
 | `test-suit/rhop_clipboard`（js） | 25 | 全绿 |
-| `test-suit/rhop_interact`（js） | 13 | 全绿 |
-| `test-suit/rhop_business`（wasm / js / native） | 10 / 41 / 10 | 全绿 |
-| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 99 / 46 | 全绿 |
-| **全模块（项目级）** | **wasm 587 / js 765 / native 587** | 全绿 |
+| `test-suit/rhop_interact`（js） | 22 | 全绿 |
+| `test-suit/rhop_business`（wasm / js / native） | 10 / 53 / 10 | 全绿 |
+| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 101 / 46 | 全绿 |
+| **全模块（项目级）** | **wasm 612 / js 819 / native 612**（快照，随并行 lane 变化） | 全绿 |
 
 跨实现一致性由 `test-suit/rhop_js/fixtures/vools_vectors.json`（真实 vools-rhop 生成的 envelope 字节 /
 checksum / canonical JSON / digest / signer 向量）锁定，`scripts/verify_interop.py` 可反向复核。

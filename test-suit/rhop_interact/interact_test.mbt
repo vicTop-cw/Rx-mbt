@@ -1003,3 +1003,145 @@ test "interact · 只读介质：接收端能收、发送端给出「写端不�
   }
   assert_true(!ffi_exists(dir + "/nodir"))
 }
+
+// ---------------------------------------------------------------------------
+// C2 轮回归：回执掩码（C2-02）、原子写残留（C2-08）、同名覆盖语义（C2-05）
+// ---------------------------------------------------------------------------
+
+///|
+extern "js" fn ffi_mkdir(p : String) -> Bool =
+  #| (p) => { try { process.getBuiltinModule("node:fs").mkdirSync(String(p), { recursive: true }); return true; } catch (_e) { return false; } }
+
+///|
+extern "js" fn ffi_ls(p : String) -> String =
+  #| (p) => { try { const fs = process.getBuiltinModule("node:fs"); return JSON.stringify(fs.readdirSync(String(p))); } catch (e) { return "ERR:" + String((e && e.message) || e); } }
+
+///|
+test "interact · C2-02：rhop.echo 回执不再泄漏 sftp 口令 / key_path" {
+  let cfg = it_cfg(
+    itj(
+      "{\"key\": \"k\", \"sftp\": {\"host\": \"jump.example\", \"user\": \"ops\", \"password\": \"SFTP-PW-C2\", \"key_path\": \"/secret/id_c2\", \"dir\": \"/srv\"}}",
+    ),
+  )
+  let r = match
+    @rp.interact(cfg, "rhop.echo", Some(itj("{\"marker\": \"m1\"}")), "execute") {
+    Ok(j) => j
+    Err(e) => abort("rhop.echo execute 失败: " + e)
+  }
+  let text = Json::stringify(r)
+  // 口令与私钥路径绝不出现在回执里（rhop.echo 常被链路自检直接打日志）
+  assert_false(text.contains("SFTP-PW-C2"))
+  assert_false(text.contains("/secret/id_c2"))
+  // 掩码占位存在，非敏感字段与 payload 仍完整（自检能力不回退）
+  assert_true(text.contains("***"))
+  assert_eq(it_str(r, "action"), "rhop.echo")
+  match it_field(r, "cfg") {
+    Some(c) => {
+      assert_eq(it_str(c, "config_name"), "rhop-config")
+      match it_field(c, "sftp") {
+        Some(sftp) => {
+          assert_eq(it_str(sftp, "password"), "***")
+          assert_eq(it_str(sftp, "key_path"), "***")
+          assert_eq(it_str(sftp, "host"), "jump.example")
+          assert_eq(it_str(sftp, "dir"), "/srv")
+        }
+        None => abort("echo 回执缺 cfg.sftp")
+      }
+    }
+    None => abort("echo 回执缺 cfg")
+  }
+  match it_field(r, "payload") {
+    Some(p) => assert_eq(it_str(p, "marker"), "m1")
+    None => abort("echo 回执缺 payload")
+  }
+}
+
+///|
+test "interact · C2-08：rename 失败不留 .tmp；phase=send 失败不产生 res_" {
+  let dir = it_dir("rhop-c2-tmp")
+  // 目标名被目录占用 → 原子写的 rename 必然失败
+  assert_true(ffi_mkdir(dir + "/blocked.rhop"))
+  let cfg = it_cfg(it_cfg_json(dir, "k"))
+  let sender = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("构造发送会话失败: " + e)
+  }
+  match sender.send_package("blocked.rhop", Json::object(Map([]))) {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_eq(it_str(j, "transport"), "shared")
+    }
+    Err(e) => abort("写失败应走 status:error 收据而非 Err: " + e)
+  }
+  // 临时文件必须被清掉（write_text_atomic 的失败分支）
+  let listing = ffi_ls(dir)
+  assert_false(listing.contains(".tmp"))
+  assert_false(ffi_exists(dir + "/blocked.rhop.tmp"))
+  // roundtrip：请求包写失败 → phase=send 收据，且绝不产生 res_ 半成品
+  match
+    @rp.interact(
+      cfg,
+      "rhop.echo",
+      None,
+      "roundtrip",
+      request_filename="blocked.rhop",
+    ) {
+    Ok(j) => {
+      assert_eq(it_str(j, "status"), "error")
+      assert_eq(it_str(j, "phase"), "send")
+      assert_false(ffi_exists(dir + "/res_blocked.rhop"))
+    }
+    Err(e) => abort("发送失败应走 phase=send 收据而非 Err: " + e)
+  }
+}
+
+///|
+test "interact · C2-05：同名缺省请求包「后写者胜」（并发方必须自带唯一名）" {
+  let dir = it_dir("rhop-c2-race")
+  let cfg = it_cfg(it_cfg_json(dir, "k"))
+  let a = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("A 会话: " + e)
+  }
+  let b = match cfg.build_session(role=@rp.Role::Send) {
+    Ok(s) => s
+    Err(e) => abort("B 会话: " + e)
+  }
+  match
+    a.send_package(
+      "req_race.rhop",
+      itj("{\"action\": \"jump.probe\", \"payload\": {\"who\": \"AAA\"}}"),
+    ) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("A 发送: " + e)
+  }
+  match
+    b.send_package(
+      "req_race.rhop",
+      itj("{\"action\": \"jump.probe\", \"payload\": {\"who\": \"BBB\"}}"),
+    ) {
+    Ok(j) => assert_eq(it_str(j, "status"), "ok")
+    Err(e) => abort("B 发送: " + e)
+  }
+  // 介质上只留一个包（原子覆盖写）——这既是资源上界，也是并发语义的坑
+  let listing = ffi_ls(dir)
+  assert_true(listing.contains("req_race.rhop"))
+  // 残留的是后写者：用接收会话解密确认（这正是「同名并发会丢前一个请求」的证据）
+  let recv = match cfg.build_session(role=@rp.Role::Recv) {
+    Ok(s) => s
+    Err(e) => abort("接收会话: " + e)
+  }
+  let got = match recv.recv_package("req_race.rhop") {
+    Ok(j) => j
+    Err(e) => abort("取包: " + e)
+  }
+  assert_eq(it_str(got, "status"), "ok")
+  let body = Json::stringify(
+    match it_field(got, "payload") {
+      Some(p) => p
+      None => abort("回执缺 payload")
+    },
+  )
+  assert_true(body.contains("BBB"))
+  assert_false(body.contains("AAA"))
+}

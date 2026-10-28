@@ -16,13 +16,14 @@
 #   powershell -ExecutionPolicy Bypass -File scripts/test_all.ps1 -Skip native,js
 #   powershell -ExecutionPolicy Bypass -File scripts/test_all.ps1 -Quiet   # 只打印每步末尾若干行
 #
-# Exit codes: 0 = all green, 1 = at least one step failed, 2 = bad usage/env.
+# Exit codes (C2 audit, same as bash entry): 0 = all green, 1 = a step really failed,
+#   2 = bad usage/env, 3 = nothing executed (all steps skipped; never treat as PASS).
 # =============================================================================
 [CmdletBinding()]
 param(
     [string[]]$Skip = @(),
     [switch]$Quiet,
-    [int]$TimeoutSec = 600
+    [string]$TimeoutSec = '600'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -45,8 +46,15 @@ if ($UnknownSkip.Count -gt 0) {
     Write-Host '       注意：未知步骤名过去会被静默忽略（用户以为跳过了测试组），C1 审计 F10 后改为硬报错。' -ForegroundColor Yellow
     exit 2
 }
-if ($TimeoutSec -le 0) {
-    Write-Host ("FATAL: -TimeoutSec 必须 > 0（收到 {0}；0 会关闭挂死保护，不允许）" -f $TimeoutSec) -ForegroundColor Red
+# C2 审计 Q9：-TimeoutSec 用字符串接收后自校验 —— 让"非法值"统一 rc=2（bash 侧同语义），
+# 而不是让 PowerShell 参数绑定抛异常（rc=1，与 bash 不一致）。
+$TimeoutNum = 0
+if (-not [int]::TryParse($TimeoutSec, [ref]$TimeoutNum)) {
+    Write-Host ("FATAL: -TimeoutSec 需正整数（秒），收到「{0}」" -f $TimeoutSec) -ForegroundColor Red
+    exit 2
+}
+if ($TimeoutNum -le 0) {
+    Write-Host ("FATAL: -TimeoutSec 必须 > 0（收到 {0}；0 会关闭挂死保护，不允许）" -f $TimeoutNum) -ForegroundColor Red
     exit 2
 }
 
@@ -142,14 +150,52 @@ if ($NodeBin -like '*.cmd') {
 # 仓库里有 scripts/with_moon_lock.sh 时，所有 moon 调用都套锁（bash 负责 mkdir 锁）。
 $MoonLockSh = Join-Path (Join-Path $ProjectDir 'scripts') 'with_moon_lock.sh'
 $BashBin = $null
-$LockNote = '未启用（找不到 bash 或 scripts/with_moon_lock.sh）'
+$LockNote = '未启用（找不到 Git Bash 或 scripts/with_moon_lock.sh）'
 if (Test-Path $MoonLockSh) {
+    # C2 审计 Q8：原实现首选路径的字面量里混进了 2 个 0x08 控制字符（`Git` + `bin` 的分隔符
+    # 被写成了退格），导致 Test-Path 恒 False，静默回退到 Get-Command bash —— 可能是 WSL 的
+    # bash，会把 Windows 的 moon.exe 塞进 WSL 执行，行为不可预期。
+    # 修法：按组件用 Join-Path 拼路径（不写任何反斜杠字面量）+ 从 git 安装位置推导 + 排除 WSL。
     $cand = @()
-    $gitBash = Join-Path $env:ProgramFiles 'Gitinash.exe'
-    if (Test-Path $gitBash) { $cand += $gitBash }
-    $cmdBash = Get-Command bash -ErrorAction SilentlyContinue
-    if ($cmdBash) { $cand += $cmdBash.Source }
-    foreach ($c in $cand) { if ($c -and (Test-Path $c)) { $BashBin = $c; break } }
+    # 常见安装根：ProgramFiles / ProgramFiles(x86)，以及各盘符下的 Program Files（本机 Git 装在 D:）
+    $progRoots = @()
+    if ($env:ProgramFiles) { $progRoots += $env:ProgramFiles }
+    if (${env:ProgramFiles(x86)}) { $progRoots += ${env:ProgramFiles(x86)} }
+    foreach ($d in @('C', 'D', 'E', 'F')) {
+        $progRoots += ($d + ':' + [System.IO.Path]::DirectorySeparatorChar + 'Program Files')
+    }
+    foreach ($r in $progRoots) {
+        if (-not $r) { continue }
+        $cand += (Join-Path (Join-Path (Join-Path $r 'Git') 'bin') 'bash.exe')
+    }
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($gitCmd -and $gitCmd.Source) {
+        $gitRoot = Split-Path -Parent (Split-Path -Parent $gitCmd.Source)
+        if ($gitRoot) { $cand += (Join-Path (Join-Path $gitRoot 'bin') 'bash.exe') }
+    }
+    foreach ($c in $cand) {
+        if (-not $c) { continue }
+        if (-not (Test-Path -LiteralPath $c)) { continue }
+        $BashBin = $c
+        break
+    }
+    if (-not $BashBin) {
+        $cmdBash = Get-Command bash -ErrorAction SilentlyContinue
+        if ($cmdBash -and $cmdBash.Source) {
+            $bs = [string]$cmdBash.Source
+            $bsLower = $bs.ToLower()
+            $isWsl = $false
+            if ($bsLower.Contains('windowsapps')) { $isWsl = $true }
+            $winDir = [string]$env:WINDIR
+            if ($winDir -and $bsLower.StartsWith($winDir.ToLower())) { $isWsl = $true }
+            if ($isWsl) {
+                Write-Host ("WARN: 只找到 WSL 的 bash（{0}），已禁用 moon 锁（避免把 Windows moon 塞进 WSL 执行）" -f $bs) -ForegroundColor Yellow
+            }
+            else {
+                $BashBin = $bs
+            }
+        }
+    }
 }
 if ($BashBin) { $LockNote = "已启用：$BashBin $MoonLockSh（moon 串行持锁）" }
 Write-Host (" moon lock  : {0}" -f $LockNote)
@@ -195,7 +241,6 @@ function Invoke-MoonStep {
         & $MoonBin @MoonArgs 2>&1 | Tee-Object -Variable captured | Out-Null
     }
     $rc = $LASTEXITCODE
-    $timedOut = $false
     # 逐步骤耗时只在 bash 版里统计：本机受限宿主里 PS 的计时原语会变 $null，
     # 打印空值反而误导；PS 版只输出结论。
 
@@ -314,8 +359,9 @@ if ($OverallRc -ne 0) {
     Write-Host ' RESULT: FAIL - see FAIL rows above' -ForegroundColor Red
 }
 elseif ($SkipCount -eq $Rows.Count) {
+    # C2 审计 Q10：与 bash 对齐 —— "一步都没跑"用独立退出码 3，不与"用法/环境错误 2"混淆
     Write-Host (' RESULT: SKIP - every step was skipped ({0}/{0}), nothing verified' -f $Rows.Count) -ForegroundColor Yellow
-    $OverallRc = 2
+    $OverallRc = 3
 }
 else {
     Write-Host (' RESULT: PASS - every executed step is green ({0} pass, {1} skip)' -f $PassCount, $SkipCount) -ForegroundColor Green

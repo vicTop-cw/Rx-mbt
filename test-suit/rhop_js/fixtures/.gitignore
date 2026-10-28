@@ -1,0 +1,4 @@
+# C2 审计 Q6：本文件由 test-suit/rhop_js 的 js 测试在运行时写出（含随机 IV 的 Fernet 密文），
+# 每次跑测试内容都会变 —— 属"生成物"，不入库，避免工作树永远处于 modified 状态。
+# 长期方案（属产品域）：把产物改写到 _build/ 或 temp/。
+moonbit_vectors.json

@@ -1660,7 +1660,7 @@ extern "js" fn rhop_ffi_db_open(path : String) -> Int32 =
 /// js：关库（未知 id 静默忽略）。
 #cfg(target="js")
 extern "js" fn rhop_ffi_db_close(id : Int32) -> Unit =
-  #| (id) => { const G = globalThis; if (G.__rhop_db === undefined) { return; } const db = G.__rhop_db.get(Number(id)); if (db === undefined) { return; } try { db.close(); G.__rhop_db_err = ""; G.__rhop_db.delete(Number(id)); } catch (e) { G.__rhop_db_err = String((e && e.message) || e); } }
+  #| (id) => { const G = globalThis; if (G.__rhop_db === undefined) { return; } const db = G.__rhop_db.get(Number(id)); if (db === undefined) { return; } if (G.__rhop_stmt !== undefined) { const pre = Number(id) + "|"; for (const k of Array.from(G.__rhop_stmt.keys())) { if (String(k).indexOf(pre) === 0) { G.__rhop_stmt.delete(k); } } } try { db.close(); G.__rhop_db_err = ""; G.__rhop_db.delete(Number(id)); } catch (e) { G.__rhop_db_err = String((e && e.message) || e); } }
 
 ///|
 /// js：执行一条非查询 SQL（params 为 JSON 数组文本）；成功 true。
@@ -1670,7 +1670,7 @@ extern "js" fn rhop_ffi_db_run(
   sql : String,
   params_json : String,
 ) -> String =
-  #| (id, sql, paramsJson) => { const G = globalThis; try { const db = (G.__rhop_db || new Map()).get(Number(id)); if (db === undefined) { G.__rhop_db_err = "数据库句柄无效（可能已 close）"; return ""; } const params = JSON.parse(String(paramsJson)); const info = db.prepare(String(sql)).run(...params); const changes = (info && info.changes !== undefined) ? Number(info.changes) : 0; const lastId = (info && info.lastInsertRowid !== undefined) ? Number(info.lastInsertRowid) : 0; G.__rhop_db_err = ""; return JSON.stringify({ changes: changes, lastInsertRowid: lastId }); } catch (e) { G.__rhop_db_err = String((e && e.message) || e); return ""; } }
+  #| (id, sql, paramsJson) => { const G = globalThis; const stmtOf = (db, id, sql) => { const key = Number(id) + "|" + String(sql); if (G.__rhop_stmt === undefined) { G.__rhop_stmt = new Map(); G.__rhop_stmt_prepared = 0; } let st = G.__rhop_stmt.get(key); if (st === undefined) { st = db.prepare(String(sql)); G.__rhop_stmt_prepared = (G.__rhop_stmt_prepared || 0) + 1; if (G.__rhop_stmt.size >= 64) { const w = G.__rhop_stmt.keys().next().value; G.__rhop_stmt.delete(w); } G.__rhop_stmt.set(key, st); } return st; }; const busy = (msg) => { const m = String(msg || ""); return (m.indexOf("database is locked") >= 0 || m.indexOf("SQLITE_BUSY") >= 0) ? ("DB_BUSY: busy_timeout(5000ms) exceeded, please retry: " + m) : m; }; try { const db = (G.__rhop_db || new Map()).get(Number(id)); if (db === undefined) { G.__rhop_db_err = "invalid db handle (closed?)"; return ""; } const params = JSON.parse(String(paramsJson)); const info = stmtOf(db, id, String(sql)).run(...params); const changes = (info && info.changes !== undefined) ? Number(info.changes) : 0; const lastId = (info && info.lastInsertRowid !== undefined) ? Number(info.lastInsertRowid) : 0; G.__rhop_db_err = ""; return JSON.stringify({ changes: changes, lastInsertRowid: lastId }); } catch (e) { G.__rhop_db_err = busy((e && e.message) || e); return ""; } }
 
 ///|
 /// js：执行一条**不带参数**的 SQL（事务控制语句 `BEGIN IMMEDIATE`/`COMMIT`/
@@ -1687,7 +1687,7 @@ extern "js" fn rhop_ffi_db_all(
   sql : String,
   params_json : String,
 ) -> String =
-  #| (id, sql, paramsJson) => { const G = globalThis; try { const db = (G.__rhop_db || new Map()).get(Number(id)); if (db === undefined) { G.__rhop_db_err = "数据库句柄无效（可能已 close）"; return ""; } const rows = db.prepare(String(sql)).all(...JSON.parse(String(paramsJson))); G.__rhop_db_err = ""; return JSON.stringify(rows.map((r) => { const o = {}; for (const k of Object.keys(r)) { o[k] = r[k]; } return o; })); } catch (e) { G.__rhop_db_err = String((e && e.message) || e); return ""; } }
+  #| (id, sql, paramsJson) => { const G = globalThis; const stmtOf = (db, id, sql) => { const key = Number(id) + "|" + String(sql); if (G.__rhop_stmt === undefined) { G.__rhop_stmt = new Map(); G.__rhop_stmt_prepared = 0; } let st = G.__rhop_stmt.get(key); if (st === undefined) { st = db.prepare(String(sql)); G.__rhop_stmt_prepared = (G.__rhop_stmt_prepared || 0) + 1; if (G.__rhop_stmt.size >= 64) { const w = G.__rhop_stmt.keys().next().value; G.__rhop_stmt.delete(w); } G.__rhop_stmt.set(key, st); } return st; }; const busy = (msg) => { const m = String(msg || ""); return (m.indexOf("database is locked") >= 0 || m.indexOf("SQLITE_BUSY") >= 0) ? ("DB_BUSY: busy_timeout(5000ms) exceeded, please retry: " + m) : m; }; try { const db = (G.__rhop_db || new Map()).get(Number(id)); if (db === undefined) { G.__rhop_db_err = "invalid db handle (closed?)"; return ""; } const rows = stmtOf(db, id, String(sql)).all(...JSON.parse(String(paramsJson))); G.__rhop_db_err = ""; return JSON.stringify(rows.map((r) => { const o = {}; for (const k of Object.keys(r)) { o[k] = r[k]; } return o; })); } catch (e) { G.__rhop_db_err = busy((e && e.message) || e); return ""; } }
 
 ///|
 /// js：取最近一次 sqlite 失败原因（空串表示成功）。
@@ -1722,7 +1722,7 @@ extern "js" fn rhop_ffi_mkdir_p_parent(path : String) -> Bool =
 /// js：原子写文本（tmp + rename）；成功 true。
 #cfg(target="js")
 extern "js" fn rhop_ffi_write_atomic(path : String, text : String) -> Bool =
-  #| (path, text) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const p = String(path); const tmp = p + ".tmp"; fs.writeFileSync(tmp, String(text), "utf8"); fs.renameSync(tmp, p); G.__rhop_fs_err = ""; return true; } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return false; } }
+  #| (path, text) => { const G = globalThis; const fs = process.getBuiltinModule("node:fs"); const p = String(path); const tmp = p + ".tmp"; try { fs.writeFileSync(tmp, String(text), "utf8"); fs.renameSync(tmp, p); G.__rhop_fs_err = ""; return true; } catch (e) { try { fs.unlinkSync(tmp); } catch (_e) {} G.__rhop_fs_err = String((e && e.message) || e); return false; } }
 
 ///|
 /// js：读 utf8 文本（成功与否由 `rhop_ffi_fs_ok` 给出，空文件也是成功）。
@@ -1761,7 +1761,7 @@ fn rhop_ffi_exists(path : String) -> Bool {
 /// js：列目录下普通文件名 JSON 数组文本（非递归，按字典序）；失败返回 ""。
 #cfg(target="js")
 extern "js" fn rhop_ffi_list_dir(dir : String) -> String =
-  #| (dir) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const pathMod = process.getBuiltinModule("node:path"); const names = fs.readdirSync(String(dir)); const out = []; for (const n of names) { try { if (fs.statSync(pathMod.join(String(dir), n)).isFile()) { out.push(n); } } catch (e) {} } out.sort(); G.__rhop_fs_err = ""; return JSON.stringify(out); } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
+  #| (dir) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const out = []; for (const ent of fs.readdirSync(String(dir), { withFileTypes: true })) { if (ent.isSymbolicLink()) { continue; } if (ent.isFile()) { out.push(ent.name); } } out.sort(); G.__rhop_fs_err = ""; return JSON.stringify(out); } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
 
 ///|
 /// 非 js：无文件系统，返回 ""（调用方据此得到空列表 + 可诊断 Err 路径）。
@@ -1800,7 +1800,7 @@ fn rhop_ffi_fs_error() -> String {
 /// js：取文件 sha256 + size（JSON 文本）；失败返回 ""。
 #cfg(target="js")
 extern "js" fn rhop_ffi_file_digest(path : String) -> String =
-  #| (path) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const crypto = process.getBuiltinModule("node:crypto"); const buf = fs.readFileSync(String(path)); const h = crypto.createHash("sha256").update(buf).digest("hex"); G.__rhop_fs_err = ""; return JSON.stringify({ sha256: h, size: buf.length }); } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
+  #| (path) => { const G = globalThis; let fd = -1; try { const fs = process.getBuiltinModule("node:fs"); const crypto = process.getBuiltinModule("node:crypto"); const h = crypto.createHash("sha256"); const CH = 1 << 20; const buf = Buffer.allocUnsafe(CH); let size = 0; fd = fs.openSync(String(path), "r"); let n = 0; while ((n = fs.readSync(fd, buf, 0, CH, null)) > 0) { h.update(buf.subarray(0, n)); size += n; } fs.closeSync(fd); fd = -1; G.__rhop_fs_err = ""; return JSON.stringify({ sha256: h.digest("hex"), size: size }); } catch (e) { if (fd >= 0) { try { process.getBuiltinModule("node:fs").closeSync(fd); } catch (_e) {} } G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
 
 ///|
 /// js：复制文件；成功 true。
@@ -1812,7 +1812,7 @@ extern "js" fn rhop_ffi_copy(src : String, dst : String) -> Bool =
 /// js：递归列出普通文件相对路径（`/` 分隔）JSON 数组文本；失败返回 ""。
 #cfg(target="js")
 extern "js" fn rhop_ffi_list_files_recursive(dir : String) -> String =
-  #| (dir) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const pathMod = process.getBuiltinModule("node:path"); const root = String(dir); const out = []; const walk = (cur, rel) => { const names = fs.readdirSync(cur); for (const n of names) { const abs = pathMod.join(cur, n); const r = rel === "" ? n : rel + "/" + n; let st = null; try { st = fs.statSync(abs); } catch (e) { continue; } if (st.isDirectory()) { walk(abs, r); } else if (st.isFile()) { out.push(r); } } }; walk(root, ""); out.sort(); G.__rhop_fs_err = ""; return JSON.stringify(out); } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
+  #| (dir) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const pathMod = process.getBuiltinModule("node:path"); const root = String(dir); const out = []; const walk = (cur, rel, depth) => { if (depth > 64) { return; } for (const ent of fs.readdirSync(cur, { withFileTypes: true })) { const abs = pathMod.join(cur, ent.name); const r = rel === "" ? ent.name : rel + "/" + ent.name; if (ent.isSymbolicLink()) { continue; } if (ent.isDirectory()) { walk(abs, r, depth + 1); } else if (ent.isFile()) { out.push(r); } } }; walk(root, "", 0); out.sort(); G.__rhop_fs_err = ""; return JSON.stringify(out); } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
 
 ///|
 /// 非 js：无文件系统，返回 ""（调用方得到空列表）。
@@ -1866,7 +1866,7 @@ pub fn rhop_remove_dir_all(dir : String) -> Result[Unit, String] {
 /// js：`fs.mkdtempSync(tmpdir()/prefix)`，并把目录登记到退出钩子。
 #cfg(target="js")
 extern "js" fn rhop_ffi_temp_dir(prefix : String) -> String =
-  #| (prefix) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const pathMod = process.getBuiltinModule("node:path"); const dir = fs.mkdtempSync(pathMod.join(os.tmpdir(), prefix || "rhop-")); if (!G.__rhop_tmp_dirs) { G.__rhop_tmp_dirs = []; if (typeof process.on === "function") { process.on("exit", () => { for (const d of G.__rhop_tmp_dirs) { try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); } catch (e) {} } }); } } G.__rhop_tmp_dirs.push(dir); G.__rhop_fs_err = ""; return dir; } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
+  #| (prefix) => { const G = globalThis; try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const pathMod = process.getBuiltinModule("node:path"); const dir = fs.mkdtempSync(pathMod.join(os.tmpdir(), prefix || "rhop-")); if (!G.__rhop_tmp_dirs) { G.__rhop_tmp_dirs = []; if (typeof process.on === "function") { process.on("exit", () => { if (G.__rhop_db !== undefined) { for (const db of G.__rhop_db.values()) { try { db.close(); } catch (e) {} } G.__rhop_db.clear(); } if (G.__rhop_stmt !== undefined) { G.__rhop_stmt.clear(); } for (const d of G.__rhop_tmp_dirs) { for (let a = 0; a < 3; a++) { try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 }); break; } catch (e) {} } } }); } } G.__rhop_tmp_dirs.push(dir); G.__rhop_fs_err = ""; return dir; } catch (e) { G.__rhop_fs_err = String((e && e.message) || e); return ""; } }
 
 ///|
 /// js：递归强删目录（带重试，容忍 Windows 句柄尚未释放）。

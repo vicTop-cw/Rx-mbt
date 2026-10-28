@@ -24,7 +24,13 @@
 #   bash scripts/test_all.sh --skip=native   # 跳过指定步骤（逗号分隔）
 #   bash scripts/test_all.sh --help
 #
-# 退出码：0 = 全部判绿；1 = 有步骤失败；2 = 用法错误/环境缺失。
+# 退出码（C2 审计 Q4/Q10 固化，两入口语义一致）：
+#   0 = 全部判绿；1 = 有步骤真实失败；2 = 用法错误/环境缺失；
+#   3 = 一步都没执行（--skip 全跳过，不能当 PASS）；4 = 构建锁等待超时（并发 moon，非产品红）。
+#
+# 跨平台构建目录隔离（C2 审计 Q12）：Windows 与 WSL 共用同一份 `_build/`，本脚本在 WSL 侧
+# 自动加 `--target-dir <repo>/_build/wsl` 隔离；**请在 WSL 里用本脚本跑测试，不要裸跑 moon**
+# （裸跑会写共享 `_build`，与 Windows 并发时会互相踩坏产物）。
 # =============================================================================
 
 set -uo pipefail
@@ -35,6 +41,11 @@ cd "$PROJECT_DIR" || { echo "FATAL: 无法进入项目目录 $PROJECT_DIR" >&2; 
 
 SKIP_LIST=""
 QUIET=0
+# C2 审计 Q2：默认允许挂死清理；需要人工保留现场可设 RX_MBT_NO_CLEANUP=1
+NO_CLEANUP="${RX_MBT_NO_CLEANUP:-0}"
+# C2 审计 Q5：失败现场保留策略（目录数 + 总量上限，两者都满足才停止裁剪）
+RUNLOG_KEEP="${RX_MBT_RUNLOG_KEEP:-20}"
+RUNLOG_MAXMB="${RX_MBT_RUNLOG_MAXMB:-50}"
 
 usage() {
   sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -100,6 +111,13 @@ detect_platform() {
 }
 
 PLATFORM=$(detect_platform)
+
+# C2 自测暴露：setup_path 会把 PATH 收敛成 node+moon+系统目录，之后 `command -v powershell`
+# 必然失败 ⇒ cleanup_orphans 里的 `|| return 0` 变成静默 no-op。这里在改 PATH 之前先记下绝对路径。
+PS_EXE=""
+for _cand in "$(command -v powershell.exe 2>/dev/null || command -v powershell 2>/dev/null || true)"              "/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"; do
+  if [ -n "$_cand" ] && [ -x "$_cand" ]; then PS_EXE="$_cand"; break; fi
+done
 
 # ---------------------------------------------------------------------------
 # PATH 修复
@@ -237,25 +255,63 @@ run_with_timeout() {
   "$@"
 }
 
-# 挂死清理（尽力而为）：杀掉本轮 spawn 出来的测试二进制，避免残留进程吃满 CPU
+# 挂死清理（尽力而为）：杀掉本轮 spawn 出来的测试二进制
+#
+# C2 审计 Q1/Q2（P1）修法：
+#   1) pattern 必须同时兼容两种路径分隔符与两种构建根：Windows 反斜杠形态
+#      `E:\...\_build\js\debug\test\...`、WSL 隔离后的 `/…/_build/wsl/js/debug/test/…`；
+#   2) pattern 必须**限定在本仓库**（含仓库目录名），绝不使用 `_build` 这种宽泛串
+#      —— 实测 `_build` 会命中 FIST-Mbt 的 cli.js serve 与其它项目/其它 lane 的进程，
+#      一旦 wasm/check 超时就会连 MCP server 一起 Stop-Process（误杀）。
+#   3) check/wasm 步骤不再做兜底清理：那两步的挂死对象是 moon 本身，而 moon 的 cmdline
+#      不含仓库路径，无法安全定位；宁可不杀也不误杀（打印提示）。
+REPO_TOKEN=$(basename "$PROJECT_DIR")
+# pattern 里用 `.` 表示「任意单个分隔符」：同时命中 Windows 的 `\` 与 POSIX 的 `/`，
+# 免去 `[\\/]` 这种在 bash/PS/pkill 三层转义下极易写坏的写法（C2 实测：写坏后会恒 0 命中）。
+CLEAN_PAT_JS="${REPO_TOKEN}._build.(wsl.)?js.debug.test"
+CLEAN_PAT_NATIVE="${REPO_TOKEN}._build.(wsl.)?native"
+
 cleanup_orphans() {
   local pattern="$1"
+  local what="$2"
+  if [ "$NO_CLEANUP" = "1" ]; then
+    echo "    (cleanup: 已按 RX_MBT_NO_CLEANUP=1 跳过；pattern=$pattern)"
+    return 0
+  fi
   case "$PLATFORM" in
     windows)
-      command -v powershell >/dev/null 2>&1 || return 0
-      # 这里必须用 -match（正则）而不是 -like（通配符）：pattern 是正则形态
-      # （如 rhop_test_.*\.(js|wasm|mjs) 或 _build/js/debug/test），塞进 -like
-      # 会被当字面量 -> 恒 0 命中、静默 no-op（C1 审计 F2）。
+      if [ -z "$PS_EXE" ]; then
+        echo "    (cleanup: 找不到 powershell，无法清理残留进程；请手工检查 node/moon；pattern=$pattern)"
+        return 0
+      fi
+      # 这里必须用 -match（正则）而不是 -like（通配符）：pattern 是正则形态。
       # 另：PS 5.1 的 Get-Process 没有 CommandLine 属性，必须走 CIM 取命令行。
+      # 只杀 node.exe / moon.exe，且要求命令行命中本仓库 pattern（双重收窄）。
       local killed
-      killed=$(powershell -NoProfile -Command         "\$pat='${pattern}'; \$n=0; Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { \$_.CommandLine -match \$pat } | ForEach-Object { \$n++; Stop-Process -Id \$_.ProcessID -Force -ErrorAction SilentlyContinue }; \$n"         2>/dev/null | tr -d '\r' | tail -1)
+      killed=$("$PS_EXE" -NoProfile -Command \
+        "\$pat='${pattern}'; \$n=0; Get-CimInstance Win32_Process -Filter \"Name='node.exe' or Name='moon.exe'\" | Where-Object { \$_.CommandLine -match \$pat } | ForEach-Object { \$n++; Stop-Process -Id \$_.ProcessID -Force -ErrorAction SilentlyContinue }; \$n" \
+        2>/dev/null | tr -d '\r' | tail -1)
       case "$killed" in ''|*[!0-9]*) killed=0 ;; esac
       if [ "$killed" -gt 0 ]; then
-        echo "    (cleanup: 已清理 $killed 个残留 node 进程，pattern=$pattern)"
+        echo "    (cleanup: 已清理 $killed 个残留进程（$what），pattern=$pattern)"
+      else
+        echo "    (cleanup: 0 命中（$what）——若无残留属正常；若确有挂死进程说明路径形态变了，pattern=$pattern)"
       fi
       ;;
     wsl|linux)
-      command -v pkill >/dev/null 2>&1 && pkill -f "$pattern" >/dev/null 2>&1 || true
+      if ! command -v pkill >/dev/null 2>&1; then
+        echo "    (cleanup: 本机无 pkill，跳过；pattern=$pattern)"
+        return 0
+      fi
+      local hits
+      hits=$(pgrep -fc -- "$pattern" 2>/dev/null || true)
+      case "$hits" in ''|*[!0-9]*) hits=0 ;; esac
+      if [ "$hits" -gt 0 ]; then
+        pkill -f -- "$pattern" >/dev/null 2>&1 || true
+        echo "    (cleanup: 已清理 $hits 个残留进程（$what），pattern=$pattern)"
+      else
+        echo "    (cleanup: 0 命中（$what）；pattern=$pattern)"
+      fi
       ;;
   esac
 }
@@ -302,9 +358,12 @@ run_step() {
     timed_out=1
     echo "    !! 步骤超时（${TIMEOUT_SECS}s 未返回）——大概率是测试二进制挂死，正在清理残留进程" >&2
     case "$step" in
-      js)     cleanup_orphans "_build/js/debug/test" ;;
-      native) cleanup_orphans "_build/native" ;;
-      *)      cleanup_orphans "_build" ;;
+      js)     cleanup_orphans "$CLEAN_PAT_JS" "js 测试二进制" ;;
+      native) cleanup_orphans "$CLEAN_PAT_NATIVE" "native 测试二进制" ;;
+      *)
+        echo "    (cleanup: $step 步骤不做兜底清理——挂死对象是 moon 本身，其 cmdline 不含仓库路径，"
+        echo "     按 pattern 杀会误伤其它 lane 的 moon；请人工确认 \`ps\` 后处理)" >&2
+        ;;
     esac
   fi
 
@@ -312,6 +371,10 @@ run_step() {
   if [ "$timed_out" -eq 1 ]; then
     verdict="FAIL"
     detail="步骤超时 ${TIMEOUT_SECS}s（测试可能挂死；可用 RX_MBT_STEP_TIMEOUT=秒 调整）"
+  elif [ "$rc" -eq 75 ]; then
+    # C2 审计 Q4：锁等待超时不是产品红，必须有可区分的文案
+    verdict="LOCK-TIMEOUT"
+    detail="构建锁等待超时（有并发 moon 正在跑；非编译/测试失败，请重试或调 MOON_LOCK_TIMEOUT）"
   elif [ "$step" = "check" ]; then
     local errs
     errs=$(parse_check "$outfile")
@@ -343,7 +406,13 @@ run_step() {
 
   printf '    --> %s  %s  (%s ms)\n' "$verdict" "$detail" "$((t1 - t0))"
   SUMMARY_ROWS+=("$step|$verdict|$detail|$((t1 - t0))")
-  [ "$verdict" = "PASS" ] || OVERALL_RC=1
+  # 退出码语义（C2 审计 Q4/Q10 固化；两入口一致）：
+  #   0=PASS  1=真实 FAIL  2=用法/环境错误  3=一步都没执行（全 skip）  4=构建锁等待超时
+  if [ "$verdict" = "LOCK-TIMEOUT" ]; then
+    [ "$OVERALL_RC" -eq 1 ] || OVERALL_RC=4
+  elif [ "$verdict" != "PASS" ]; then
+    OVERALL_RC=1
+  fi
   return 0
 }
 
@@ -370,7 +439,9 @@ done
 echo "-----------------------------------------------------------------------------"
 if [ "$EXECUTED_STEPS" -eq 0 ]; then
   echo " RESULT: SKIP —— 没有任何步骤被执行（--skip 全跳过），以下结论不构成判绿"
-  OVERALL_RC=2
+  OVERALL_RC=3
+elif [ "$OVERALL_RC" -eq 4 ]; then
+  echo " RESULT: LOCK-TIMEOUT —— 有步骤因构建锁等待超时而未执行（并发 moon 抢锁；非产品红）"
 elif [ "$OVERALL_RC" -eq 0 ]; then
   echo " RESULT: PASS —— 所有已执行步骤判绿（$EXECUTED_STEPS 步）"
 else
@@ -378,12 +449,47 @@ else
 fi
 echo "============================================================================="
 
-# ---- F5: 失败时保留现场（否则 trap 会把 $TMPDIR_RUN/*.log 一起删掉） ----
+# ---- C2 审计 Q5：失败现场保留 + 保留策略（防无界增长） ----
+# 每次失败新建一个时间戳目录；同时按「保留最近 N 个 + 总量上限 MB」裁剪旧目录。
+prune_run_logs() {
+  local base="$1"
+  [ -d "$base" ] || return 0
+  local keep="${RUNLOG_KEEP:-20}" maxmb="${RUNLOG_MAXMB:-50}"
+  case "$keep" in ''|*[!0-9]*) keep=20 ;; esac
+  case "$maxmb" in ''|*[!0-9]*) maxmb=50 ;; esac
+  # 1) 目录数上限
+  local dirs
+  dirs=$(ls -1d "$base"/*/ 2>/dev/null | wc -l | tr -d ' ')
+  case "$dirs" in ''|*[!0-9]*) dirs=0 ;; esac
+  if [ "$dirs" -gt "$keep" ]; then
+    local del=$((dirs - keep))
+    ls -1dt "$base"/*/ 2>/dev/null | tail -n "$del" | while read -r d; do
+      rm -rf -- "$d" 2>/dev/null || true
+    done
+    echo " (run-logs 裁剪：目录数 $dirs > $keep，已删最旧 $del 个)"
+  fi
+  # 2) 总量上限（KB → MB 比较）
+  local kb
+  kb=$(du -sk "$base" 2>/dev/null | awk '{print $1}')
+  case "$kb" in ''|*[!0-9]*) kb=0 ;; esac
+  local maxkb=$((maxmb * 1024))
+  if [ "$kb" -gt "$maxkb" ]; then
+    ls -1dt "$base"/*/ 2>/dev/null | tail -n +2 | while read -r d; do
+      cur=$(du -sk "$base" 2>/dev/null | awk '{print $1}')
+      case "$cur" in ''|*[!0-9]*) cur=0 ;; esac
+      [ "$cur" -le "$maxkb" ] && break
+      rm -rf -- "$d" 2>/dev/null || true
+    done
+    echo " (run-logs 裁剪：总量曾超 ${maxmb}MB，已按最旧优先删除直到达标)"
+  fi
+}
+
 if [ "$OVERALL_RC" -ne 0 ] && [ -d "$TMPDIR_RUN" ]; then
   _LOGDIR="$PROJECT_DIR/fist-mbt/reports/run-logs/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$_LOGDIR" 2>/dev/null || true
   cp "$TMPDIR_RUN"/*.log "$_LOGDIR"/ 2>/dev/null || true
-  echo " 失败日志已保留：$_LOGDIR"
+  echo " 失败日志已保留：$_LOGDIR（保留策略：最近 ${RUNLOG_KEEP} 个目录 / 上限 ${RUNLOG_MAXMB}MB）"
+  prune_run_logs "$PROJECT_DIR/fist-mbt/reports/run-logs"
 fi
 
 exit "$OVERALL_RC"

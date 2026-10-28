@@ -246,3 +246,58 @@ test "relay · 收尾：无遗留中转子进程（js 挂死兜底 + 回归断�
   // 句柄快照打印出来，便于下次真的挂死时一眼定位（FSWatcher/Server/Socket/Timer…）
   println("[relay] active resources = " + ffi_r_active_resources())
 }
+
+// ---------------------------------------------------------------------------
+// C2（资源与并发）回归：relay 的临时目录泄漏 与 僵尸子进程重启
+// ---------------------------------------------------------------------------
+
+///|
+/// 统计 os.tmpdir() 下 `rhop-relay-*` 目录数量（-1 = 探测失败）。
+extern "js" fn ffi_r_tmp_relay_dirs() -> Int32 =
+  #| () => { try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const path = process.getBuiltinModule("node:path"); const base = os.tmpdir(); let n = 0; for (const name of fs.readdirSync(base)) { if (String(name).startsWith("rhop-relay-")) { try { if (fs.statSync(path.join(base, String(name))).isDirectory()) { n++; } } catch (_e) {} } } return n; } catch (_e) { return -1; } }
+
+///|
+test "relay · stop() 连临时目录一起清掉（C2 BUG-1 回归）" {
+  let before = ffi_r_tmp_relay_dirs()
+  let server = @rp.RelayServer::new("127.0.0.1", 0, None, 15000)
+  match server.start() {
+    Err(e) => fail("中转服务启动失败: \{e}")
+    Ok(_) => ()
+  }
+  let during = ffi_r_tmp_relay_dirs()
+  // start 期间应恰好多一个目录（放端口文件用）
+  if before >= 0 {
+    assert_eq(during, before + 1)
+  }
+  server.stop()
+  let after = ffi_r_tmp_relay_dirs()
+  if before >= 0 {
+    // 旧实现只删端口文件、目录残留，这里必须回到基线
+    assert_eq(after, before)
+  }
+  assert_false(server.alive())
+}
+
+///|
+test "relay · 子进程消失后 start() 会重新拉起（C2 BUG-5 回归）" {
+  let server = @rp.RelayServer::new("127.0.0.1", 0, None, 15000)
+  match server.start() {
+    Err(e) => fail("中转服务启动失败: \{e}")
+    Ok(_) => ()
+  }
+  assert_true(server.process_alive())
+  // 模拟子进程意外消失（被外部杀 / TTL 到期）：注册表里已无该句柄
+  ffi_r_relay_kill_all()
+  assert_false(server.process_alive())
+  // 旧实现：start() 见到 child != 0 直接返回 Ok，调用方以为服务可用
+  match server.start() {
+    Err(e) => fail("子进程消失后重新 start 失败: \{e}")
+    Ok(_) => ()
+  }
+  assert_true(server.process_alive())
+  // 新拉起的服务真的可用
+  let ch = @rp.RelayChannel::new("127.0.0.1", server.port(), None, 3000)
+  assert_true(@rp.OnlineChannel::available(ch))
+  server.stop()
+  assert_false(server.alive())
+}

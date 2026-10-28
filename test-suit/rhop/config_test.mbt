@@ -690,3 +690,125 @@ test "config · F8 语义对齐：role 空串→SEND、shared {}→None、online
     Err(e) => assert_true(e.contains("不接受布尔值"))
   }
 }
+
+// ---------------------------------------------------------------------------
+// C2-01：load_config 的「配置文本 vs 文件路径」形态判定（防错误信息放大）
+// ---------------------------------------------------------------------------
+
+///|
+/// 生成 depth 层嵌套的对象文本 `{"a":{"a":…1…}}`（C2-01 复现语料）。
+fn deep_json_text(depth : Int32) -> String {
+  let sb = StringBuilder::new()
+  for _ in 0..<depth {
+    sb.write_string("{\"a\":")
+  }
+  sb.write_string("1")
+  for _ in 0..<depth {
+    sb.write_string("}")
+  }
+  sb.to_string()
+}
+
+///|
+test "config · C2-01：非对象 JSON 文本不再被当成文件路径（数组/标量）" {
+  // 数组文本：必须报「必须是对象」，而不是「读取配置文件失败 … ENOENT」
+  match @rp.load_config(Json::string("[1, 2, 3]")) {
+    Ok(_) => abort("数组文本不应成为配置")
+    Err(e) => {
+      assert_true(e.contains("必须是 dict/JSON 对象"))
+      assert_false(e.contains("读取配置文件失败"))
+    }
+  }
+  // 对象文本仍正常解析（形态判定不能误伤正路）
+  match @rp.load_config(Json::string("{\"key\": \"k\", \"name\": \"dev-T\"}")) {
+    Ok(c) => assert_eq(c.name(), "dev-T")
+    Err(e) => abort("对象文本应当解析成功: " + e)
+  }
+}
+
+///|
+test "config · C2-01：超深/超长 JSON 文本绝不被当成文件路径，错误串有上界" {
+  // 1) 以 `{` 开头但内容非法的超长文本：给「不是合法 JSON」+ 片段截断
+  let sb = StringBuilder::new()
+  sb.write_string("{\"key\": \"k\", \"junk\": ")
+  for i in 0..<12000 {
+    let _ = i
+    sb.write_char('x')
+  }
+  let invalid = sb.to_string()
+  match @rp.load_config(Json::string(invalid)) {
+    Ok(_) => abort("非法 JSON 文本不应被接受")
+    Err(e) => {
+      assert_false(e.contains("读取配置文件失败"))
+      assert_false(e.contains("ENAMETOOLONG"))
+      assert_true(e.contains("不是合法 JSON"))
+      // 错误串远小于输入（输入 12KB+，日志放大被截断）
+      assert_true(e.length() < 400)
+    }
+  }
+  // 2) 2048 层深嵌套：解析器可能有深度上限（拒绝）也可能接受，
+  //    但**无论如何都不能回落成「读文件」**（这正是 C2-01 的根因）
+  let deep = deep_json_text(2048)
+  let text = "{\"key\": \"k\", \"junk\": " + deep + "}"
+  match @rp.load_config(Json::string(text)) {
+    Ok(_) => ()
+    Err(e) => {
+      assert_false(e.contains("读取配置文件失败"))
+      assert_false(e.contains("ENAMETOOLONG"))
+      assert_true(e.length() < 400)
+    }
+  }
+}
+
+///|
+test "config · C2-01：长纯文本 / 多行文本拒绝，不当路径" {
+  // 多行文本
+  match @rp.load_config(Json::string("line1\nline2")) {
+    Ok(_) => abort("多行文本不应成为配置")
+    Err(e) => {
+      assert_true(
+        e.contains("既不是配置对象 JSON 也不是可用的文件路径"),
+      )
+      assert_true(e.length() < 400)
+    }
+  }
+  // 超长单行纯文本（> CFG_PATH_MAX_LEN）
+  let sb = StringBuilder::new()
+  for i in 0..<4200 {
+    let _ = i
+    sb.write_char('a')
+  }
+  let huge = sb.to_string()
+  match @rp.load_config(Json::string(huge)) {
+    Ok(_) => abort("超长文本不应成为配置")
+    Err(e) => {
+      assert_true(
+        e.contains("既不是配置对象 JSON 也不是可用的文件路径"),
+      )
+      assert_true(e.length() < 400)
+    }
+  }
+}
+
+///|
+test "config · C2-01：from_file 超长路径直接判错（不把超长串交给文件系统）" {
+  let sb = StringBuilder::new()
+  for i in 0..<4200 {
+    let _ = i
+    sb.write_char('b')
+  }
+  let huge_path = sb.to_string()
+  match @rp.RhopConfig::from_file(huge_path) {
+    Ok(_) => abort("超长路径不应成功")
+    Err(e) => {
+      assert_true(e.contains("路径过长"))
+      assert_true(e.contains("4096"))
+      assert_true(e.length() < 400)
+    }
+  }
+  // 正常长度的不存在路径：仍给可诊断的读取失败（既有行为不回归）
+  match @rp.RhopConfig::from_file("/no/such/rhop-config-c2.json") {
+    Ok(_) => abort("不存在的配置应当 Err")
+    Err(e) => assert_true(e.contains("读取配置文件失败"))
+  }
+}

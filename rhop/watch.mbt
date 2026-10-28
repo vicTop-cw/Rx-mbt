@@ -144,6 +144,10 @@ pub fn RhopWatcher::start(self : RhopWatcher) -> Result[Unit, String] {
 
 ///|
 /// 停止监控（幂等）：释放 @monitor 订阅，事件流保持可再订阅。
+///
+/// C2 BUG-3：同时清空 `seen` —— 每次 start 都是新的观察窗口；不清会让「stop 后
+/// 重新 start」时同名文件的新事件被永久压制（与 skip_existing 的 start 侧 seed 语义对齐）。
+/// `bad_files()` 是累计诊断计数，跨 restart 保留。
 pub fn RhopWatcher::stop(self : RhopWatcher) -> Unit {
   match self.sub {
     Some(s) => s.dispose()
@@ -151,6 +155,7 @@ pub fn RhopWatcher::stop(self : RhopWatcher) -> Unit {
   }
   self.sub = None
   self.started = false
+  self.seen.val = @hashset.HashSet::new()
 }
 
 ///|
@@ -176,20 +181,24 @@ pub fn RhopWatcher::process_file(
   if self.seen.val.contains(path) {
     return None
   }
-  self.seen.val.add(path)
   match fs_read_text(path) {
     Err(_) => {
-      // 读不到（可能被删/半写）：跳过并计数，不中断监控
+      // 读不到（可能被删/半写）：跳过并计数，不中断监控。
+      // C2 BUG-2：这里**不登记 seen** —— 否则一次瞬时读失败（半写/杀软占用/网络盘抖动）
+      // 会让该路径被永久压制，写完后的新事件全被 contains 挡掉（静默丢消息）。
       self.bad.val = self.bad.val + 1
       None
     }
     Ok(text) => {
       let r = self.crypto.decrypt_verify(text)
       if !r.ok {
-        // 坏文件（解析/解密失败）：跳过并计数
+        // 坏文件（解析/解密失败）：跳过并计数，同样不登记 seen（可能是写到一半的内容，
+        // 写完后应被重新处理；重复告警由「事件仅在文件变化时才触发」自然收敛）
         self.bad.val = self.bad.val + 1
         None
       } else {
+        // 只在**成功推送**后登记：保证「已消费」与「已投递」语义一致
+        self.seen.val.add(path)
         self.subject.on_next((basename(path), r))
         Some(r)
       }

@@ -65,6 +65,7 @@ test "daemon: 空目录 run_once 两轮全 0（幂等）" {
   }
   req_daemon.close()
   exec_daemon.close()
+  ignore(@rp.rhop_remove_dir_all(dir))
 }
 
 ///|
@@ -147,12 +148,13 @@ test "daemon: 两 daemon 单机中继闭环（提交 → 执行 → 结果回流
   req.close()
   req_daemon.close()
   exec_daemon.close()
+  ignore(@rp.rhop_remove_dir_all(dir))
 }
 
 ///|
 test "daemon: 坏信封 → 移入 failed/ 并计数，不中断其它信封" {
   let dir = biz_temp_workspace()
-  let (req_daemon, _exec_daemon, shared, req_data, _ed) = daemon_pair(dir)
+  let (req_daemon, exec_daemon, shared, req_data, _ed) = daemon_pair(dir)
   let inbox = @rp.rhop_join(req_data, "inbox")
   // 坏信封（不是 JSON）
   match @rp.rhop_fs_write_text(@rp.rhop_join(inbox, "bad.rhop"), "not-a-json") {
@@ -201,12 +203,14 @@ test "daemon: 坏信封 → 移入 failed/ 并计数，不中断其它信封" {
   assert_eq(jnum(two, "processed"), 0.0)
   assert_eq(jnum(two, "failed"), 0.0)
   req_daemon.close()
+  exec_daemon.close()
+  ignore(@rp.rhop_remove_dir_all(dir))
 }
 
 ///|
 test "daemon: 加密信封收包（decrypt_verify 降级路径）→ 解密后照常执行" {
   let dir = biz_temp_workspace()
-  let (_req_daemon, exec_daemon, shared, _rd, _ed) = daemon_pair(dir)
+  let (req_daemon, exec_daemon, shared, _rd, _ed) = daemon_pair(dir)
   // 用与 config 一致的 key 加密一个 Pending 信封
   let crypto = @rp.RhopCrypto::from_key("biz-test-key")
   let env = mk_env("job-enc", @rp.TaskStatus::Pending, @rp.Side::Requester, 1)
@@ -247,6 +251,8 @@ test "daemon: 加密信封收包（decrypt_verify 降级路径）→ 解密后�
   }
   assert_eq(got.status, @rp.TaskStatus::Done)
   exec_daemon.close()
+  req_daemon.close()
+  ignore(@rp.rhop_remove_dir_all(dir))
 }
 
 ///|
@@ -295,7 +301,7 @@ test "daemon: 无共享介质时 push_local 不报错但把情况写清（pendin
 ///|
 test "daemon: start(max_rounds=2) 跑满即退（不阻塞）" {
   let dir = biz_temp_workspace()
-  let (req_daemon, _exec_daemon, _shared, _rd, _ed) = daemon_pair(dir)
+  let (req_daemon, exec_daemon, _shared, _rd, _ed) = daemon_pair(dir)
   let summary = match req_daemon.start(2) {
     Ok(v) => v
     Err(e) => abort("start 失败: \{e}")
@@ -304,4 +310,6 @@ test "daemon: start(max_rounds=2) 跑满即退（不阻塞）" {
   assert_eq(req_daemon.rounds(), 2)
   assert_true(!req_daemon.is_running())
   req_daemon.close()
+  exec_daemon.close()
+  ignore(@rp.rhop_remove_dir_all(dir))
 }

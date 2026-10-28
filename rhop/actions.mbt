@@ -445,11 +445,20 @@ pub fn jump_sync(cfg : Json, payload : Json?) -> Json {
 ///
 /// 用途：interact / daemon / executor 的链路自检（不依赖 SFTP、不碰网络），
 /// 也是「动作注册表真的能跑通」的最小证据。
+///
+/// **安全口径（C2-02）**：回显的 `cfg` 会先过敏感键深度掩码（`password` / `key_path` /
+/// `token` / `secret` … → `"***"`，与 `RhopConfig::to_dict` 同一套键表），
+/// 因为动作 cfg 里可能带跳板机口令，而本动作结果常被原样打日志。
 pub fn rhop_echo(cfg : Json, payload : Json?) -> Json {
   Json::object({
     "status": Json::string("ok"),
     "action": Json::string("rhop.echo"),
-    "cfg": cfg,
+    // C2-02：回显前做敏感键深度掩码（口径与 RhopConfig::to_dict 一致）。
+    // 背景：动作层的 cfg 来自 RhopConfig::action_cfg()，其中 sftp.password /
+    // key_path 是**原文**（jump.push/pull/sync 真连 SFTP 需要）；而 rhop.echo
+    // 是链路自检动作，结果常被 println/写日志 —— 不能让口令顺着回执外泄。
+    // 掩码只改敏感键值（→ "***"），非敏感字段与对象键序保持不变。
+    "cfg": cfg_mask_deep(cfg),
     "payload": match payload {
       Some(v) => v
       None => Json::null()

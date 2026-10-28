@@ -44,6 +44,10 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
+# C2 审计 Q13：导入 gen_conformance_vectors 会在 scripts/__pycache__ 落 .pyc（多余产物）
+# 把这个副作用关掉（只影响本工具的字节码缓存，不影响行为）。
+sys.dont_write_bytecode = True
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)

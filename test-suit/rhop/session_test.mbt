@@ -744,3 +744,50 @@ test "session · remove_package：删除读视图包；空名/无介质可诊断
     Err(e) => assert_true(e.contains("仅 shared path"))
   }
 }
+
+// ---------------------------------------------------------------------------
+// C2-03：文件名白名单的平台加固（纯点号 / Windows 设备名 / 结尾点）
+// ---------------------------------------------------------------------------
+
+///|
+test "session · C2-03：safe_filename 拒绝纯点号 / Windows 设备名 / 结尾点" {
+  // 纯点号：介质层会把目录当目标，报错难懂，且 exists(".") 恒真会误导调用方
+  for bad in [".", "..", "..."] {
+    match @rp.safe_filename(bad) {
+      Ok(v) => abort("纯点号不应通过: " + v)
+      Err(_) => ()
+    }
+  }
+  // Windows 保留设备名（DOS 设备名规则：base = 第一个 "." 之前那段，大小写不敏感）
+  for
+    bad in [
+      "NUL.rhop", "nul.rhop", "CON", "con.txt", "PRN.rhop", "AUX.rhop", "CLOCK$",
+      "COM1.rhop", "com9.rhop", "LPT1.rhop", "lpt3.rhop", "COM1",
+    ] {
+    match @rp.safe_filename(bad) {
+      Ok(v) => abort("Windows 设备名不应通过: " + v)
+      Err(e) =>
+        assert_true(
+          e.contains("保留设备名") || e.contains("只允许 A-Za-z0-9._-"),
+        )
+    }
+  }
+  // 结尾点：Win32 抹掉、POSIX 保留 → 同一逻辑名两平台指向不同文件
+  for bad in ["a.", "pkg.rhop."] {
+    match @rp.safe_filename(bad) {
+      Ok(v) => abort("结尾点不应通过: " + v)
+      Err(e) => assert_true(e.contains("结尾"))
+    }
+  }
+  // 近似但不保留的名字必须放行（别把白名单收得太狠）
+  for
+    good in [
+      "console.rhop", "com0.rhop", "com10.rhop", "lpt0.rhop", "a.rhop", "-x.rhop",
+      "x.y.z", "nulish.rhop",
+    ] {
+    match @rp.safe_filename(good) {
+      Ok(v) => assert_eq(v, good)
+      Err(e) => abort("合法名不应被拒: " + good + " => " + e)
+    }
+  }
+}

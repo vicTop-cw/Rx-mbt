@@ -364,8 +364,24 @@ pub fn RelayDaemon::process_inbox(self : RelayDaemon) -> Result[Json, String] {
         }
       }
     }
-    // executor 侧 + Pending ⇒ 接力执行；执行后把**结果信封**写进 outbox（回传给对端）
+    // executor 侧 + Pending ⇒ 接力执行（**幂等守卫**，见下）
+    //
+    // C2-1/C2-2：只有「镜子库里这条任务【当前】仍是 Pending」才允许执行。
+    // 只判信封自带的 status 是不够的 —— inbox 里的信封是**历史快照**，
+    // 搬运失败/进程崩溃会让同一枚 Pending v1 信封被重复读到，而库里可能已经是
+    // Claimed（别的执行体领着）/ Running（上个进程执行中）/ Done（已经做完）。
+    // 重放这些会重复触发动作副作用（写库、跑命令），因此一律跳过并留档。
+    let local_is_pending = match mirror.get_task(env.task_id) {
+      Some(local) => local.status == TaskStatus::Pending
+      None => false
+    }
     if self.side == Side::Executor && env.status == TaskStatus::Pending {
+      if !local_is_pending {
+        // 已被处理/正在处理：不重放副作用，只把信封移入 processed 留档
+        processed = processed + 1
+        move_to(self.data_dir, "inbox", fname, "processed")
+        continue
+      }
       match self.executor.execute(env) {
         Ok(_) => {
           processed = processed + 1
@@ -445,6 +461,8 @@ pub fn RelayDaemon::push_local(self : RelayDaemon) -> Result[Json, String] {
   let remote_dir = "inbox/" + other.to_string()
   let mut pushed = 0
   let errors : Array[String] = []
+  // 待落库的推送审计（task_id, 字节数），循环结束后一次事务写入
+  let pending_logs : Array[(String, Int32)] = []
   for fname in names {
     if !fname.has_suffix(".rhop") {
       continue
@@ -462,21 +480,15 @@ pub fn RelayDaemon::push_local(self : RelayDaemon) -> Result[Json, String] {
       Ok(_) => {
         ignore(rhop_fs_remove(path))
         pushed = pushed + 1
-        ignore(
-          self.executor
-          .mirror()
-          .log_sync(
-            "push",
-            "shared",
-            strip_rhop_suffix(fname),
-            true,
-            bytes_xfer=text.length(),
-          ),
-        )
+        pending_logs.push((strip_rhop_suffix(fname), text.length()))
       }
       Err(msg) => errors.push("投递失败 \{fname}: \{msg}")
     }
   }
+  // C2-7：审计日志「一轮一事务」批量落库。
+  // 原来每文件一条 log_sync = 一条独立隐式事务 = 一次 fsync；
+  // 1000 个小包在 Windows 上就是 ~10s 的纯等待（实测单条 fsync 约 10ms）。
+  flush_push_logs(self.executor.mirror(), pending_logs)
   Ok(
     Json::object({
       "pushed": Json::number(pushed.to_double()),
@@ -496,6 +508,30 @@ pub fn RelayDaemon::close(self : RelayDaemon) -> Unit {
 // ---------------------------------------------------------------------------
 // 本文件私有 helper
 // ---------------------------------------------------------------------------
+
+///|
+/// 批量写入 push 审计日志（一轮一个 `BEGIN IMMEDIATE` 事务）。
+///
+/// 失败不致命：daemon 的审计日志丢了不该阻断投递（信封已经送到对端），
+/// 因此这里只吞掉错误 —— 但**不静默**：调用方在回执的 errors 里已经能看出投递结果。
+fn flush_push_logs(mirror : MirrorDB, entries : Array[(String, Int32)]) -> Unit {
+  if entries.length() == 0 {
+    return
+  }
+  ignore(
+    mirror.write_tx(fn() {
+      for entry in entries {
+        let (task_id, bytes) = entry
+        match
+          mirror.log_sync("push", "shared", task_id, true, bytes_xfer=bytes) {
+          Ok(_) => ()
+          Err(msg) => return Err(msg)
+        }
+      }
+      Ok(())
+    }),
+  )
+}
 
 ///|
 /// 解码信封：优先按明文 `.rhop`（`Envelope::from_rhop_bytes`，含 checksum 校验）；

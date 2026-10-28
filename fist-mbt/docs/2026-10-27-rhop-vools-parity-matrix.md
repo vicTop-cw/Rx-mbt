@@ -530,6 +530,9 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | 16 | **CLI 与 P2 task 队列**：vools 有 CLI 入口与完整 `task/` 队列（230 符号）；本项目不迁 CLI，`rhop_task` 覆盖数据/配置/密文（P2a）+ 存储/队列/心跳/执行/同步（P2b）共 8 文件，尚未移植 `task/cli.py`、`task/daemon.py`、`task/local_runner.py`、Postgres 后端 | P2 | 见 §5.9 与 §11 |
 | 17 | **信封字段类型严格度高于 vools**：`task_id:123` / `error:5` / `hops_seen:[1]` / `version:"3"` 本实现 `Err`，vools dataclass 无运行期类型检查会接受 | 读取他方产出的畸形 `.rhop` | 有意保留（C1 PROTO-03）：显式失败优于静默接受；vools 能读的文件本实现可能拒绝 |
 | 18 | **非规范数字字面量**：payload 写 `1.50` / `1e2` 时本实现按 `preserve_number_repr` 保留原文重算 checksum；vools `json.loads` 规范化（`1.5` / `100.0`）后重算，对同一文件判 `checksum mismatch` | 与 vools 交换含非规范数字的文件 | 有意保留（C1 PROTO-07）：避免二次序列化改值；规范语料（Python `json.dumps` 产出）不受影响 |
+| 19 | **信封嵌套深度不对称（C2P-05）**：写侧迭代序列化无深度上限，读侧受 `MAX_ENVELOPE_NESTING_DEPTH = 1000` 约束 | 深嵌套 payload（>1000 层） | 深度 1000–2000+ 可写出但读不回，属 out-of-contract；常量已显式化并有用例固定该行为 |
+| 20 | **payload/result 的 Json 引用共享（C2P-04）**：wither 复用同一 `Json`（与 vools dataclass 同）；`hops_seen` 已改为构造时防御性复制（C2P-03） | 多个持有方共享信封 | 契约：`payload`/`result` 按不可变值使用，不得原地改内层 Array/Map；已写入 DOC.md 与结构体 docstring |
+| 21 | **PBKDF2 200000 轮耗时（C2P-02）**：纯 MoonBit 实现，优化后 js ≈0.8 s / wasm ≈1.8 s / native ≈2.0 s（旧实现 2.4–3.8 s） | Fernet KDF（每个信封一次） | 算法语义与 RFC 向量不变；高频收发建议复用派生密钥（同一 key 只派生一次） |
 
 > 历史条目（v3 的第 17/18 条：P2 心跳文件格式不互通、未来时间戳判定方向）**已于 2026-10-28 T0r15 解决**（vools 字节级对齐 + 真 vools 双向互操作 6/6），已移出本表，证据见 §5.9 B1/B2。
 
@@ -582,25 +585,29 @@ moon test -p test-suit/rhop_business --target js
 moon test -p test-suit/rhop_task --target js
 ```
 
-**复核时刻实测状态（2026-10-28 10:1x 终版，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧由 lead 用 `scripts/test_all.sh` 独立复核同数字）**
+**复核时刻实测状态（C2 轮修复后快照 2026-10-28 14:2x，Windows / moon 0.1.20261016 / node v25.2.1）**
+
+> ⚠️ C2 并行 lane（crypto/session/business）仍在追加测试，**跨 lane 总数持续变化**；下表为本域快照，
+> 跨 lane / 项目级数字以 `bash scripts/test_all.sh`（qa 终验）为准。
 
 | 命令 | 结果 |
 |---|---|
 | `moon check`（项目级，三目标） | wasm / js / native 均 **0 error**（`moon check` 实测 0） |
 | `moon check -p rhop`（wasm / js / native） | 三目标均 **0 error** |
-| `moon test test-suit/rhop`（wasm） | `Total tests: 131, passed: 131, failed: 0.` |
-| `moon test test-suit/rhop --target js` | `Total tests: 135, passed: 135, failed: 0.` |
-| `moon test test-suit/rhop --target native` | `Total tests: 131, passed: 131, failed: 0.` |
-| `moon test -p test-suit/rhop_js --target js` | `Total tests: 52, passed: 52, failed: 0.` |
+| `moon test test-suit/rhop`（wasm） | `Total tests: 156, passed: 156, failed: 0.` |
+| `moon test test-suit/rhop --target js` | `Total tests: 160, passed: 160, failed: 0.` |
+| `moon test test-suit/rhop --target native` | `Total tests: 156, passed: 156, failed: 0.` |
+| `moon test test-suit/rhop_vectors --target js` | `Total tests: 2, passed: 2, failed: 0.`（互操作产物生产者） |
+| `moon test -p test-suit/rhop_js --target js` | `Total tests: 56, passed: 56, failed: 0.` |
 | `moon test -p test-suit/rhop_clipboard --target js` | `Total tests: 25, passed: 25, failed: 0.` |
-| `moon test -p test-suit/rhop_interact --target js` | `Total tests: 13, passed: 13, failed: 0.` |
+| `moon test -p test-suit/rhop_interact --target js` | `Total tests: 22, passed: 22, failed: 0.` |
 | `moon test test-suit/rhop_business`（wasm/native） | `Total tests: 10, passed: 10, failed: 0.` |
-| `moon test test-suit/rhop_business --target js` | `Total tests: 41, passed: 41, failed: 0.` |
+| `moon test test-suit/rhop_business --target js` | `Total tests: 53, passed: 53, failed: 0.` |
 | `moon test test-suit/rhop_task`（wasm/native） | `Total tests: 46, passed: 46, failed: 0.`（P2a 纯逻辑部分）|
-| `moon test test-suit/rhop_task --target js` | `Total tests: 99, passed: 99, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
-| 项目级 `moon test`（wasm） | `Total tests: 587, passed: 587, failed: 0.` |
-| 项目级 `moon test --target native` | `Total tests: 587, passed: 587, failed: 0.` |
-| 项目级 `moon test --target js` | `Total tests: 765, passed: 765, failed: 0.`（T0r15 后的终版计数）|
+| `moon test test-suit/rhop_task --target js` | `Total tests: 101, passed: 101, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
+| 项目级 `moon test`（wasm） | `Total tests: 612, passed: 612, failed: 0.`（快照）|
+| 项目级 `moon test --target native` | `Total tests: 612, passed: 612, failed: 0.`（快照）|
+| 项目级 `moon test --target js` | 快照时点 `819` 例（C2 并行 lane 正在追加测试，故不冻结单一总数；本域各包均绿，见上表）|
 
 > 判绿纪律：只认 `moon test` 汇总行（`Total tests: N, passed: N, failed: 0`），不认 exit code。
 > 本表所有数字均在表格标注时刻实际运行得到；P2 / Batch D 在途项恢复后应重跑并把 `rhop_business` 一行改为 38/38。
@@ -619,29 +626,29 @@ moon test -p test-suit/rhop_task --target js
 | `test-suit/rhop/session_test.mbt` | 15 | `session.py` | wasm/js/native |
 | `test-suit/rhop/actions_test.mbt` | 10 | `actions/__init__.py` + `jump.probe` | wasm/js/native |
 | `test-suit/rhop/rhop_test.mbt` + `rhop_js_test.mbt` | 7 + 4 | **既有** RX-MBT 的 `RhopPacket`/`RhopEnvelope`/`RhopCipherNone`（非 vools 对照面） | 默认 / js |
-| **`test-suit/rhop` 小计** | **131（wasm/native）/ 135（js）** | — | — |
+| **`test-suit/rhop` 小计** | **156（wasm/native）/ 160（js）** | — | — |
 | `test-suit/rhop_js/crypto_test.mbt` | 24 | `crypto.py`（Fernet 双向互解、三态 reason、`RHOP-ENC`） | js |
 | `test-suit/rhop_js/transport_test.mbt` | 16 | `transport/{base,local,endpoint,selector,shared}.py` | js |
 | `test-suit/rhop_js/watch_test.mbt` | 6 | `watch.py` | js |
 | `test-suit/rhop_js/relay_test.mbt` | 6 | `transport/relay.py` | js |
-| **`test-suit/rhop_js` 小计** | **52** | — | js |
+| **`test-suit/rhop_js` 小计** | **56** | — | js |
 | `test-suit/rhop_clipboard/clipboard_test.mbt` | 25 | `clipboard.py`（push/pull 状态机、探测、边界） | js |
-| `test-suit/rhop_interact/interact_test.mbt` | 13 | `interact.py` + `actions/` 三模式 | js |
+| `test-suit/rhop_interact/interact_test.mbt` | 22 | `interact.py` + `actions/` 三模式 | js |
 | `test-suit/rhop_business/mirror_test.mbt` | 11 | `mirror.py` | js |
 | `test-suit/rhop_business/executor_test.mbt` | 6 | `executor.py` | js |
 | `test-suit/rhop_business/requester_test.mbt` | 5 | `requester.py` | js |
 | `test-suit/rhop_business/daemon_test.mbt` | 6 | `daemon.py` | js |
 | `test-suit/rhop_business/sync_folder_test.mbt` + `sync_glob_test.mbt` | 5 + 5 | `sync_folder.py` | js |
 | `test-suit/rhop_business/nonjs_test.mbt` + helpers | 5（+ 0 例 helper 模块） | 非 js 降级路径 | wasm/native |
-| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 41（js）** | — | — |
-| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 99（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
+| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 53（js）** | — | — |
+| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 101（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
 
 **rhop 相关合计**
 
-- **js 口径**：135(rhop) + 52(rhop_js) + 25(clipboard) + 13(interact) + 41(business) + 99(task) = **365 例**
-- **wasm / native 口径**：131(rhop) + 10(business) + 46(task) = **187 例**（不含 js-only 包）
-- **全模块（项目级）**：wasm **587** / js **765** / native **587**，三目标全绿
-- 其中 vools 契约范围（A–D + clipboard）占 263 例（js），P2 占 99 例（js）
+- **js 口径**：160(rhop) + 2(vectors) + 56(rhop_js) + 25(clipboard) + 22(interact) + 53(business) + 101(task) = **419 例**（快照）
+- **wasm / native 口径**：156(rhop) + 10(business) + 46(task) = **212 例**（不含 js-only 包）
+- **全模块（项目级，快照）**：wasm **612** / native **612**，js 快照 **819**；js 侧随并行 lane 追加而变，以 `scripts/test_all.sh` 输出为准
+- 其中 vools 契约范围（A–D + clipboard）约 318 例（js），P2 占 101 例（js）
 
 ## 11. 本轮完成情况与「待终轮更新」清单
 
@@ -658,6 +665,8 @@ moon test -p test-suit/rhop_task --target js
 - `actions_test.mbt` 已交付（10 例，包级全绿）→ §5.5 三行改 ✅。
 
 **待终轮更新（P2 收尾后需要再刷一遍）**
-1. （已关闭）项目级三目标汇总行均已补齐：wasm 587/587、native 587/587、js 765/765，全绿（T0r15 字节级对齐后实测，Windows 与 WSL 双平台 `scripts/test_all.sh` 均 PASS）。
+1. （C2 轮更新）本域已全绿：wasm 612/612、native 612/612（项目级快照），`test-suit/rhop` 156/160/156、`rhop_vectors` 0/2/0；
+   项目级 js 因并行 lane 持续追加测试未冻结单一总数。**C2 修复项**：C2P-01 深嵌套栈溢出、C2P-02 PBKDF2 秒级阻塞、C2P-03 hops_seen 引用外泄、
+   C2P-05 读写深度不对称、C2P-06 文档数字漂移、C2P-07 键排序分配 —— 详见 `fist-mbt/reports/2026-10-28-c2-{bugfind,fix}-protocol.md`。
 2. P2b：`rhop_task` 与 vools `task/`（230 符号）逐符号对照表 + native 目标结论。
 3. 覆盖率：当前契约范围 **92.7%**（178/192），已无在途 ⏳ 项；仅剩 ⚠️ 1（watch 常量）与 ⛔ 9（明确不做）。

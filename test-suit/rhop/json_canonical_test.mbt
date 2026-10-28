@@ -342,3 +342,38 @@ test "canonical: 资源边界 · 深嵌套不 panic（数组 100 层 / 对象 50
   assert_true(obj_text.contains("\"leaf\""))
   assert_eq(@rp.canonical_json_ascii(deep_obj), obj_text) // 纯 ASCII 两口径一致
 }
+
+// ============================================================================
+// C2 资源审计回归：深嵌套不再栈溢出（writer 已改为显式栈迭代；旧递归实现
+// 在 js 下约 2500–5000 层触发 `RangeError: Maximum call stack size exceeded`，
+// 且阈值随外层调用深度漂移）。
+// ============================================================================
+
+///|
+/// 构造 depth 层嵌套数组 `[[[…null…]]]`。
+fn deeply_nested(depth : Int32) -> Json {
+  let mut v : Json = Json::null()
+  let mut i = 0
+  while i < depth {
+    v = Json::array([v])
+    i = i + 1
+  }
+  v
+}
+
+///|
+test "canonical: 深嵌套 5000 层不栈溢出（wasm/js/native 一致）" {
+  let depth = 5000
+  let text = @rp.canonical_json(deeply_nested(depth))
+  assert_eq(text.length(), depth + 4 + depth) // '['*d + "null" + ']'*d
+  assert_true(text.has_prefix("[[["))
+  // ensure_ascii 变体走同一条迭代 writer
+  assert_eq(@rp.canonical_json_ascii(deeply_nested(depth)), text)
+}
+
+///|
+test "canonical: 深嵌套 20000 层（更深的资源边界，仍不崩）" {
+  let depth = 20000
+  let text = @rp.canonical_json(deeply_nested(depth))
+  assert_eq(text.length(), depth + 4 + depth)
+}

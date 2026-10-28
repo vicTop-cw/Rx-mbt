@@ -688,3 +688,87 @@ test "envelope(PROTO-02): 可选字段显式 null / 浮点 version → 字段值
     Err(reason) => assert_true(reason.contains("None is not a valid Side"))
   }
 }
+
+// ============================================================================
+// C2 资源审计回归
+// ============================================================================
+
+///|
+test "envelope: hops_seen 防御性复制（外部 push 不影响已封信封）" {
+  let arr : Array[String] = ["requester"]
+  let env = @rp.Envelope::new_full(
+    "c2-hops",
+    @rp.TaskStatus::Running,
+    @json.parse("{}") catch {
+      _ => Json::null()
+    },
+    @rp.Side::Requester,
+    hops_seen=arr,
+  )
+  let sealed = env.checksum
+  arr.push("executor")
+  // 信封内的数组是副本：仍是 1 条，且 checksum 与内容自洽
+  assert_eq(env.hops_seen.length(), 1)
+  assert_eq(env.hops_seen, ["requester"])
+  assert_eq(env.checksum, sealed)
+  assert_eq(env.checksum, env.compute_checksum())
+  // with_hops_seen 同样复制
+  let arr2 : Array[String] = ["a"]
+  let next = env.with_hops_seen(arr2)
+  arr2.push("b")
+  assert_eq(next.hops_seen.length(), 1)
+  assert_eq(next.checksum, next.compute_checksum())
+}
+
+///|
+test "envelope: MAX_ENVELOPE_NESTING_DEPTH 常量与读写深度边界" {
+  assert_eq(@rp.MAX_ENVELOPE_NESTING_DEPTH, 1000)
+  // 深度 300（远小于上限）：写→读往返成功
+  let nested = {
+    let mut v : Json = Json::null()
+    let mut i = 0
+    while i < 300 {
+      v = Json::array([v])
+      i = i + 1
+    }
+    v
+  }
+  let env = @rp.Envelope::new(
+    "depth-300",
+    @rp.TaskStatus::Pending,
+    nested,
+    @rp.Side::Requester,
+  )
+  match @rp.Envelope::from_rhop_bytes(env.to_rhop_bytes()) {
+    Err(e) => fail("深度 300 应可往返: \{e}")
+    Ok(restored) => assert_eq(restored.task_id, "depth-300")
+  }
+  // 深度 2000（超过上限）：写成功、读得可诊断 Err（已知不对称，固定行为）
+  let deep = {
+    let mut v : Json = Json::null()
+    let mut i = 0
+    while i < 2000 {
+      v = Json::array([v])
+      i = i + 1
+    }
+    v
+  }
+  let deep_env = @rp.Envelope::new(
+    "depth-2000",
+    @rp.TaskStatus::Pending,
+    deep,
+    @rp.Side::Requester,
+  )
+  let raw = deep_env.to_rhop_bytes()
+  assert_true(raw.length() > 0)
+  match @rp.Envelope::from_rhop_bytes(raw) {
+    Ok(_) =>
+      fail(
+        "超过 MAX_ENVELOPE_NESTING_DEPTH 应返回 Err（已知不对称）",
+      )
+    Err(reason) =>
+      assert_true(
+        reason.contains("Depth limit") || reason.contains("解析失败"),
+      )
+  }
+}

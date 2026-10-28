@@ -359,6 +359,120 @@ fn int_be32(value : Int32) -> Bytes {
   Bytes::from_array(out)
 }
 
+// ---------------------------------------------------------------------------
+// SHA-256 增量原语（PBKDF2 专用，避免每轮重新处理 ipad/opad 与重复分配）
+//
+// 背景（C2 资源审计）：旧 pbkdf2 每轮调用 hmac_sha256 ⇒ 每轮 ~6 次堆分配，
+// 且 ipad/opad 的两个 64 字节块每轮都被重新压缩。Fernet KDF 用 200000 轮，
+// 旧实现实测 js 2.4–3.4 s / wasm 2.8 s / native 3.8 s。
+// 这里把「pad 块压缩成初始状态」只做一次，内层循环只做必要的 1–2 次压缩。
+// ---------------------------------------------------------------------------
+
+///|
+/// 把 64 字节 pad 块压缩进 8 字状态（从标准 IV 起），供 HMAC/PBKDF2 复用。
+fn sha256_pad_state(pad : Bytes) -> Array[UInt32] {
+  let state = sha256_iv()
+  sha256_compress(state, pad, 0)
+  state
+}
+
+///|
+/// 从给定 8 字状态继续吸收 `data` 并收尾（含 0x80 填充与 8 字节大端比特长度）。
+///
+/// `prefix_len` = 该状态此前已吸收的字节数（必须是 64 的倍数：HMAC 的 pad 块 = 64）。
+/// 返回 32 字节摘要。`data` 可为任意长度（PBKDF2 内层为 32 字节、外层为 32 字节，
+/// 但本函数也支持更长的 salt||block）。
+fn sha256_finish_from_state(
+  state : Array[UInt32],
+  data : Bytes,
+  prefix_len : Int32,
+) -> Bytes {
+  let total = data.length()
+  let full = total / SHA256_BLOCK_SIZE
+  for b in 0..<full {
+    sha256_compress(state, data, b * SHA256_BLOCK_SIZE)
+  }
+  let rem = total - full * SHA256_BLOCK_SIZE
+  // rem ≤ 63；rem ≥ 56 时填充需要额外一个块
+  let need_two = rem >= 56
+  let block : FixedArray[Byte] = FixedArray::make(
+    if need_two {
+      128
+    } else {
+      64
+    },
+    b'\x00',
+  )
+  for i in 0..<rem {
+    block[i] = data[full * SHA256_BLOCK_SIZE + i]
+  }
+  block[rem] = b'\x80'
+  // 长度 = prefix + data 的总字节数（比特）
+  let bits = (prefix_len + total).to_int64() * 8L
+  let base = if need_two { 120 } else { 56 }
+  for k in 0..<8 {
+    let shift = 56 - 8 * k
+    block[base + k] = ((bits >> shift).to_int() & 0xFF).to_byte()
+  }
+  let head = Bytes::from_array(block)
+  sha256_compress(state, head, 0)
+  if need_two {
+    sha256_compress(state, head, 64)
+  }
+  sha256_state_to_bytes(state)
+}
+
+///|
+/// 8 字状态 → 32 字节大端摘要。
+fn sha256_state_to_bytes(state : Array[UInt32]) -> Bytes {
+  let out : FixedArray[Byte] = FixedArray::make(SHA256_DIGEST_SIZE, b'\x00')
+  for i in 0..<8 {
+    let word = state[i]
+    out[i * 4] = ((word >> 24).to_int() & 0xFF).to_byte()
+    out[i * 4 + 1] = ((word >> 16).to_int() & 0xFF).to_byte()
+    out[i * 4 + 2] = ((word >> 8).to_int() & 0xFF).to_byte()
+    out[i * 4 + 3] = (word.to_int() & 0xFF).to_byte()
+  }
+  Bytes::from_array(out)
+}
+
+///|
+/// 基于「pad 已收纳状态」的 HMAC-SHA256 单次计算（PBKDF2 内层循环用）。
+///
+/// 语义等价于 `hmac_sha256(key, message)`，但跳过 ipad/opad 块的重复压缩与
+/// `bytes_concat` 分配。`ipad_state`/`opad_state` 必须由 `sha256_pad_state` 生成。
+fn sha256_hmac_from_pad_states(
+  ipad_state : Array[UInt32],
+  opad_state : Array[UInt32],
+  message : Bytes,
+) -> Bytes {
+  let inner = sha256_finish_from_state(
+    ipad_state.copy(),
+    message,
+    SHA256_BLOCK_SIZE,
+  )
+  sha256_finish_from_state(opad_state.copy(), inner, SHA256_BLOCK_SIZE)
+}
+
+///|
+/// PBKDF2 的 pad 状态对（ipad/opad 各一次，跨全部块与全部迭代复用）。
+fn pbkdf2_pad_states(password : Bytes) -> (Array[UInt32], Array[UInt32]) {
+  let mut k = password
+  if k.length() > SHA256_BLOCK_SIZE {
+    k = sha256(k)
+  }
+  let ipad : FixedArray[Byte] = FixedArray::make(SHA256_BLOCK_SIZE, b'\x36')
+  let opad : FixedArray[Byte] = FixedArray::make(SHA256_BLOCK_SIZE, b'\x5c')
+  for i in 0..<k.length() {
+    ipad[i] = (ipad[i].to_uint() ^ k[i].to_uint()).to_byte()
+    opad[i] = (opad[i].to_uint() ^ k[i].to_uint()).to_byte()
+  }
+  (
+    sha256_pad_state(Bytes::from_array(ipad)),
+    sha256_pad_state(Bytes::from_array(opad)),
+  )
+}
+
 ///|
 /// PBKDF2-HMAC-SHA256 密钥派生（RFC 8018 §5.2）。
 ///
@@ -369,6 +483,8 @@ fn int_be32(value : Int32) -> Bytes {
 /// - `dk_len`：派生长度（字节）。`dk_len <= 0` 同样返回长度 0 的 `Bytes`。
 /// - 输出按 32 字节块 `T_i = U_1 ^ … ^ U_c` 拼接、末块截断，故任意正整数
 ///   `dk_len` 都可用（含跨越多个 T 块的长输出）。
+/// - **资源**：ipad/opad 只压缩一次（C2 优化），200000 轮（Fernet KDF 参数）
+///   较旧实现减少约一半压缩次数与大部分堆分配；无输入长度上限。
 pub fn pbkdf2_hmac_sha256(
   password : Bytes,
   salt : Bytes,
@@ -379,18 +495,23 @@ pub fn pbkdf2_hmac_sha256(
     return Bytes::make(0, b'\x00')
   }
   let out : FixedArray[Byte] = FixedArray::make(dk_len, b'\x00')
+  let (ipad_state, opad_state) = pbkdf2_pad_states(password)
   let mut block_index = 1
   let mut written = 0
   while written < dk_len {
-    // U_1 = HMAC(P, S || INT_BE(block_index))
-    let mut u = hmac_sha256(password, bytes_concat(salt, int_be32(block_index)))
+    // U_1 = HMAC(P, S || INT_BE(block_index))，其后 U_j = HMAC(P, U_{j-1})
+    let mut u = sha256_hmac_from_pad_states(
+      ipad_state,
+      opad_state,
+      bytes_concat(salt, int_be32(block_index)),
+    )
     let t : FixedArray[Byte] = FixedArray::make(SHA256_DIGEST_SIZE, b'\x00')
     for i in 0..<SHA256_DIGEST_SIZE {
       t[i] = u[i]
     }
     let mut round = 1
     while round < iterations {
-      u = hmac_sha256(password, u)
+      u = sha256_hmac_from_pad_states(ipad_state, opad_state, u)
       for i in 0..<SHA256_DIGEST_SIZE {
         t[i] = (t[i].to_uint() ^ u[i].to_uint()).to_byte()
       }

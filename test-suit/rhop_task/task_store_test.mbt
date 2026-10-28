@@ -380,3 +380,61 @@ test "store · 关闭后再操作 → 可诊断 Err（不静默）" {
   }
   ffi_st_rmrf(dir)
 }
+
+// ---------------------------------------------------------------------------
+// C2（资源与并发）回归：sqlite 句柄生命周期
+// ---------------------------------------------------------------------------
+
+///|
+/// 当前注册表里仍打开的 sqlite 句柄数。
+extern "js" fn ffi_st_sqlite_live() -> Int32 =
+  #| () => { const G = globalThis; if (!G.__rxmbt_sqlite_reg) { return 0; } let n = 0; for (const _k of G.__rxmbt_sqlite_reg.keys()) { n++; } return n; }
+
+///|
+/// 强制关闭注册表里所有 sqlite 句柄（兜底，防断言失败路径漏 close）。
+extern "js" fn ffi_st_sqlite_close_all() -> Unit =
+  #| () => { const G = globalThis; if (!G.__rxmbt_sqlite_reg) { return; } for (const [k, db] of G.__rxmbt_sqlite_reg) { try { db.close(); } catch (_e) {} } G.__rxmbt_sqlite_reg.clear(); }
+
+///|
+/// C2 BUG-7：断言失败会让用例跳过 `close`，句柄漏在进程里。这里兜底清理并断言归零，
+/// 让「失败时的资源不归零」这类问题在 CI 里可见（与 relay/watch 的守门一致）。
+test "store · 收尾：无遗留 sqlite 句柄（C2 BUG-7 守卫）" {
+  let live = ffi_st_sqlite_live()
+  if live > 0 {
+    println(
+      "[store] 发现 \{live.to_string()} 个未关闭的 sqlite 句柄（有用例断言失败跳过 close），兜底清理",
+    )
+    ffi_st_sqlite_close_all()
+  }
+  assert_eq(ffi_st_sqlite_live(), 0)
+}
+
+///|
+/// C2 BUG-6 可观测性：describe() 现在区分「配置的 journal_mode」与「实际生效值」，
+/// 并在两者不同时置 degraded=true（WAL 在 9p/网络盘上会降级成 DELETE）。
+test "store · describe() 报告实际生效的 journal_mode 与降级标记（C2 BUG-6）" {
+  let (store, dir) = open_store("sqlite-local")
+  match @rt.SqliteTaskStore::describe(store) {
+    {
+      "journal_mode": String(actual),
+      "journal_mode_configured": String(configured),
+      "journal_mode_degraded": degraded_j,
+      ..
+    } => {
+      assert_eq(configured, "WAL")
+      // ext4/NTFS 上 WAL 可用；若介质不支持会降级为 DELETE 且 degraded=true
+      assert_true(actual == "WAL" || actual == "DELETE")
+      let degraded = match degraded_j {
+        True => true
+        False => false
+        _ => false
+      }
+      let expect_degraded = actual != configured
+      assert_true(degraded == expect_degraded)
+    }
+    _ => fail("describe 缺 journal_mode 相关字段")
+  }
+  @rt.SqliteTaskStore::close(store)
+  assert_eq(ffi_st_sqlite_live(), 0)
+  ffi_st_rmrf(dir)
+}
