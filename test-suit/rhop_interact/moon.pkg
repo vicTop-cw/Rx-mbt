@@ -1,0 +1,8 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/json",
+}
+
+options(
+  targets: { "interact_test.mbt": [ "js" ] },
+)

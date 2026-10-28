@@ -1,0 +1,14 @@
+import {
+  "vicTop-cw/RX-MBT/rhop_task" @rt,
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/ref",
+}
+
+options(
+  targets: {
+    "task_secrets_js_test.mbt": [ "js" ],
+    "task_config_js_test.mbt": [ "js" ],
+  },
+)
