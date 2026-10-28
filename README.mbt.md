@@ -350,7 +350,7 @@ bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓�
 | `3` | 一步都没执行（`--skip` 全跳过；**不能当 PASS**） |
 | `4` | 构建锁等待超时（`with_moon_lock.sh` 并发冲突；非产品红，重试即可） |
 
-**最新实测计数（2026-10-28 17:4x C4 快照，Windows 11 / moon 0.1.20261016 / node v25.2.1；`scripts/test_all.sh` 四步 RESULT: PASS）**
+**最新实测计数（2026-10-28 18:1x C4 终态，Windows 11 / moon 0.1.20261016 / node v25.2.1；Windows 与 WSL 四步 `RESULT: PASS`，互操作 `--strict --require-negative` 47/47）**
 
 > ⚠️ C2 轮并行 lane（crypto/session/business）仍在持续追加测试，**跨 lane 总数会继续变化**；
 > 本表数字为上述快照时点实测，最终数字以 `bash scripts/test_all.sh`（qa 终验）输出为准；
@@ -360,12 +360,12 @@ bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓�
 |---|---:|---|
 | `test-suit/rhop`（wasm / js / native） | 159 / 163 / 159 | 全绿 |
 | `test-suit/rhop_vectors`（js，互操作产物生产者） | 0 / 3 / 0 | 全绿 |
-| `test-suit/rhop_js`（js） | 56 | 全绿 |
+| `test-suit/rhop_js`（js） | 60 | 全绿 |
 | `test-suit/rhop_clipboard`（js） | 25 | 全绿 |
-| `test-suit/rhop_interact`（js） | 23 | 全绿 |
-| `test-suit/rhop_business`（wasm / js / native） | 10 / 57 / 10 | 全绿 |
-| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 102 / 46 | 全绿 |
-| **全模块（项目级）** | **wasm 615 / js 849 / native 615**（C4 快照） | 全绿 |
+| `test-suit/rhop_interact`（js） | 28 | 全绿 |
+| `test-suit/rhop_business`（wasm / js / native） | 10 / 69 / 10 | 全绿 |
+| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 103 / 46 | 全绿 |
+| **全模块（项目级）** | **wasm 615 / js 851 / native 615**（C4 终态，双平台一致） | 全绿 |
 
 跨实现一致性由 `test-suit/rhop_js/fixtures/vools_vectors.json`（真实 vools-rhop 生成的 envelope 字节 /
 checksum / canonical JSON / digest / signer 向量）锁定，`scripts/verify_interop.py` 可反向复核。

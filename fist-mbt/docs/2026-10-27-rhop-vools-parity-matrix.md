@@ -256,7 +256,7 @@
 
 > 三个文件均已于 2026-10-28 落地（`rhop/session.mbt` / `rhop/config.mbt` / `rhop/interact.mbt`），
 > 测试（C3 实测）：`session_test.mbt` **20 例**、`config_test.mbt` **25 例**（都在 `test-suit/rhop`，wasm/js/native 三目标绿）、
-> `interact_test.mbt` **23 例**（`test-suit/rhop_interact`，js）。
+> `interact_test.mbt` **28 例**（`test-suit/rhop_interact`，js）。
 
 ### 4.1 `session.py` → `rhop/session.mbt`（7/7 ✅）
 
@@ -274,7 +274,7 @@
 
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
-| `interact(cfg, action, payload, mode)` | `interact.mbt: interact(RhopConfig, String, Json?, String, request_filename?) -> Result[Json, String]` | 三目标（纯分派）；**真实闭环仅 js** | `rhop_interact/interact_test.mbt`（23 例） | ✅ | mode：`execute`/`request`/`roundtrip`（roundtrip 依赖文件介质 ⇒ 仅 js 可端到端） |
+| `interact(cfg, action, payload, mode)` | `interact.mbt: interact(RhopConfig, String, Json?, String, request_filename?) -> Result[Json, String]` | 三目标（纯分派）；**真实闭环仅 js** | `rhop_interact/interact_test.mbt`（28 例） | ✅ | mode：`execute`/`request`/`roundtrip`（roundtrip 依赖文件介质 ⇒ 仅 js 可端到端） |
 | `handle_request(cfg, filename, session?)` | `interact.mbt: handle_request(RhopConfig, String, session? : Session) -> Result[Json, String]` | 三目标 | 同上 | ✅ | 回传 `res_` 前缀文件 |
 
 ### 4.3 `config.py` → `rhop/config.mbt`（11/11 ✅）
@@ -300,7 +300,7 @@
 > 六个业务文件 + clipboard 均已落地。测试分布：
 > `test-suit/rhop_business`（mirror 11 / executor 6 / requester 5 / daemon 6 / sync_folder 5 / sync_glob 5 / nonjs 5 例）、
 > `test-suit/rhop_clipboard`（25 例）、`test-suit/rhop_interact`（13 例）。
-> **C3 复核（2026-10-28）**：本域已全绿，无在途项。js 侧 `test-suit/rhop_business` **57 例**（mirror 11 / requester 5 / executor 6 / daemon 6 / sync_folder 5 / sync_glob 5 / actions_fs 3 / c2 回归 6 / p1 回归 6 / c3 回归 4），wasm+native 各 **10 例**（sync_glob 5 + nonjs 5）；`test-suit/rhop/actions_test.mbt` 10 例（三目标）。C2 修复了 daemon 消费幂等（P0）、符号链接遍历、分块摘要、临时目录残留等 8 项；C3 修复了 workspace 卫生并刷新本文档。详见 `fist-mbt/reports/2026-10-28-c{2,3}-{bugfind,fix}-business.md`。
+> **C3 复核（2026-10-28）**：本域已全绿，无在途项。js 侧 `test-suit/rhop_business` **69 例**（C4 终态）（mirror 11 / requester 5 / executor 6 / daemon 6 / sync_folder 5 / sync_glob 5 / actions_fs 3 / c2 回归 6 / p1 回归 6 / c3 回归 4），wasm+native 各 **10 例**（sync_glob 5 + nonjs 5）；`test-suit/rhop/actions_test.mbt` 10 例（三目标）。C2 修复了 daemon 消费幂等（P0）、符号链接遍历、分块摘要、临时目录残留等 8 项；C3 修复了 workspace 卫生并刷新本文档。详见 `fist-mbt/reports/2026-10-28-c{2,3}-{bugfind,fix}-business.md`。
 
 ### 5.1 `mirror.py` → `rhop/mirror.mbt`（12/12 ✅）
 
@@ -653,7 +653,7 @@ moon test -p test-suit/rhop_business --target js
 moon test -p test-suit/rhop_task --target js
 ```
 
-**复核时刻实测状态（C4 轮修复后快照 2026-10-28 17:4x，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧对照同数字）**
+**复核时刻实测状态（C4 终态快照 2026-10-28 18:1x，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧对照同数字）**
 
 > ⚠️ C2 并行 lane（crypto/session/business）仍在追加测试，**跨 lane 总数持续变化**；下表为本域快照，
 > 跨 lane / 项目级数字以 `bash scripts/test_all.sh`（qa 终验）为准。
@@ -666,16 +666,16 @@ moon test -p test-suit/rhop_task --target js
 | `moon test test-suit/rhop --target js` | `Total tests: 163, passed: 163, failed: 0.` |
 | `moon test test-suit/rhop --target native` | `Total tests: 159, passed: 159, failed: 0.` |
 | `moon test test-suit/rhop_vectors --target js` | `Total tests: 3, passed: 3, failed: 0.`（互操作产物生产者；含 tampered 负向与确定性回归） |
-| `moon test -p test-suit/rhop_js --target js` | `Total tests: 56, passed: 56, failed: 0.` |
+| `moon test -p test-suit/rhop_js --target js` | `Total tests: 60, passed: 60, failed: 0.` |
 | `moon test -p test-suit/rhop_clipboard --target js` | `Total tests: 25, passed: 25, failed: 0.` |
-| `moon test -p test-suit/rhop_interact --target js` | `Total tests: 23, passed: 23, failed: 0.` |
+| `moon test -p test-suit/rhop_interact --target js` | `Total tests: 28, passed: 28, failed: 0.` |
 | `moon test test-suit/rhop_business`（wasm/native） | `Total tests: 10, passed: 10, failed: 0.` |
-| `moon test test-suit/rhop_business --target js` | `Total tests: 57, passed: 57, failed: 0.` |
+| `moon test test-suit/rhop_business --target js` | `Total tests: 69, passed: 69, failed: 0.` |
 | `moon test test-suit/rhop_task`（wasm/native） | `Total tests: 46, passed: 46, failed: 0.`（P2a 纯逻辑部分）|
-| `moon test test-suit/rhop_task --target js` | `Total tests: 102, passed: 102, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
+| `moon test test-suit/rhop_task --target js` | `Total tests: 103, passed: 103, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
 | 项目级 `moon test`（wasm） | `Total tests: 615, passed: 615, failed: 0.`（C4 快照）|
 | 项目级 `moon test --target native` | `Total tests: 615, passed: 615, failed: 0.`（C4 快照）|
-| 项目级 `moon test --target js` | `Total tests: 849, passed: 849, failed: 0.`（C4 快照）|
+| 项目级 `moon test --target js` | `Total tests: 851, passed: 851, failed: 0.`（C4 终态，WSL 同数）|
 
 > 判绿纪律：只认 `moon test` 汇总行（`Total tests: N, passed: N, failed: 0`），不认 exit code。
 > 本表所有数字均在表格标注时刻实际运行得到；P2 / Batch D 在途项恢复后应重跑并把 `rhop_business` 一行改为 38/38。
@@ -699,26 +699,45 @@ moon test -p test-suit/rhop_task --target js
 | `test-suit/rhop_js/transport_test.mbt` | 16 | `transport/{base,local,endpoint,selector,shared}.py` | js |
 | `test-suit/rhop_js/watch_test.mbt` | 6 | `watch.py` | js |
 | `test-suit/rhop_js/relay_test.mbt` | 6 | `transport/relay.py` | js |
-| **`test-suit/rhop_js` 小计** | **56** | — | js |
+| **`test-suit/rhop_js` 小计** | **60** | — | js |
 | `test-suit/rhop_clipboard/clipboard_test.mbt` | 25 | `clipboard.py`（push/pull 状态机、探测、边界） | js |
-| `test-suit/rhop_interact/interact_test.mbt` | 23 | `interact.py` + `actions/` 三模式 | js |
+| `test-suit/rhop_interact/interact_test.mbt` | 28 | `interact.py` + `actions/` 三模式 | js |
 | `test-suit/rhop_business/mirror_test.mbt` | 11 | `mirror.py` | js |
 | `test-suit/rhop_business/executor_test.mbt` | 6 | `executor.py` | js |
 | `test-suit/rhop_business/requester_test.mbt` | 5 | `requester.py` | js |
 | `test-suit/rhop_business/daemon_test.mbt` | 6 | `daemon.py` | js |
 | `test-suit/rhop_business/sync_folder_test.mbt` + `sync_glob_test.mbt` | 5 + 5 | `sync_folder.py` | js |
 | `test-suit/rhop_business/nonjs_test.mbt` + helpers | 5（+ 0 例 helper 模块） | 非 js 降级路径 | wasm/native |
-| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 57（js）** | — | — |
-| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 102（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
+| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 69（js）** | — | — |
+| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 103（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
 
 **rhop 相关合计**
 
-- **js 口径**：163(rhop) + 3(vectors) + 56(rhop_js) + 25(clipboard) + 23(interact) + 57(business) + 102(task) = **429 例**（C4 快照）
+- **js 口径**：163(rhop) + 3(vectors) + 60(rhop_js) + 25(clipboard) + 28(interact) + 69(business) + 103(task) = **451 例**（C4 终态）
 - **wasm / native 口径**：159(rhop) + 10(business) + 46(task) = **215 例**（不含 js-only 包）
-- **全模块（项目级，C4 快照）**：wasm **615** / js **849** / native **615**，三目标全绿
+- **全模块（项目级，C4 终态）**：wasm **615** / js **851** / native **615**，三目标全绿（Windows 与 WSL 逐字一致）
 - 其中 vools 契约范围（A–D + clipboard）约 323 例（js），P2 占 102 例（js）
 
 ## 11. 本轮完成情况与「待终轮更新」清单
+
+**C4 终态（2026-10-28 18:1x，Windows 与 WSL 逐字一致）**
+
+- 项目级：`moon check` 三目标 0 error；**wasm 615 / js 851 / native 615** 全绿
+- 分包（wasm/js/native）：`rhop` **159/163/159**、`rhop_vectors` **0/3/0**、`rhop_js` 60（js）、`rhop_clipboard` 25、
+  `rhop_interact` 28、`rhop_business` **10/69/10**、`rhop_task` **46/103/46**
+- 互操作：`scripts/verify_interop.py --strict --require-negative` → **PASS=47 / FAIL=0 / WARN=0 / SKIP=0**
+- determinism：`scripts/check_determinism.sh` PASS（生成器同 sha `f22dda48…`；生产者仅 5 个 crypto 随机字段变化）
+- 生成物：5 个产物已 untrack + `.gitignore` 补全 ⇒ `git status` 干净
+
+**C4 修复入账（本域相关，详见 `fist-mbt/reports/2026-10-28-c4-{bugfind,fix}-protocol.md`）**
+
+1. **跨进程读路径以「列为准」**（快照撕裂 P1）：读 `.rhop` 时以**列出的文件**为准而非订阅时刻快照，避免并发写/读下的半可见状态（crypto/transport 域同修）。
+2. **掩码键表泄漏（P1）**：`RhopConfig.to_dict` 的脱敏从「仅 sftp.password/key_path」改为**递归键表**（sftp/online/shared/relay 下 `password`/`key_path`/`token`/`secret`/… 全掩码），比 vools 更严。
+3. **密钥 BOM（P1）**：config 层统一 `cfg_strip_bom`（去 UTF-8 BOM、**不 trim**）——Windows 记事本写出的密钥文件在 Linux/WSL 下也可用。
+4. **`json_canonical` 10MB 加速（P1）**：字符串转义改「普通字符 run 批量写」，10MB payload checksum/写/读 **3531/3522/3437 ms → 632/366/334 ms（5.6×/9.6×/10.3×）**，输出逐字节不变。
+5. **relay token 恒时比较（P2，安全）**：中转服务校验 `x-rhop-token` 时先各自 sha256 再 `crypto.timingSafeEqual`，避免长度/前缀时序侧信道。
+6. **生成物确定性 / untrack（P1）**：生产者产物带 `deterministic_sections`/`volatile_sections`/`deterministic_digest`；随机分节（crypto）不参与摘要；仓库侧已 untrack 5 个产物。
+7. **`HttpEndpoint.read_text` 非破坏性**（与 vools 一致）：普通 GET，读后不删除远端对象（删除需显式 `remove`）。
 
 **本轮（v2）已完成**
 1. Batch C 全部落地核实并转 ✅：`session.mbt`(7)、`config.mbt`(11)、`interact.mbt`(2)，测试 15 + 18 + 13 例。

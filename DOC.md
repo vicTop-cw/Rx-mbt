@@ -2,6 +2,9 @@
 
 > 本文档由 `rx/pkg.generated.mbti`（`moon info` 生成）与源码注释整理，列出全部公开 API 的签名与语义说明。
 > 库版本：`vicTop-cw/RX-MBT@0.4.0`　工具链：`moon 0.1.20261016`　编译目标：`wasm`（rhop 相关 API 另见各条目标标注）
+>
+> C4 终态实测（2026-10-28）：`moon check` 三目标 0 error；项目级 **wasm 615 / js 851 / native 615** 全绿（Windows 与 WSL 一致）；
+> 互操作 `verify_interop.py --strict --require-negative` **47/47 PASS**；生成物 determinism PASS（产物已 untrack）。
 
 ## 目录
 
@@ -771,6 +774,9 @@ pub fn integrity_checksum_match(Envelope) -> Bool
 ### key.mbt —— 密钥与校验结果（三目标；path 分支仅 js）
 
 > **路径约定**：本项目**不做 `~` 展开**（两平台一致，避免平台差异）；请给**绝对路径**或用 `RHOP_KEY` 环境变量。
+>
+> **BOM 归一（C4）**：密钥来源（文件 / 环境变量 / 配置内联）统一剥离开头 UTF-8 BOM（U+FEFF；内部实现 `cfg_strip_bom`），
+> **只去 BOM、不 trim 空白**——Windows 记事本写出的密钥文件在 WSL/Linux 下可直接使用。
 
 ```moonbit
 pub struct VerifyResult { ok : Bool; payload : Json?; reason : String }   // reason: OK/MALFORMED/BAD_TOKEN/NOT_JSON
@@ -885,6 +891,7 @@ pub struct HttpEndpoint { … }     // WebDAV 风格 PUT/GET/DELETE
 pub fn HttpEndpoint::new(String, String?, Int32) -> Self          // (base_url, token?, timeout_ms)
 pub fn HttpEndpoint::base(Self) -> String
 pub fn HttpEndpoint::url_of(Self, String) -> String
+// read_text 是**非破坏性** GET（读后不删除远端对象；删除请显式 remove），与 vools 一致
 pub fn parse_endpoint(String) -> Result[&EndpointView, String]     // 裸路径 / file:// / http(s)://
 pub fn is_file_url(String) -> Bool
 pub fn file_url_to_path(String) -> Result[String, String]
@@ -895,6 +902,8 @@ pub struct HttpResp { status : Int32; body : String }
 > 「URL 形态 ≠ 联网」：`file://` 与 `http(s)://` 都属 shared path 兜底层，不参与「在线优先」判定。
 
 ### transport_selector.mbt / online.mbt / relay.mbt —— 通道与中转
+
+> **安全（C4）**：`RelayServer` 校验 `x-rhop-token` 时对两侧先做 sha256 再 `crypto.timingSafeEqual`（恒时比较，避免长度/前缀时序侧信道）。
 
 ```moonbit
 pub fn select_transport(Array[&OnlineChannel], &SharedPath?) -> TransportSelection
@@ -957,7 +966,8 @@ pub struct RhopConfig { key : String; role : Role; sftp : Json?; online : Json?;
 pub fn RhopConfig::new(String, Role, Json?, Json?, Json?, Json?, String) -> Self
 pub fn RhopConfig::from_dict(Json) -> Result[Self, String]
 pub fn RhopConfig::from_file(String) -> Result[Self, String]          // 仅 js
-pub fn RhopConfig::to_dict(Self) -> Json                    // 递归深度脱敏：sftp/online/shared/relay 下 password/key_path/token/secret → "***"（比 vools 更严）
+pub fn RhopConfig::to_dict(Self) -> Json                    // 递归键表脱敏：sftp/online/shared/relay 下 password/key_path/token/secret 等 → "***"（比 vools 更严）
+// 注（C4）：脱敏用**键名表**递归匹配（action_cfg 仍是原文凭据视图，二者不要混用）
 pub fn RhopConfig::build_crypto(Self) -> RhopCrypto
 pub fn RhopConfig::build_online(Self) -> Result[Array[&OnlineChannel], String]
 pub fn RhopConfig::build_shared(Self) -> Result[SharedPathView?, String]
