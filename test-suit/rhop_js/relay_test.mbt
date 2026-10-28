@@ -204,3 +204,43 @@ extern "js" fn ffi_r_mkdtemp(prefix : String) -> String =
 ///|
 extern "js" fn ffi_r_rmrf(p : String) -> Unit =
   #| (p) => { try { process.getBuiltinModule("node:fs").rmSync(String(p), { recursive: true, force: true }); } catch (_e) {} }
+
+// ---------------------------------------------------------------------------
+// 泄漏兜底（防 js 测试进程挂死）
+//
+// 背景：node 只有在事件循环里没有活跃 handle 时才退出。中转子进程若没被 stop()，
+// 或某个用例在 stop() 之前断言失败，就会留下活着的子进程/句柄，表现为
+// 「断言全过但 moon 不打印汇总行、进程永久挂住」（qa 2026-10-27 复现过）。
+// 正常路径下每个用例都会自己 stop()；本用例是**兜底 + 回归断言**：
+// 残留数必须能被清到 0，否则说明有用例漏了 stop。
+// ---------------------------------------------------------------------------
+
+///|
+/// 当前仍注册着的中转子进程数。
+extern "js" fn ffi_r_relay_live_count() -> Int =
+  #| () => { const G = globalThis; if (!G.__rxmbt_relay) { return 0; } let n = 0; for (const _k of G.__rxmbt_relay.keys()) { n++; } return n; }
+
+///|
+/// 杀掉并移除所有已注册的中转子进程（幂等兜底）。
+extern "js" fn ffi_r_relay_kill_all() -> Unit =
+  #| () => { const G = globalThis; if (!G.__rxmbt_relay) { return; } for (const [k, c] of G.__rxmbt_relay) { try { c.kill(); } catch (_e) {} } G.__rxmbt_relay.clear(); }
+
+///|
+/// 有余留 node 句柄的类别（用于定位挂死来源）。
+extern "js" fn ffi_r_active_resources() -> String =
+  #| () => { try { const f = process.getActiveResourcesInfo; if (!f) { return "[]"; } return JSON.stringify(f.call(process)); } catch (_e) { return "[]"; } }
+
+///|
+test "relay · 收尾：无遗留中转子进程（js 挂死兜底 + 回归断言）" {
+  let live = ffi_r_relay_live_count()
+  if live > 0 {
+    println(
+      "[relay] 发现 \{live.to_string()} 个未停止的中转子进程（有用例未走到 stop），兜底清理",
+    )
+  }
+  ffi_r_relay_kill_all()
+  assert_eq(ffi_r_relay_live_count(), 0)
+  // 句柄快照打印出来，便于下次真的挂死时一眼定位（FSWatcher/Server/Socket/Timer…）
+  println("[relay] active resources = " + ffi_r_active_resources())
+}
+

@@ -29,3 +29,8 @@ pkg.generated.mbti
 backup/
 /mb*.txt
 .fist-mbt/
+fist-mbt.db-shm
+fist-mbt.db-wal
+.mcp.json
+@TMP@/
+rhop-data/

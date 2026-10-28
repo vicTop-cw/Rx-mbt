@@ -31,7 +31,7 @@ struct MemPath {
 ///|
 /// 构造内存介质（`reachable=false` 模拟不可达挂载）。
 fn MemPath::new(label : String, reachable : Bool) -> MemPath {
-  { files: Map([]), reachable, label }
+  { files: Map([]), reachable, label, }
 }
 
 ///|
@@ -55,7 +55,10 @@ impl @rp.SharedPath for MemPath with fn write_text(self, filename, content) {
 impl @rp.SharedPath for MemPath with fn read_text(self, filename) {
   match self.files.get(filename) {
     Some(v) => Ok(v)
-    None => Err("rhop: 读取失败: " + self.label + "/" + filename + ": no such file")
+    None =>
+      Err(
+        "rhop: 读取失败: " + self.label + "/" + filename + ": no such file",
+      )
   }
 }
 
@@ -95,7 +98,7 @@ struct MemChannel {
 ///|
 /// 构造内存通道。
 fn MemChannel::new(label : String, up : Bool) -> MemChannel {
-  { store: Map([]), up, label }
+  { store: Map([]), up, label, }
 }
 
 ///|

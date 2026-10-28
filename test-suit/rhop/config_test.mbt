@@ -88,7 +88,8 @@ test "config · from_dict：role 大小写不敏感；未知 role / 非字符串
     }
     Err(e) => abort("recv 角色应当解析成功: \{e}")
   }
-  match @rp.RhopConfig::from_dict(cfgj("{\"key\": \"k\", \"role\": \"bogus\"}")) {
+  match
+    @rp.RhopConfig::from_dict(cfgj("{\"key\": \"k\", \"role\": \"bogus\"}")) {
     Ok(_) => abort("未知 role 应当 Err")
     Err(e) => assert_true(e.contains("未知角色"))
   }
@@ -157,28 +158,32 @@ test "config · _key_from_cfg：None / null / 非法形态均可诊断 Err" {
 test "config · _key_from_cfg 分支 4：{\"path\"} / {\"env\"} 走 load_key（两目标都 Err）" {
   // 不存在的密钥文件：js 目标「读取密钥文件失败」，wasm/native「读文件仅 js 可用」，
   // 统一落到 load_key 的「未找到本地固定密钥」或文件错误 —— 断言 Err 即可。
-  match @rp._key_from_cfg(
-    Some(cfgj("{\"path\": \"/no/such/rhop-key-file\"}")),
-  ) {
+  match
+    @rp._key_from_cfg(Some(cfgj("{\"path\": \"/no/such/rhop-key-file\"}"))) {
     Ok(_) => abort("不存在的 path 应当 Err")
     Err(e) => assert_true(e.length() > 0)
   }
   // 未设置的环境变量
-  match @rp._key_from_cfg(
-    Some(cfgj("{\"env\": \"RX_MBT_NO_SUCH_KEY_ENV_XYZ\"}")),
-  ) {
+  match
+    @rp._key_from_cfg(Some(cfgj("{\"env\": \"RX_MBT_NO_SUCH_KEY_ENV_XYZ\"}"))) {
     Ok(_) => abort("未设置的 env 应当 Err")
-    Err(e) => {
-      assert_true(e.contains("未找到本地固定密钥") || e.contains("未设置"))
-    }
+    Err(e) =>
+      assert_true(
+        e.contains("未找到本地固定密钥") || e.contains("未设置"),
+      )
   }
 }
 
 ///|
 test "config · _key_from_cfg 分支 3：{\"cipher\"} 缺外层密钥 → 可诊断 Err（不自己解自己）" {
-  match @rp._key_from_cfg(
-    Some(cfgj("{\"cipher\": \"RHOP-ENC:AAAA\", \"env\": \"RX_MBT_NO_SUCH_UNLOCK_ENV\"}")),
-  ) {
+  match
+    @rp._key_from_cfg(
+      Some(
+        cfgj(
+          "{\"cipher\": \"RHOP-ENC:AAAA\", \"env\": \"RX_MBT_NO_SUCH_UNLOCK_ENV\"}",
+        ),
+      ),
+    ) {
     Ok(_) => abort("缺外层密钥应当 Err")
     Err(e) => assert_true(e.contains("外层密钥"))
   }
@@ -258,7 +263,10 @@ test "config · build_online：sftp / git / relay 三种 kind 都能构造，名
         @rp.OnlineChannel::name(channels[1]),
         "git:https://example.invalid/r.git",
       )
-      assert_eq(@rp.OnlineChannel::name(channels[2]), "relay:http://127.0.0.1:9")
+      assert_eq(
+        @rp.OnlineChannel::name(channels[2]),
+        "relay:http://127.0.0.1:9",
+      )
     }
   }
   // 无 online 配置 → 空数组（不是 Err）
@@ -280,18 +288,21 @@ test "config · build_online：未知 kind / 非数组 / git 缺 remote_url 均�
       Err(e) => abort("配置应当成功: \{e}")
     }
   }
-  match mk("{\"key\": \"k\", \"online\": [{\"kind\": \"ftp\"}]}").build_online() {
+  match
+    mk("{\"key\": \"k\", \"online\": [{\"kind\": \"ftp\"}]}").build_online() {
     Ok(_) => abort("未知 kind 应当 Err")
     Err(e) => {
       assert_true(e.contains("不支持的在线通道 kind"))
       assert_true(e.contains("sftp/git/relay"))
     }
   }
-  match mk("{\"key\": \"k\", \"online\": {\"kind\": \"sftp\"}}").build_online() {
+  match
+    mk("{\"key\": \"k\", \"online\": {\"kind\": \"sftp\"}}").build_online() {
     Ok(_) => abort("online 非数组应当 Err")
     Err(e) => assert_true(e.contains("必须是数组"))
   }
-  match mk("{\"key\": \"k\", \"online\": [{\"kind\": \"git\"}]}").build_online() {
+  match
+    mk("{\"key\": \"k\", \"online\": [{\"kind\": \"git\"}]}").build_online() {
     Ok(_) => abort("git 缺 remote_url 应当 Err")
     Err(e) => assert_true(e.contains("remote_url"))
   }
@@ -311,7 +322,8 @@ test "config · build_shared：无配置 Ok(None)；单 spec / 地址字符串�
     Err(e) => abort("无 shared 配置不应 Err: \{e}")
   }
   // 1) 对象单 spec（读=写）
-  match mk("{\"key\": \"k\", \"shared\": {\"write\": \"/tmp/rhop-share-a\"}}").build_shared() {
+  match
+    mk("{\"key\": \"k\", \"shared\": {\"write\": \"/tmp/rhop-share-a\"}}").build_shared() {
     Ok(Some(view)) => {
       assert_eq(view.write_name(), view.read_name())
       assert_true(view.read_name().contains("rhop-share-a"))
@@ -320,18 +332,21 @@ test "config · build_shared：无配置 Ok(None)；单 spec / 地址字符串�
     Err(e) => abort("单 spec 应当成功: \{e}")
   }
   // 2) 地址字符串简写
-  match mk("{\"key\": \"k\", \"shared\": \"/tmp/rhop-share-b\"}").build_shared() {
+  match
+    mk("{\"key\": \"k\", \"shared\": \"/tmp/rhop-share-b\"}").build_shared() {
     Ok(Some(view)) => assert_true(view.read_name().contains("rhop-share-b"))
     Ok(None) => abort("字符串简写不应为 None")
     Err(e) => abort("字符串简写应当成功: \{e}")
   }
   // 3) 缺 write/spec
-  match mk("{\"key\": \"k\", \"shared\": {\"read\": \"/tmp/x\"}}").build_shared() {
+  match
+    mk("{\"key\": \"k\", \"shared\": {\"read\": \"/tmp/x\"}}").build_shared() {
     Ok(_) => abort("缺 write/spec 应当 Err")
     Err(e) => assert_true(e.contains("write/spec"))
   }
   // 4) 地址非法（未知协议）
-  match mk("{\"key\": \"k\", \"shared\": {\"write\": \"ftp://h/s\"}}").build_shared() {
+  match
+    mk("{\"key\": \"k\", \"shared\": {\"write\": \"ftp://h/s\"}}").build_shared() {
     Ok(_) => abort("未知协议应当 Err")
     Err(e) => assert_true(e.contains("shared 配置非法"))
   }
@@ -341,7 +356,9 @@ test "config · build_shared：无配置 Ok(None)；单 spec / 地址字符串�
 test "config · build_shared：http(s) 写端必须解析成 http-url（不能当本地目录）" {
   let c = match
     @rp.RhopConfig::from_dict(
-      cfgj("{\"key\": \"k\", \"shared\": {\"write\": \"http://127.0.0.1:9/share\"}}"),
+      cfgj(
+        "{\"key\": \"k\", \"shared\": {\"write\": \"http://127.0.0.1:9/share\"}}",
+      ),
     ) {
     Ok(v) => v
     Err(e) => abort("配置应当成功: \{e}")
@@ -387,7 +404,10 @@ test "config · build_relay：无配置 Ok(None)；有配置给通道；非对�
     Ok(None) => ()
     _ => abort("无 relay 配置应当 Ok(None)")
   }
-  match mk("{\"key\": \"k\", \"relay\": {\"host\": \"10.0.0.2\", \"port\": 7777, \"token\": \"tk\"}}").build_relay() {
+  match
+    mk(
+      "{\"key\": \"k\", \"relay\": {\"host\": \"10.0.0.2\", \"port\": 7777, \"token\": \"tk\"}}",
+    ).build_relay() {
     Ok(Some(rc)) => {
       let ch : &@rp.OnlineChannel = rc
       assert_eq(@rp.OnlineChannel::name(ch), "relay:http://10.0.0.2:7777")
@@ -438,9 +458,10 @@ test "config · build_session：角色缺省/覆盖、介质与密钥装配、�
     Err(e) => abort("角色覆盖应当成功: \{e}")
   }
   // 坏 online 配置 → build_session 也 Err（不吞错）
-  let bad = match @rp.RhopConfig::from_dict(
-    cfgj("{\"key\": \"k\", \"online\": [{\"kind\": \"nope\"}]}"),
-  ) {
+  let bad = match
+    @rp.RhopConfig::from_dict(
+      cfgj("{\"key\": \"k\", \"online\": [{\"kind\": \"nope\"}]}"),
+    ) {
     Ok(v) => v
     Err(e) => abort("配置应当成功: \{e}")
   }
@@ -488,16 +509,17 @@ test "config · action_cfg：透出 sftp + has_key + config_name，且不含密�
 
 ///|
 test "config · load_config：对象直传 / 数字与空串可诊断 Err" {
-  let direct = @rp.load_config(
-    cfgj("{\"key\": \"k\", \"name\": \"dev-C\"}"),
-  )
+  let direct = @rp.load_config(cfgj("{\"key\": \"k\", \"name\": \"dev-C\"}"))
   match direct {
     Ok(c) => assert_eq(c.name(), "dev-C")
     Err(e) => abort("对象直传应当成功: \{e}")
   }
   match @rp.load_config(cfgj("42")) {
     Ok(_) => abort("数字不是合法 cfg")
-    Err(e) => assert_true(e.contains("必须是配置对象 JSON 或 JSON 文件路径"))
+    Err(e) =>
+      assert_true(
+        e.contains("必须是配置对象 JSON 或 JSON 文件路径"),
+      )
   }
   match @rp.load_config(Json::string("")) {
     Ok(_) => abort("空串应当 Err")

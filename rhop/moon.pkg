@@ -2,10 +2,14 @@ import {
   "vicTop-cw/RX-MBT/monitor",
   "vicTop-cw/RX-MBT/rx",
   "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
   "moonbitlang/core/json",
   "moonbitlang/core/hashset",
   "moonbitlang/core/ref",
+  "moonbitlang/core/string",
+  "moonbitlang/core/buffer",
 }
 
 options(

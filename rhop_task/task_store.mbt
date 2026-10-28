@@ -41,9 +41,9 @@ pub(all) struct TaskStoreSpec {
   /// 全局锁租约（秒）
   lock_ttl_sec : Double
   /// 一次 claim 的扫描行数上限
-  claim_scan_limit : Int
+  claim_scan_limit : Int32
   /// 写重试次数（"database is locked" 退避重试）
-  write_retries : Int
+  write_retries : Int32
   /// 重试退避基数（秒）
   retry_backoff_sec : Double
 }
@@ -148,9 +148,21 @@ pub fn schema_sql(table : String) -> String {
     "    updated_at TEXT NOT NULL",
     "  );",
     "CREATE INDEX IF NOT EXISTS " + idx + "_state ON " + table + "(state);",
-    "CREATE INDEX IF NOT EXISTS " + idx + "_priority ON " + table + "(priority);",
-    "CREATE INDEX IF NOT EXISTS " + idx + "_lock_time ON " + table + "(lock_time);",
-    "CREATE INDEX IF NOT EXISTS " + idx + "_scheduled ON " + table + "(scheduled_at);",
+    "CREATE INDEX IF NOT EXISTS " +
+    idx +
+    "_priority ON " +
+    table +
+    "(priority);",
+    "CREATE INDEX IF NOT EXISTS " +
+    idx +
+    "_lock_time ON " +
+    table +
+    "(lock_time);",
+    "CREATE INDEX IF NOT EXISTS " +
+    idx +
+    "_scheduled ON " +
+    table +
+    "(scheduled_at);",
     "CREATE INDEX IF NOT EXISTS " + idx + "_worker ON " + table + "(worker_id);",
     "CREATE INDEX IF NOT EXISTS " + idx + "_type ON " + table + "(task_type);",
     "CREATE INDEX IF NOT EXISTS " + idx + "_queue ON " + table + "(queue);",
@@ -209,11 +221,9 @@ pub fn SqliteTaskStore::open(
     (spec.busy_timeout_sec * 1000.0).to_int(),
   )
   if id < 0L {
-    return Err(
-      "打开数据库失败 \{spec.path}: \{sqlite_last_error()}",
-    )
+    return Err("打开数据库失败 \{spec.path}: \{sqlite_last_error()}")
   }
-  let store = { spec, db: id, closed: false }
+  let store = { spec, db: id, closed: false, }
   match store.init_schema() {
     Err(e) => {
       store.close()
@@ -226,7 +236,9 @@ pub fn SqliteTaskStore::open(
 
 ///|
 /// 建表 + 索引（幂等；与 vools 一样把 user_version 置 1）。
-pub fn SqliteTaskStore::init_schema(self : SqliteTaskStore) -> Result[Unit, String] {
+pub fn SqliteTaskStore::init_schema(
+  self : SqliteTaskStore,
+) -> Result[Unit, String] {
   match self.exec(schema_sql(self.spec.table)) {
     Err(e) => return Err("初始化表 \{self.spec.table} 失败: \{e}")
     Ok(_) => ()
@@ -284,7 +296,10 @@ pub fn SqliteTaskStore::describe(self : SqliteTaskStore) -> Json {
 
 ///|
 /// 执行一条无参数 SQL（DDL / PRAGMA / BEGIN-COMMIT）。
-fn SqliteTaskStore::exec(self : SqliteTaskStore, sql : String) -> Result[Unit, String] {
+fn SqliteTaskStore::exec(
+  self : SqliteTaskStore,
+  sql : String,
+) -> Result[Unit, String] {
   if self.is_closed() {
     return Err("rhop_task: 数据库已关闭")
   }
@@ -301,7 +316,7 @@ fn SqliteTaskStore::run(
   self : SqliteTaskStore,
   sql : String,
   params : Array[Json],
-) -> Result[(Int, Int64), String] {
+) -> Result[(Int32, Int64), String] {
   if self.is_closed() {
     return Err("rhop_task: 数据库已关闭")
   }
@@ -418,7 +433,7 @@ fn to_db_value(column : String, v : Json) -> Json {
 pub fn SqliteTaskStore::insert_tasks(
   self : SqliteTaskStore,
   records : Array[TaskRecord],
-) -> Result[Int, String] {
+) -> Result[Int32, String] {
   if records.length() == 0 {
     return Ok(0)
   }
@@ -505,11 +520,10 @@ fn jget_or_null(obj : Json, key : String) -> Json {
 /// 可写附加列白名单（防止把 task_name 等身份列改掉）。
 fn mutable_fields() -> Array[String] {
   [
-    "task_type", "value", "deps", "priority", "timeout_min", "retry_delay_min",
-    "retry_count", "max_retries", "scheduled_at", "worker_id", "lock_time",
-    "expire_time", "start_time", "end_time", "cancel_requested", "payload_enc",
-    "payload_sha", "back_info", "last_err", "tags", "queue", "owner", "team",
-    "group_name", "extra_desc",
+    "task_type", "value", "deps", "priority", "timeout_min", "retry_delay_min", "retry_count",
+    "max_retries", "scheduled_at", "worker_id", "lock_time", "expire_time", "start_time",
+    "end_time", "cancel_requested", "payload_enc", "payload_sha", "back_info", "last_err",
+    "tags", "queue", "owner", "team", "group_name", "extra_desc",
   ]
 }
 
@@ -522,7 +536,7 @@ pub fn SqliteTaskStore::set_state(
   self : SqliteTaskStore,
   task_name : String,
   state : TaskState,
-  expect_version : Int?,
+  expect_version : Int32?,
   force : Bool,
   extra : Json,
   now : String,
@@ -531,10 +545,11 @@ pub fn SqliteTaskStore::set_state(
     Err(e) => return Err(e)
     Ok(_) => ()
   }
-  let rows = match self.query_all(
-    "SELECT * FROM " + self.spec.table + " WHERE task_name = ?",
-    [Json::string(task_name)],
-  ) {
+  let rows = match
+    self.query_all(
+      "SELECT * FROM " + self.spec.table + " WHERE task_name = ?",
+      [Json::string(task_name)],
+    ) {
     Err(e) => {
       let _ = self.exec("ROLLBACK")
       return Err(e)
@@ -567,8 +582,13 @@ pub fn SqliteTaskStore::set_state(
     )
   }
   // 组装 SET 子句
-  let sets : Array[String] = ["state = ?", "version = version + 1", "updated_at = ?"]
-  let params : Array[Json] = [Json::string(state.to_string()), Json::string(now)]
+  let sets : Array[String] = [
+    "state = ?", "version = version + 1", "updated_at = ?",
+  ]
+  let params : Array[Json] = [
+    Json::string(state.to_string()),
+    Json::string(now),
+  ]
   for key in mutable_fields() {
     match extra {
       Object(m) =>
@@ -613,10 +633,11 @@ pub fn SqliteTaskStore::update_fields(
     Err(e) => return Err(e)
     Ok(_) => ()
   }
-  let exists = match self.query_one(
-    "SELECT 1 FROM " + self.spec.table + " WHERE task_name = ?",
-    [Json::string(task_name)],
-  ) {
+  let exists = match
+    self.query_one(
+      "SELECT 1 FROM " + self.spec.table + " WHERE task_name = ?",
+      [Json::string(task_name)],
+    ) {
     Err(e) => {
       let _ = self.exec("ROLLBACK")
       return Err(e)
@@ -682,10 +703,11 @@ pub fn SqliteTaskStore::claim_next(
     Ok(_) => ()
   }
   // 已完成任务名集合（依赖门控在 MoonBit 侧做，兼容无 JSON1 的 SQLite）
-  let done_rows = match self.query_all(
-    "SELECT task_name FROM " + self.spec.table + " WHERE state = ?",
-    [Json::string("COMPLETED")],
-  ) {
+  let done_rows = match
+    self.query_all(
+      "SELECT task_name FROM " + self.spec.table + " WHERE state = ?",
+      [Json::string("COMPLETED")],
+    ) {
     Err(e) => {
       let _ = self.exec("ROLLBACK")
       return Err(e)
@@ -704,12 +726,13 @@ pub fn SqliteTaskStore::claim_next(
     " WHERE state IN (?, ?) AND cancel_requested = 0 " +
     "AND (scheduled_at IS NULL OR scheduled_at <= ?) " +
     "ORDER BY priority DESC, task_id ASC LIMIT ?"
-  let rows = match self.query_all(sql, [
-    Json::string("PENDING"),
-    Json::string("RETRY_PENDING"),
-    Json::string(now),
-    Json::number(self.spec.claim_scan_limit.to_double()),
-  ]) {
+  let rows = match
+    self.query_all(sql, [
+      Json::string("PENDING"),
+      Json::string("RETRY_PENDING"),
+      Json::string(now),
+      Json::number(self.spec.claim_scan_limit.to_double()),
+    ]) {
     Err(e) => {
       let _ = self.exec("ROLLBACK")
       return Err(e)
@@ -790,15 +813,16 @@ pub fn SqliteTaskStore::claim_next(
 pub fn SqliteTaskStore::clean_stale_locks(
   self : SqliteTaskStore,
   now : String,
-) -> Result[Int, String] {
+) -> Result[Int32, String] {
   let sql = "SELECT * FROM " +
     self.spec.table +
     " WHERE state IN (?, ?) AND expire_time IS NOT NULL AND expire_time < ?"
-  let rows = match self.query_all(sql, [
-    Json::string("LOCKED"),
-    Json::string("RUNNING"),
-    Json::string(now),
-  ]) {
+  let rows = match
+    self.query_all(sql, [
+      Json::string("LOCKED"),
+      Json::string("RUNNING"),
+      Json::string(now),
+    ]) {
     Err(e) => return Err(e)
     Ok(v) => v
   }
@@ -868,10 +892,11 @@ pub fn SqliteTaskStore::get_task(
   self : SqliteTaskStore,
   task_name : String,
 ) -> Result[TaskRecord?, String] {
-  let row = match self.query_one(
-    "SELECT * FROM " + self.spec.table + " WHERE task_name = ?",
-    [Json::string(task_name)],
-  ) {
+  let row = match
+    self.query_one(
+      "SELECT * FROM " + self.spec.table + " WHERE task_name = ?",
+      [Json::string(task_name)],
+    ) {
     Err(e) => return Err(e)
     Ok(v) => v
   }
@@ -903,22 +928,24 @@ pub fn SqliteTaskStore::require_task(
 pub fn SqliteTaskStore::list_tasks(
   self : SqliteTaskStore,
   state : TaskState?,
-  limit : Int,
+  limit : Int32,
 ) -> Result[Array[TaskRecord], String] {
   let lim = if limit <= 0 { 200 } else { limit }
   let (sql, params) = match state {
-    Some(s) => (
-      "SELECT * FROM " +
-      self.spec.table +
-      " WHERE state = ? ORDER BY priority DESC, task_id ASC LIMIT ?",
-      [Json::string(s.to_string()), Json::number(lim.to_double())],
-    )
-    None => (
-      "SELECT * FROM " +
-      self.spec.table +
-      " ORDER BY priority DESC, task_id ASC LIMIT ?",
-      [Json::number(lim.to_double())],
-    )
+    Some(s) =>
+      (
+        "SELECT * FROM " +
+        self.spec.table +
+        " WHERE state = ? ORDER BY priority DESC, task_id ASC LIMIT ?",
+        [Json::string(s.to_string()), Json::number(lim.to_double())],
+      )
+    None =>
+      (
+        "SELECT * FROM " +
+        self.spec.table +
+        " ORDER BY priority DESC, task_id ASC LIMIT ?",
+        [Json::number(lim.to_double())],
+      )
   }
   let rows = match self.query_all(sql, params) {
     Err(e) => return Err(e)
@@ -939,12 +966,11 @@ pub fn SqliteTaskStore::list_tasks(
 pub fn SqliteTaskStore::all_task_names(
   self : SqliteTaskStore,
 ) -> Result[Array[String], String] {
-  let rows = match self.query_all(
-    "SELECT task_name FROM " +
-    self.spec.table +
-    " ORDER BY task_id ASC",
-    [],
-  ) {
+  let rows = match
+    self.query_all(
+      "SELECT task_name FROM " + self.spec.table + " ORDER BY task_id ASC",
+      [],
+    ) {
     Err(e) => return Err(e)
     Ok(v) => v
   }
@@ -962,17 +988,16 @@ pub fn SqliteTaskStore::all_task_names(
 /// 各状态任务数（只返回出现过的状态）。
 pub fn SqliteTaskStore::count_by_state(
   self : SqliteTaskStore,
-) -> Result[Map[String, Int], String] {
-  let rows = match self.query_all(
-    "SELECT state, COUNT(*) AS n FROM " +
-    self.spec.table +
-    " GROUP BY state",
-    [],
-  ) {
+) -> Result[Map[String, Int32], String] {
+  let rows = match
+    self.query_all(
+      "SELECT state, COUNT(*) AS n FROM " + self.spec.table + " GROUP BY state",
+      [],
+    ) {
     Err(e) => return Err(e)
     Ok(v) => v
   }
-  let out : Map[String, Int] = Map::new()
+  let out : Map[String, Int32] = Map::new()
   for row in rows {
     match row {
       { "state": String(s), "n": Number(n, ..), .. } => out[s] = n.to_int()
@@ -987,17 +1012,18 @@ pub fn SqliteTaskStore::count_by_state(
 pub fn SqliteTaskStore::active_tasks(
   self : SqliteTaskStore,
 ) -> Result[Array[TaskRecord], String] {
-  let rows = match self.query_all(
-    "SELECT * FROM " +
-    self.spec.table +
-    " WHERE state IN (?, ?, ?, ?) ORDER BY priority DESC, task_id ASC",
-    [
-      Json::string("PENDING"),
-      Json::string("LOCKED"),
-      Json::string("RUNNING"),
-      Json::string("RETRY_PENDING"),
-    ],
-  ) {
+  let rows = match
+    self.query_all(
+      "SELECT * FROM " +
+      self.spec.table +
+      " WHERE state IN (?, ?, ?, ?) ORDER BY priority DESC, task_id ASC",
+      [
+        Json::string("PENDING"),
+        Json::string("LOCKED"),
+        Json::string("RUNNING"),
+        Json::string("RETRY_PENDING"),
+      ],
+    ) {
     Err(e) => return Err(e)
     Ok(v) => v
   }
@@ -1023,10 +1049,8 @@ pub fn SqliteTaskStore::is_all_done(
   if active.length() > 0 {
     return Ok(false)
   }
-  let total = match self.query_all(
-    "SELECT COUNT(*) AS n FROM " + self.spec.table,
-    [],
-  ) {
+  let total = match
+    self.query_all("SELECT COUNT(*) AS n FROM " + self.spec.table, []) {
     Err(e) => return Err(e)
     Ok(v) => v
   }
@@ -1056,11 +1080,13 @@ pub fn SqliteTaskStore::summary(self : SqliteTaskStore) -> Result[Json, String] 
     Err(e) => return Err(e)
     Ok(v) => v
   }
-  Ok(Json::object({
-    "counts": Json::object(obj),
-    "is_all_done": Json::boolean(all_done),
-    "backend": self.describe(),
-  }))
+  Ok(
+    Json::object({
+      "counts": Json::object(obj),
+      "is_all_done": Json::boolean(all_done),
+      "backend": self.describe(),
+    }),
+  )
 }
 
 ///|
@@ -1073,18 +1099,12 @@ pub fn SqliteTaskStore::apply_task(
 ) -> Result[String, String] {
   match self.get_task(rec.task_name) {
     Err(e) => Err(e)
-    Ok(None) => {
+    Ok(None) =>
       // 新任务：直接插入（insert_tasks 是 INSERT OR IGNORE）
       match self.insert_tasks([rec]) {
         Err(e) => Err(e)
-        Ok(n) =>
-          if n > 0 {
-            Ok("inserted")
-          } else {
-            Ok("ignored")
-          }
+        Ok(n) => if n > 0 { Ok("inserted") } else { Ok("ignored") }
       }
-    }
     Ok(Some(cur)) =>
       if rec.version <= cur.version {
         // 版本不新：不覆盖（幂等）
@@ -1097,17 +1117,18 @@ pub fn SqliteTaskStore::apply_task(
           extra[key] = jget_or_null(d, key)
         }
         // 终态/任意态都可能来自对端，同步路径 force=true
-        match self.set_state(
-          rec.task_name,
-          rec.state,
-          None,
-          true,
-          Json::object(extra),
-          match rec.updated_at {
-            Some(v) => v
-            None => utcnow_iso()
-          },
-        ) {
+        match
+          self.set_state(
+            rec.task_name,
+            rec.state,
+            None,
+            true,
+            Json::object(extra),
+            match rec.updated_at {
+              Some(v) => v
+              None => utcnow_iso()
+            },
+          ) {
           Err(e) => Err(e)
           Ok(true) => Ok("updated")
           Ok(false) => Ok("ignored")
@@ -1120,7 +1141,7 @@ pub fn SqliteTaskStore::apply_task(
 // node:sqlite FFI（js 目标；句柄注册表 + 错误槽）
 //
 // 约定：
-//   - globalThis.__rxmbt_sqlite_reg : Map<number, DatabaseSync>
+//   - globalThis.__rxmbt_sqlite_reg : Map[number, DatabaseSync]
 //   - globalThis.__rxmbt_sqlite_seq : 自增 id（从 1 起；0 是"未打开"哨兵）
 //   - globalThis.__rxmbt_sqlite_err : 最近一次失败原因（成功时清空）
 //   - 参数统一以 JSON 数组传入，JS 侧展开绑定（只支持 string/number/null/bool）
@@ -1133,7 +1154,7 @@ extern "js" fn ffi_sqlite_open(
   path : String,
   journal_mode : String,
   synchronous : String,
-  busy_timeout_ms : Int,
+  busy_timeout_ms : Int32,
 ) -> Int64 =
   #| (path, journal, synch, busy) => { const G = globalThis; try { if (!G.__rxmbt_sqlite_reg) { G.__rxmbt_sqlite_reg = new Map(); G.__rxmbt_sqlite_seq = 1; } const sqlite = process.getBuiltinModule("node:sqlite"); const db = new sqlite.DatabaseSync(String(path)); db.exec("PRAGMA busy_timeout = " + Number(busy)); db.exec("PRAGMA journal_mode = " + String(journal)); db.exec("PRAGMA synchronous = " + String(synch)); const id = G.__rxmbt_sqlite_seq++; G.__rxmbt_sqlite_reg.set(id, db); G.__rxmbt_sqlite_err = ""; return BigInt(id); } catch (e) { G.__rxmbt_sqlite_err = String((e && e.message) || e); return BigInt(-1); } }
 
@@ -1146,19 +1167,31 @@ extern "js" fn ffi_sqlite_exec(id : Int64, sql : String) -> Bool =
 ///|
 /// 执行带参数的写语句，返回 `{"changes":n,"lastInsertRowid":n}`。
 #cfg(target="js")
-extern "js" fn ffi_sqlite_run(id : Int64, sql : String, params_json : String) -> String =
+extern "js" fn ffi_sqlite_run(
+  id : Int64,
+  sql : String,
+  params_json : String,
+) -> String =
   #| (id, sql, paramsJson) => { const G = globalThis; try { const db = G.__rxmbt_sqlite_reg.get(Number(id)); if (!db) { G.__rxmbt_sqlite_err = "database handle not found"; return ""; } const params = JSON.parse(String(paramsJson || "[]")).map((v) => (v === undefined ? null : v)); const st = db.prepare(String(sql)); const r = st.run(...params); G.__rxmbt_sqlite_err = ""; return JSON.stringify({ changes: Number(r.changes), lastInsertRowid: Number(r.lastInsertRowid) }); } catch (e) { G.__rxmbt_sqlite_err = String((e && e.message) || e); return ""; } }
 
 ///|
 /// 查询多行，返回 JSON 数组文本。
 #cfg(target="js")
-extern "js" fn ffi_sqlite_all(id : Int64, sql : String, params_json : String) -> String =
+extern "js" fn ffi_sqlite_all(
+  id : Int64,
+  sql : String,
+  params_json : String,
+) -> String =
   #| (id, sql, paramsJson) => { const G = globalThis; try { const db = G.__rxmbt_sqlite_reg.get(Number(id)); if (!db) { G.__rxmbt_sqlite_err = "database handle not found"; return ""; } const params = JSON.parse(String(paramsJson || "[]")).map((v) => (v === undefined ? null : v)); const st = db.prepare(String(sql)); const rows = st.all(...params); G.__rxmbt_sqlite_err = ""; return JSON.stringify(rows); } catch (e) { G.__rxmbt_sqlite_err = String((e && e.message) || e); return ""; } }
 
 ///|
 /// 查询单行，返回 JSON 对象文本（无行返回空串）。
 #cfg(target="js")
-extern "js" fn ffi_sqlite_get(id : Int64, sql : String, params_json : String) -> String =
+extern "js" fn ffi_sqlite_get(
+  id : Int64,
+  sql : String,
+  params_json : String,
+) -> String =
   #| (id, sql, paramsJson) => { const G = globalThis; try { const db = G.__rxmbt_sqlite_reg.get(Number(id)); if (!db) { G.__rxmbt_sqlite_err = "database handle not found"; return ""; } const params = JSON.parse(String(paramsJson || "[]")).map((v) => (v === undefined ? null : v)); const st = db.prepare(String(sql)); const row = st.get(...params); G.__rxmbt_sqlite_err = ""; return (row === undefined || row === null) ? "" : JSON.stringify(row); } catch (e) { G.__rxmbt_sqlite_err = String((e && e.message) || e); return ""; } }
 
 ///|
@@ -1180,7 +1213,7 @@ fn sqlite_open(
   path : String,
   journal_mode : String,
   synchronous : String,
-  busy_timeout_ms : Int,
+  busy_timeout_ms : Int32,
 ) -> Int64 {
   ffi_sqlite_open(path, journal_mode, synchronous, busy_timeout_ms)
 }
@@ -1192,7 +1225,7 @@ fn sqlite_open(
   path : String,
   journal_mode : String,
   synchronous : String,
-  busy_timeout_ms : Int,
+  busy_timeout_ms : Int32,
 ) -> Int64 {
   -1L
 }

@@ -226,12 +226,29 @@ extern "js" fn ffi_watch_count() -> Int32 =
   #| () => { const G = globalThis; if (!G.__rxmbt_watch_reg) { return 0; } let n = 0; for (const _k of G.__rxmbt_watch_reg.keys()) { n++; } return n; }
 
 ///|
-/// 回归用例：`stop()` 必须真正关闭 fs.watch 句柄。
+/// 诊断用：node 侧资源快照（含 FSEventWrap/FSWatcher 计数）。
 ///
-/// 历史缺陷（已修）：monitor 的 `ffi_watch_stop` 用 BigInt 去查以 number 为键的
-/// `__rxmbt_watch_reg`，`get` 恒 undefined ⇒ close() 从不执行 ⇒ `@rx.Subscription::dispose()`
-/// 名存实亡：句柄泄漏 + node 测试进程跑完不退出（moon 永远打不出汇总行）。
-/// 这里断言「start 后注册表 +1，stop 后回到基线」，正是该缺陷的回归点。
+/// **重要**：`process.getActiveResourcesInfo()` 在 Windows 上会把**已 close 但尚未被
+/// GC 回收**的 FSEventWrap 仍列出来（实测 stop 之后计数不下降，但进程能正常退出）。
+/// 因此它**不能**用来断言"句柄没关"——真正的判据是「测试进程能否自然退出」
+/// （若真有 5 个被 ref 的 fs.watch 句柄，node 永远不会退出）。
+/// 本函数只用于挂死时打印现场，不参与断言。
+extern "js" fn ffi_active_fs_watchers() -> Int =
+  #| () => { try { const f = process.getActiveResourcesInfo; if (!f) { return -1; } const list = f.call(process); let n = 0; for (const x of list) { const s = String(x); if (s.indexOf("FSEvent") >= 0 || s.indexOf("FSWatcher") >= 0) { n++; } } return n; } catch (_e) { return -1; } }
+
+///|
+/// 回归用例：`stop()` 必须真正走完「dispose → ffi_watch_stop → close()」这条链。
+///
+/// 历史缺陷（已修，T0r8）：monitor 的 `ffi_watch_stop` 用 BigInt 去查以 **number**
+/// 为键的 `__rxmbt_watch_reg`，`get` 恒 undefined ⇒ `close()` 从不执行 ⇒
+/// `@rx.Subscription::dispose()` 名存实亡：句柄泄漏 + node 测试进程跑完不退出
+/// （moon 永远打不出汇总行，qa 曾观测到 3 个挂死进程各吃 400s+ CPU）。
+///
+/// 断言策略：
+///   - 用 monitor 注册表计数锁住"键类型不匹配"这个**具体**缺陷（start +1 / stop 归位）；
+///   - 不断言 `getActiveResourcesInfo()` 的 FSEvent 数：该接口含已 close 未 GC 的残留，
+///     会假红（本用例曾因此误报"close() 未生效"）。真判据是进程能否自然退出，
+///     由 CI 侧 `moon test` 的硬超时 + 自然退出把控。
 test "watch · stop() 真正关闭 fs.watch 句柄（dispose 回归）" {
   let dir = ffi_w_mkdtemp("rhop-w6")
   let base = ffi_watch_count()
@@ -240,10 +257,14 @@ test "watch · stop() 真正关闭 fs.watch 句柄（dispose 回归）" {
   assert_eq(ffi_watch_count(), base + 1)
   w.stop()
   assert_eq(ffi_watch_count(), base)
-  // 重复 start/stop 也不残留
+  // 重复 start/stop 也不残留（stop 幂等 + start 可重入）
   assert_eq(w.start(), Ok(()))
   assert_eq(ffi_watch_count(), base + 1)
   w.stop()
   assert_eq(ffi_watch_count(), base)
+  w.stop()
+  assert_eq(ffi_watch_count(), base)
+  // 现场快照（挂死时便于定位；不做断言）
+  println("[watch] live fs handles snapshot = " + ffi_active_fs_watchers().to_string())
   ffi_w_rmrf(dir)
 }

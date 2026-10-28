@@ -1,0 +1,16 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/json",
+}
+
+options(
+  targets: {
+    "mirror_test.mbt": [ "js" ],
+    "requester_test.mbt": [ "js" ],
+    "executor_test.mbt": [ "js" ],
+    "daemon_test.mbt": [ "js" ],
+    "sync_folder_test.mbt": [ "js" ],
+    "actions_fs_test.mbt": [ "js" ],
+    "nonjs_test.mbt": [ "wasm", "native" ],
+  },
+)

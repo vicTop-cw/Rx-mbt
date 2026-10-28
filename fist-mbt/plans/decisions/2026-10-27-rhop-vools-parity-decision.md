@@ -122,11 +122,16 @@ decision: approved
 
 ### 4.1 测试包划分
 
-| 包 | 目标 | 内容 |
+| 包 | 目标 | 内容 / owner |
 |---|---|---|
-| `test-suit/rhop` | wasm + js + native（默认全目标） | core/digest/json_canonical/envelope/signer/integrity 纯逻辑；现有 packet/cipher 测试 |
-| `test-suit/rhop_js`（新） | js | crypto（Fernet）/watch/transport/relay/session/config/interact/mirror/daemon 等 js 依赖 API；fixtures 跨实现向量 |
+| `test-suit/rhop` | wasm + js + native（默认全目标） | core/digest/json_canonical/envelope/signer/integrity（impl-core）；session/config（impl-session，纯逻辑部分）；actions（impl-business，纯逻辑部分）；现有 packet/cipher 测试 |
+| `test-suit/rhop_js`（新，impl-crypto） | js | crypto（Fernet）/watch/transport/relay；fixtures 跨实现向量（qa 生成） |
+| `test-suit/rhop_interact`（新，impl-session） | js | interact 三模式 / roundtrip 单机闭环（依赖 node fs/crypto 的端到端） |
+| `test-suit/rhop_business`（新，impl-business） | js | mirror（node:sqlite）/requester/executor/daemon |
 | `test-suit/rhop_native`（可选） | native | 纯摘要/信封在 native 的等价抽查（可与 rhop 包合并，非必需） |
+
+> 包边界按 owner 切分，避免多人写同一个 `moon.pkg`（`test-suit/rhop_js/moon.pkg` 归 impl-crypto，
+> 其余新包由各自 owner 新建）。
 
 ### 4.2 跨平台测试入口（qa-platform 交付）
 
