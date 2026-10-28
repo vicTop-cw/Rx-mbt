@@ -1,6 +1,6 @@
 # 2026-10-27 rhop ← vools-rhop 复刻 · 跨平台验收与跨实现互操作汇报（RX-QA / qa-platform）
 
-- 状态：**final（终验完成 2026-10-28 10:00，三入口四目标全绿 + 互操作 --strict 通过）**
+- 状态：**final v2（代码冻结后终验复跑 2026-10-28 11:27–11:35，三入口四目标全绿 + 互操作 --strict 通过 + fmt 门已关闭）**
 - 执行者：qa-platform（fist-mbt ns=`rx-rhop`，任务 `T0r7`，level=6）
 - 依据契约：`fist-mbt/plans/decisions/2026-10-27-rhop-vools-parity-decision.md` §0 / §4（§4.2 测试入口、§4.3 验收清单）
 - API 对齐统计来源：`fist-mbt/docs/2026-10-27-rhop-vools-parity-matrix.md`（契约范围 192 个符号 → 178 全对齐 = **92.7%**，
@@ -21,15 +21,15 @@
 
 | # | 交付物 | 状态 | 指纹 / 证据 |
 |---|---|---|---|
-| ① | `scripts/test_all.sh`（339 行） | ✅ | sha256 `f47cc7d0ab4ee263a96e677684577aa2c2295c4321da7e330b3ff477502cdb6f`；两平台四目标全绿 |
+| ① | `scripts/test_all.sh`（339 行） | ✅ | sha256 `f47cc7d0ab4ee263a96e677684577aa2c2295c4321da7e330b3ff477502cdb6f`；两平台四目标全绿（冻结后复跑同绿） |
 | ① | `scripts/test_all.ps1`（257 行） | ✅ | sha256 `18022feffb0f7bad4117f962b44ddcbc1b1d5abf6dab3992715babfecfe05ead`；Windows 原生入口四目标全绿 |
 | ② | `scripts/gen_conformance_vectors.py`（963 行） | ✅ | sha256 `37dc1cb1e21477e73cd09f1702dc01a2f7e304eb94eb74e05f8e15730252f58d`；幂等自检 + 跨平台同 sha |
 | ② | `test-suit/rhop_js/fixtures/vools_vectors.json` | ✅ | 32710 bytes，sha256 `f22dda48e3b6b5083a5ae84f0f0872ec93f7fceb3c04fddfcb3b3742e8a3b9b3` |
 | ② | `scripts/verify_interop.py`（747 行） | ✅ | sha256 `e4d0465c0540fb940a28c72ee2bbb3ae214c830da4dc0c0bf1a615579987297b`；`--strict` 20/20，自检 3/3 |
 | ③ | 全量跨平台终验 + §4.3 逐条勾 | ✅ | §2.2 / §7 |
 
-**终验四目标计数（三入口一致）**：`moon check` 0 error；`moon test`（wasm）**587/587/0**；
-`moon test --target js` **756/756/0**；`moon test --target native` **587/587/0**。
+**终验四目标计数（三入口一致，代码冻结后复跑）**：`moon check` 0 error；`moon test`（wasm）**587/587/0**；
+`moon test --target js` **765/765/0**（P2 心跳用例 +9：90→99）；`moon test --target native` **587/587/0**。
 
 ---
 
@@ -43,7 +43,7 @@
 | PowerShell 5.1 | Windows 同机 | 同上 | `C:\Program Files\nodejs\node.exe` v25.2.1 | 前置真 node + **剔除所有含 `node.cmd` 的 PATH 项**（见 §2.5.1） | `_build`（默认） |
 | WSL | Ubuntu-22.04 | `0.1.20261021` (a4f8933) | `/usr/local/bin/node` v25.2.1 | 净化 PATH 为 `$HOME/.moon/bin:/usr/local/bin:/usr/bin:/bin` | **`_build/wsl`**（见 §2.5.2） |
 
-### 2.2 三入口 × 四目标实测汇总行（终验 2026-10-28 09:55–10:00）
+### 2.2 三入口 × 四目标实测汇总行（代码冻结后终验复跑 2026-10-28 11:27–11:35，三入口严格串行）
 
 **A) Windows 原生 PowerShell 入口**
 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test_all.ps1`
@@ -51,12 +51,12 @@
 ```
  check    PASS   0 errors
  wasm     PASS   Total tests: 587, passed: 587, failed: 0
- js       PASS   Total tests: 756, passed: 756, failed: 0
+ js       PASS   Total tests: 765, passed: 765, failed: 0
  native   PASS   Total tests: 587, passed: 587, failed: 0
  RESULT: PASS - every executed step is green          （进程退出码 0）
 ```
 
-**B) Windows Git Bash 入口** `bash scripts/test_all.sh`
+**B) Windows Git Bash 入口** `"D:\Program Files\Git\bin\bash.exe" scripts/test_all.sh`（Git 5.3.15 cygwin）
 
 ```
  platform   : windows (MINGW64_NT-10.0-26200)
@@ -64,14 +64,14 @@
  node       : /c/Program Files/nodejs/node -> v25.2.1
  单步超时   : 600s
  构建目录   : <默认 _build>
- check    PASS   0 errors                                            1202 ms
- wasm     PASS   Total tests: 587, passed: 587, failed: 0            1682 ms
- js       PASS   Total tests: 756, passed: 756, failed: 0            9857 ms
- native   PASS   Total tests: 587, passed: 587, failed: 0            7958 ms
+ check    PASS   0 errors                                             945 ms
+ wasm     PASS   Total tests: 587, passed: 587, failed: 0             680 ms
+ js       PASS   Total tests: 765, passed: 765, failed: 0            6504 ms
+ native   PASS   Total tests: 587, passed: 587, failed: 0             700 ms
  RESULT: PASS —— 所有已执行步骤判绿（4 步）            （进程退出码 0）
 ```
 
-**C) WSL 入口** `wsl.exe -e bash -lc "cd /mnt/e/IDEProjects/AI/rx-mbt && bash scripts/test_all.sh"`
+**C) WSL 入口** `wsl.exe -e bash -lc "cd /mnt/e/IDEProjects/AI/rx-mbt && bash scripts/test_all.sh --quiet"`（rc=0，elapsed 42s）
 
 ```
  platform   : wsl (Linux)
@@ -79,15 +79,15 @@
  node       : /usr/local/bin/node -> v25.2.1
  单步超时   : 600s
  构建目录   : /mnt/e/IDEProjects/AI/rx-mbt/_build/wsl
- check    PASS   0 errors                                            4648 ms
- wasm     PASS   Total tests: 587, passed: 587, failed: 0           10430 ms
- js       PASS   Total tests: 756, passed: 756, failed: 0           28468 ms
- native   PASS   Total tests: 587, passed: 587, failed: 0           29990 ms
+ check    PASS   0 errors                                            3096 ms
+ wasm     PASS   Total tests: 587, passed: 587, failed: 0            3240 ms
+ js       PASS   Total tests: 765, passed: 765, failed: 0           21467 ms
+ native   PASS   Total tests: 587, passed: 587, failed: 0            3378 ms
  RESULT: PASS —— 所有已执行步骤判绿（4 步）            （进程退出码 0）
 ```
 
-> 与契约 §0 基线的差异：wasm 407 → **587**、js 411 → **756**、native 407 → **587**（Batch A–D/P2a/P2b/clipboard
-> 全量落地后的增量）。三入口数字逐字一致，说明跨平台没有目标差异。
+> 与契约 §0 基线的差异：wasm 407 → **587**、js 411 → **765**、native 407 → **587**（Batch A–D/P2a/P2b/clipboard
+> 全量落地 + P2 心跳 B1/B2 修复后的增量）。三入口数字逐字一致，说明跨平台没有目标差异。
 > 分包计数（lead 侧复核 + 本次 gate 同源）：rhop 131/135/131、rhop_js 52、rhop_clipboard 25、
 > rhop_interact 13、rhop_business 10/41/10、rhop_task 46/90/46（wasm/js/native）。
 
@@ -177,7 +177,10 @@ Error: failed to build ... (js) ×N
 | `check:T0r7:r2` | passed | ⚠ **无效记录**：环境探测用的包装命令（`rc=$?` 取空 → 外层 exit 0），**不是 gate 运行** |
 | `check:T0r7:r3`–`r7` | failed | 中间态 / 旧版 PS 缺陷（`$rc` 为空）/ PS 走 node.cmd shim，均已定位并修复，见 §2.4–§2.5.1 |
 | `check:T0r7:r8` | **passed** | 真实 Windows 原生 gate（`cmd="powershell"` + `-File scripts/test_all.ps1 -Quiet`），构建稳定窗口内自然跑完 |
-| 终验 | **passed** | 终验时重取的新鲜记录（Windows 原生 + WSL 两条），见 §7 |
+| `check:T0r7:r9` | **passed** | Windows 原生 gate（`cmd="powershell"` + `-File scripts/test_all.ps1 -Quiet`），stdout 完整四步汇总行（587/756/587） |
+| `check:T0r7:r10` | **passed** | WSL gate（`cmd="bash"` + `--quiet`），构建目录 `_build/wsl` |
+| 代码冻结后复跑（2026-10-28 11:27–11:35） | 待 lead 记账 | 本轮 MCP fist-mbt 工具在本执行体会话不可用（`mcp__fist-mbt__*` 未暴露），
+      **真实输出已在本报告 §2.2 与给 lead 的汇报中固化**，run_check/submit 由 lead 记账补登 |
 
 **环境事实（重要）**：MCP server 侧 `cmd="bash"` 解析到的是 **WSL 的 `/bin/bash`**（`HOME=/root`、
 `node=/usr/local/bin/node`、`C:/tmp` 被当相对路径），所以 `run_check(cmd="bash")` 实际跑的是 **WSL 侧** gate；
@@ -276,30 +279,40 @@ $ python scripts/verify_interop.py test-suit/rhop_js/fixtures/moonbit_vectors.js
    语料只用 int/string/bool/null/对象/数组（fixture 里 `scalars` 用例即为该口径的边界声明）。
 3. **jump 真传输未实现**：Batch D 的 `jump.probe` 等动作是离线可验证实现；SFTP 远端文件操作（8 个符号）
    与 CLI 入口（1 个）为明确 ⛔ 不做项 —— 与 92.7% 的对齐统计口径一致（矩阵文档 §统计）。
-4. **P2 层**（`rhop_task` 子包）已落地（P2a/P2b verify 完成），但本轮 fixture 未覆盖 task 层语义
+4. **P2 心跳 B1/B2 互操作缺口 —— 已解决（2026-10-28 11:2x，impl-crypto）**：
+   缺口原是 MoonBit 心跳与 vools `task/heartbeat` 在 5 个点上的口径差异，现已按 vools 真实行为对齐并用真 vools 双向核验：
+   - 心跳报文格式：vools **纯文本**（非 JSON）
+   - 时间戳：**微秒级 ISO** 时间串
+   - `include_worker`：显式 `false` 时按 vools 语义处理
+   - `closed_token`：关闭态令牌与 vools 一致
+   - `max_future_skew`：60s，**fail-closed**（超出即拒绝，不静默接受）
+   验证方式：真 vools `Heartbeat` 与 MoonBit 侧**双向 6/6 通过**；js 目标因此新增 9 条心跳用例（90 → 99），
+   使 js 总数从 756 变为 **765**，三入口在代码冻结后复跑全绿（§2.2）。
+   对 QA 判据的意义：这类「报文形态 + 时间单位 + 边界 fail-closed」最容易出现「两边各自绿、互相对不上」，
+   因此本报告坚持用**真实 vools 做双向核验**而不是两边各写一份期望值。
+
+5. **P2 层**（`rhop_task` 子包）已落地（P2a/P2b verify 完成），但本轮 fixture 未覆盖 task 层语义
    （TaskState 流转 / TaskRecord 31 列 / mask_value）—— 见 §11 后续建议。
-5. **monitor 的 BigInt 句柄泄漏**已由 impl-crypto 修复（`T0r8`），是本轮唯一「断言全绿但进程挂死」类缺陷。
+6. **monitor 的 BigInt 句柄泄漏**已由 impl-crypto 修复（`T0r8`），是本轮唯一「断言全绿但进程挂死」类缺陷。
 
 ---
 
 ## 7. 契约 §4.3 验收清单（终验逐条勾）
 
 - [x] **`moon check` 0 error**（三目标）：Windows 三入口 check 步骤均 `0 errors`；WSL `0 errors`（§2.2 A/B/C）
-- [x] **新增 API 均有测试；`moon test` 三目标 failed: 0**：wasm 587/587、js 756/756、native 587/587（三入口一致）
+- [x] **新增 API 均有测试；`moon test` 三目标 failed: 0**：wasm 587/587、js **765**/765、native 587/587（三入口一致，代码冻结后复跑）
 - [x] **Windows 与 WSL 各跑一遍 `scripts/test_all.sh` 全绿**：§2.2 B（Windows Git Bash）、§2.2 C（WSL），
       外加 §2.2 A（Windows PowerShell 原生入口）
 - [x] **Batch A：checksum 与 Python 逐字节一致（fixture）**：`fixture-self` 段对 3 个 envelope 用例
       用真实 vools `from_rhop_bytes` 复算 checksum + 篡改用例如期被拒；impl-core 测试消费同批值且全绿
 - [x] **Batch B：Python↔MoonBit 双向解密成功**：Python 解 MoonBit（`flat/envelope_json`、`flat/secret` PASS）、
       MoonBit 解 Python（impl-crypto 的 27 条 crypto 用例消费 fixture，含 3 encrypt_json + 2 secret + 7 负向 reason）
-- [ ] ⚠ **`moon fmt` 后无 diff；`.mbti` 变更已复核** —— **本项未通过（需 lead/owner 处理）**：
-      `moon fmt --check` 在本机直接报 `Error: program not found`（moon 找不到 `moonfmt`，见 §8 工具面缺陷），
-      改用**非破坏性等价检查**（`moonfmt <file>` 输出与文件逐行 diff，CRLF 已归一）实测：
-      **85 个 .mbt 文件里 11 个会被 moonfmt 改写** ⇒ 现在跑 `moon fmt` 会产生 diff。
-      未通过清单：`test-suit/rhop_js/relay_test.mbt`、`test-suit/rhop_js/watch_test.mbt`、
-      `test-suit/rhop_task/task_config_js_test.mbt`、`task_config_test.mbt`、`task_models_test.mbt`、
-      `task_secrets_js_test.mbt`、`task_secrets_test.mbt`、`task_heartbeat_test.mbt` 等 11 个（其余 74 个干净）。
-      本执行体**无产品代码写权限**，不代跑 `moon fmt`；已交 lead 决定是否在合并前统一格式化。
+- [x] **`moon fmt` 后无 diff；`.mbti` 变更已复核** —— **已关闭（2026-10-28 11:2x）**：
+      lead 用 `moonfmt -w` 对全部 112 个 `.mbt` 逐个格式化并做**二次幂等验证（unstable=0）**，格式化后三目标仍全绿。
+      本执行体用**非破坏性等价检查**独立复验（`moonfmt <file>` 输出与文件逐行 diff、CRLF 归一、全仓库扫描）：
+      **144 个 .mbt 文件 needs_format=0**（`_build` 之外全量），即当前代码库已 fmt 幂等、再跑 `moon fmt` 无 diff。
+      注：`moon fmt --check` 在本机仍报 `Error: program not found`（moon 找不到 `moonfmt`，见 §8），
+      因此复验用上述等价检查而非该开关。`.mbti` 变更由各 owner 在各自 lane 内 `moon info` 复核（本执行体未改产品代码）。
 - [x] **执行汇报写入 `fist-mbt/reports/2026-10-27-<batch>-report.md`**：即本文件 +
       `fist-mbt/reports/interop-verify.json`（机器可读逐项报告）
 
@@ -320,8 +333,9 @@ python scripts/gen_conformance_vectors.py --print-sha256
 python scripts/verify_interop.py test-suit/rhop_js/fixtures/moonbit_vectors.json --strict \
     --out fist-mbt/reports/interop-verify.json
 python scripts/verify_interop.py --self-test                    # 校验器自检 3/3
-# 6) fmt 门（非破坏性；本执行体不执行会改文件的 moon fmt）
-moon fmt --check
+# 6) fmt 门（非破坏性）。注意 `moon fmt --check` 在本机会报 Error: program not found，
+#    改用等价检查：对每个 .mbt 跑 `moonfmt <file>` 与文件逐行 diff（CRLF 归一），要求 needs_format=0
+#    实测（2026-10-28 冻结后）：144 个 .mbt needs_format=0
 ```
 
 ---
@@ -335,20 +349,22 @@ moon fmt --check
 | BUG-454 | `tx_contract` 缺 namespace 路由：对 `rx-rhop` 任务读 default 库，返回与 `get` 矛盾的「当前是 [已归档]」 | lead 已入账 |
 | （monitor） | `watcher_js.mbt` BigInt/number 键不匹配 ⇒ `watcher.close()` 从不执行 ⇒ js 测试进程挂死 | impl-crypto 已修（T0r8）+ 回归守门 |
 | （判据） | `process.getActiveResourcesInfo()` 在 Windows 会把已 close 未 GC 的句柄列出 ⇒ 不可用其断言泄漏 | 已写入 §2.5 判据 |
-| （QA 自留） | `run_check(cmd="bash")` 在 MCP server 侧实际跑 WSL bash；gate 记录必须区分入口 | 已写入 §2.6 |
+| （工具） | `moon fmt --check` 在本机报 `Error: program not found`（moon 找不到 `moonfmt`；`moonfmt` 本体可用）⇒ fmt 门须用等价检查或 `moonfmt -w` | 已写入 §7.1 / 建议转报 |
+| （工具） | 本轮本执行体会话中 `mcp__fist-mbt__*` 工具不可用 ⇒ run_check/submit 由 lead 记账 | 见 §2.6 |
 
 ---
 
 ## 9. 资源消耗
 
 - 工具：MCP fist-mbt（ns=`rx-rhop`）+ 本地 bash / PowerShell / python；未启动额外服务器。
-- 时间：2026-10-27 19:46 起 → 2026-10-28 10:00 终验完成（含等待并行 lane 收敛与多次瞬时红复跑）。
+- 时间：2026-10-27 19:46 起 → 2026-10-28 10:06 首次终验完成；**2026-10-28 11:27–11:35 代码冻结后复跑**（三入口串行，全绿）。
+  含大量等待并行 lane 收敛、瞬时红复跑与三处环境/工具缺陷定位。
 - 预算：未调用 model_route / executor_run，无额外配额消耗。
 
 ## 10. 遗留风险
 
-1. **两平台不可并发跑 gate**（共享 `_build` 的物理事实仍在）：脚本已用 `_build/wsl` 隔离 WSL，
-   但若有人绕过脚本手工在 Windows 与 WSL 同时 `moon test`，仍可能互相踩坏产物。
+1. **两平台并发仍要小心**（共享 `_build` 的物理事实仍在）：脚本已用 `_build/wsl` 隔离 WSL，本轮三入口**串行**复跑全绿；
+   但若有人绕过脚本手工在 Windows 与 WSL 同时 `moon test`，仍可能互相踩坏产物（隔离前的 `Sys_error … .mi missing` 即此）。
 2. **WSL 首次跑要全量重建**（`_build/wsl` 从零开始约 1–2 分钟），run_check 需给足 `timeout_ms`（终验用 300000）。
 3. **`--strict` 五分节产物缺生产者**（§5 末尾）：要闭合需在 MoonBit 侧新增一个写出 `canonical/digest/envelope/signer`
    的测试；在此之前跨实现证据靠「fixture 被 MoonBit 测试消费 + MoonBit 产物被 Python 复核」两方向合成。
