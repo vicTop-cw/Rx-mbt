@@ -27,6 +27,19 @@
 
 ## 1. 总览
 
+### 参考实现快照（N-1 冻结裁定，2026-10-28 C4）
+
+| 项 | 值 |
+|---|---|
+| 快照 commit | **`bfdb162`**（`E:/IDEProjects/AI/vools`，提交时间 2026-10-28 18:01:40 +0800） |
+| 计入范围的树 | **该 commit 的已提交树**（`git show bfdb162` 视角） |
+| 未提交工作树改动 | **不计入**：`rhop/vools/rhop/watch.py` 有 +89/-2 行未提交改动（公开成员 +1，mtime 18:15）；`memory/thinking.md`、`rhop/tests/test_pg_store.py` 亦有未提交改动 |
+| 为什么不回滚 | vools 是本会话之外的仓库，未提交改动非本项目 lane 所为；擅自 revert 可能毁掉他人在途工作 ⇒ 采用「冻结已提交快照」而非清洗工作树 |
+| 若上游将来提交 watch.py | 契约分母将变为 **194 / 474**（覆盖率 **91.8% / 94.3%**），届时需 **re-baseline** 本文档并重跑对照 |
+| 快照后上游是否前进 | C4 期间上游前进过一个 commit，`task/store/pg_store.py` 计入 **22** 个符号（较 C3 的 21 +1） |
+
+> 口径纪律：本矩阵所有分母/覆盖率都以 `bfdb162` 的**已提交树**为准；未提交工作树一律视为「不存在的未来」。
+
 | vools 模块 | 符号数 | ✅ | 🟡 | ⚠️ | ⏳ | ⛔ | MoonBit 落地文件 |
 |---|---:|---:|---:|---:|---:|---:|---|
 | `core.py` | 5 | 5 | 0 | 0 | 0 | 0 | `rhop/core.mbt` |
@@ -55,8 +68,8 @@
 | **契约范围小计** | **193** | **178** | **4** | **1** | **0** | **10** | — |
 | `actions/jump.py` | 14 | 1 | 0 | 0 | 0 | 13 | 仅 `jump.probe` 内建（`actions_test.mbt` 覆盖） |
 | `secret.py` | 1 | 0 | 0 | 0 | 0 | 1 | CLI 工具，不迁 |
-| `task/` 子包（含 `task/store/`） | 264 | 0 | 21 | 0 | 0 | 243 | P2 已落地 P2a+P2b（8 文件；仅模块级映射 21 项，其余未逐符号；逐文件分布见 §5.9） |
-| **vools 全量** | **472** | **179** | **25** | **1** | **0** | **267** | — |
+| `task/` 子包（含 `task/store/`） | 265 | 0 | 22 | 0 | 0 | 243 | P2 已落地 P2a+P2b（8 文件；仅模块级映射 22 项，其余未逐符号；逐文件分布见 §5.9） |
+| **vools 全量** | **473** | **179** | **26** | **1** | **0** | **267** | — |
 
 ## 2. Batch A（协议/摘要层，已验收 · owner impl-core）
 
@@ -436,7 +449,7 @@
 |---|---|---|
 | `secret.py: main` | 命令行「生成/查看密钥」工具 | ⛔ 不迁 CLI（密钥读取走 `rhop/key.mbt` 的 `load_key`） |
 
-### 5.9 P2：`task/` 子包（264，原估 230 为低估）→ `rhop_task/`（**P2a + P2b 已落地**）
+### 5.9 P2：`task/` 子包（265，原估 230 为低估）→ `rhop_task/`（**P2a + P2b 已落地**）
 
 > vools `task/` 是独立的通用任务队列（A 提交加密 JSON → B 解密执行；SQLite 管依赖/状态；存储可换后端）。
 > 契约 §3 把它列为 P2（「不列入本轮验收硬门槛」）。本项目已分两批落地：
@@ -457,9 +470,9 @@
 | `task/daemon.py`（`TaskDaemon`/`build_queue`） | — | — | ⛔ 未移植（中继守护的 task 版；`rhop/daemon.mbt` 已覆盖镜像 daemon） | — |
 | `task/local_runner.py`（`run_local_task`/`should_run_local`/`mark_local_result`） | — | — | ⛔ 未移植（本机执行器快捷路径） | — |
 | `task/errors.py`（`RhopTaskError`/`DagValidationError`/`TaskNotFound`/… 10 个异常类型） | 以 `Result[_, String]` + 文本前缀表达（如 `stale_version:`） | — | 🟡 语义等价（错误类型 → Result） | — |
-| `task/store/pg_store.py`（Postgres 后端） | — | — | ⛔ 未移植（仅 SQLite 后端） | — |
+| `task/store/pg_store.py`（Postgres 后端，**22 符号**） | — | — | ⛔ 未移植（仅 SQLite 后端） | — |
 
-**vools `task/` 子包逐文件符号数（C3 经 Python AST 复算，合计 264；此前 230 为低估）**
+**vools `task/` 子包逐文件符号数（C4 快照 `bfdb162` 复算，合计 265；此前 230/264 为低估）**
 
 | 文件 | 符号 | 文件 | 符号 |
 |---|---:|---|---:|
@@ -468,12 +481,12 @@
 | `errors.py` | 10 | `sync.py` | 10 |
 | `exec.py` | 17 | `store/__init__.py` | 4 |
 | `heartbeat.py` | 22 | `store/base.py` | 26 |
-| `local_runner.py` | 3 | `store/pg_store.py` | 21 |
+| `local_runner.py` | 3 | `store/pg_store.py` | 22 |
 | `models.py` | 50 | `store/sqlite_store.py` | 23 |
 | `cli.py` | 2 | `__init__.py` / `__main__.py` | 0 / 0 |
 
 **P2 映射现状（诚实口径）**：8 个文件对应 vools `task/` 的 models/config/secrets/store/queue/heartbeat/exec/sync；
-vools `task/` 共 **264** 个公开符号，本项目**按模块级对位 21 个关键符号**（见上表「关键符号」列），
+vools `task/` 共 **265** 个公开符号，本项目**按模块级对位 22 个关键符号**（见上表「关键符号」列），
 其余 243 个为 CLI / daemon / local_runner / Postgres 后端等明确未移植项 —— **逐符号映射留待后续（P2b-2）**，
 故 P2 不参与 §8 的契约覆盖率分母。
 
@@ -607,30 +620,36 @@ vools `task/` 共 **264** 个公开符号，本项目**按模块级对位 21 个
 **分母说明**
 
 - `已落地范围（A+B）` = 契约 §3 Batch A + Batch B 的 124 个符号。
-- `契约范围（A–D + clipboard）` = **193** 个符号 = 契约 §3 列出的全部模块（core/envelope/signer/integrity/crypto/watch/transport×7/session/interact/config/mirror/daemon/requester/executor/actions(2)/sync_folder/clipboard(8)）；不含 `secret.py` CLI（1）、`actions/jump.py` 动作族（14）、P2 `task/` 子包（264，单列于 §5.9）。
-- `vools 全量` = **472** 个符号（194 主模块 + 14 jump + 264 task）。
+- `契约范围（A–D + clipboard）` = **193** 个符号 = 契约 §3 列出的全部模块（core/envelope/signer/integrity/crypto/watch/transport×7/session/interact/config/mirror/daemon/requester/executor/actions(2)/sync_folder/clipboard(8)）；不含 `secret.py` CLI（1）、`actions/jump.py` 动作族（14）、P2 `task/` 子包（265，单列于 §5.9）。
+  - 依据 **`bfdb162` 已提交树**（§1 快照说明）：`watch.py` 的未提交 +1 成员**不计入**，故契约分母保持 **193**（不是 194）。
+- `vools 全量` = **473** 个符号（194 主模块 + 14 jump + 265 task）。
 
 | 口径 | 符号数 | ✅ | 🟡 | ⚠️ | ⏳ | ⛔ | 覆盖率 |
 |---|---:|---:|---:|---:|---:|---:|---|
 | 已落地范围（A+B） | 124 | 113 | 2 | 1 | 0 | 8 | **91.1%** 完全对齐；对齐+等价+部分 = 93.5% |
 | 契约范围（A–D + clipboard） | 193 | 178 | 4 | 1 | 0 | 10 | **92.2%** 完全对齐；对齐+等价+部分 = **94.8%**；不做 5.2% |
-| vools 全量（含 P2） | 472 | 179 | 25 | 1 | 0 | 267 | **37.9%** 完全对齐；对齐+等价+部分 = 39.0% |
+| vools 全量（含 P2） | 473 | 179 | 26 | 1 | 0 | 267 | **37.8%** 完全对齐；对齐+等价+部分（✅+🟡+⚠️ 全含）= **206/473 = 43.6%** |
 
 **结论**
 
 1. **契约范围内 193 个符号中 178 个已完全对齐（92.2%），加上语义等价（🟡 4）与部分（⚠️ 1，watch 的无公开 `DEFAULT_EXTENSIONS` 常量）达 94.8%**；余下 10 个 ⛔ 全是明确不做项（SFTP 远端文件操作 9（含 `port_reachable`）+ CLI 入口 1）。
 2. Batch A/B（124）保持 91.1%，跨实现字节级对齐有 qa fixture 硬证据（envelope checksum/字节、canonical JSON 7 例、digest 13 例、signer 3 例）。
 3. Batch C/D **全部落地且测试全绿**：session 7 / interact 2 / config 11 / mirror 12 / daemon 3+1CLI / requester 6 / executor 7 / sync_folder 9 / actions 2（`actions_test.mbt` 10 例）/ clipboard 6✅+2🟡（25 例）。
-4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 101 全绿），按模块级映射 21/264 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 243 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
+4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 103 全绿），按模块级映射 22/265 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 243 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
 
 ## 9. 复核方式（可重复执行）
 
 ```bash
 # ① 本项目公开面（权威：moon info 生成的接口）
 cd E:/IDEProjects/AI/rx-mbt
-grep -cE "^pub " rhop/pkg.generated.mbti                                           # 353 行 pub 声明（C3 实测）
-grep -oE "^pub (fn|struct|enum|trait|const|using|impl)" rhop/pkg.generated.mbti | sort | uniq -c
-#   10 pub const / 300 pub fn / 15 pub impl / 32 pub struct / 2 pub trait / 3 pub(all) enum → 353 行
+grep -cE "^pub " rhop/pkg.generated.mbti                                           # 361 行（含 15 行 `pub impl`）
+grep -oE "^pub(\([a-z]+\))? (fn|struct|enum|trait|const|let|impl)" rhop/pkg.generated.mbti | sort | uniq -c
+#   口径（N-3，2026-10-28 C4 终态快照，`moon info` 生成，实测）：
+#     * `grep -cE '^pub '` = **361**（只匹配 `pub ` 前缀，含 15 行 `pub impl`）
+#     * `grep -cE '^pub'`  = **368**（额外 7 行是 `pub(all) enum`×3 与 `pub(open) trait`×4）
+#     * 去掉 15 行 `pub impl` 后，剩下的**声明行 = 346**；若把 trait 方法签名（缩进 `fn`）也算作条目，需另给口径
+#     * 旧文里的「353」是更早轮次的混合口径，**本版不再使用**
+#   `rhop_task/pkg.generated.mbti` = 163 行（C4 终态）。
 # rhop_task/pkg.generated.mbti: 163 行（156 fn / 14 struct / 2 enum / 2 type）
 # 注：公开面随各 lane 增量变化，以 `moon info` 重新生成为准（本行为 C3 快照）
 
