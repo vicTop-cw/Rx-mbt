@@ -1109,7 +1109,7 @@ pub fn RhopEnvelope::decode(String) -> Result[Self, String]
 
 > vools `task/` 子包（230 个公开符号）的 MoonBit 移植，分两批：**P2a**（数据/配置/密文，三目标纯逻辑）
 > 与 **P2b**（存储/队列/心跳/执行/同步，js 依赖 `node:sqlite`）。
-> 测试：`test-suit/rhop_task` **wasm/native 46 例、js 90 例**。
+> 测试：`test-suit/rhop_task` **wasm/native 46 例、js 99 例**（含与真 vools Heartbeat 的双向互操作用例）。
 
 **P2a（已落地）**
 
@@ -1209,17 +1209,25 @@ pub fn TaskQueue::verify_payload_sha(Self, TaskRecord) -> Bool          // 增�
 pub fn TaskQueue::crypto_enabled(Self) -> Bool;  pub fn TaskQueue::store_of(Self) -> SqliteTaskStore
 pub fn TaskQueue::close(Self) -> Unit
 
-// task_heartbeat.mbt —— 心跳（JSON 快照 + 泵）
+// task_heartbeat.mbt —— 心跳（vools 同形纯文本 + 三级兼容读 + 泵）
 pub(all) struct HeartbeatSnapshot { … };  pub(all) struct Heartbeat { … }
 pub fn Heartbeat::new(&@rhop.SharedPath?, String, Double, Double, String, String) -> Self
 pub fn Heartbeat::from_config(&@rhop.SharedPath?, TaskConfig) -> Self
-pub fn Heartbeat::beat(Self, String?) -> Result[Unit, String]
+pub fn Heartbeat::beat(Self, String?, include_worker~ : Bool = false) -> Result[Unit, String]
+    // 写 vools 同形纯文本 `<ISO.%fZ>`（微秒；MoonBit ms 精度补 000）；
+    // include_worker=true 时写 `<ts> <worker_id>`（vools 默认 False，本项目同）
 pub fn Heartbeat::mark_closed(Self, String?) -> Result[Unit, String]
+    // 写字面量 closed_token（默认 "closed"，与 vools 同名常量一致），不是 JSON
 pub fn Heartbeat::read(Self) -> Result[HeartbeatSnapshot?, String]
+    // 三级兼容：① 整串 == closed_token ⇒ 停机哨兵；② JSON 存量（历史版本）；
+    // ③ 纯文本 ISO（秒 / 微秒都收，`<ts>` 或 `<ts> <worker>`）
 pub fn Heartbeat::is_alive(Self, Int64?) -> Bool
 pub fn Heartbeat::check(Self, Int64?) -> Result[(Bool, String), String]
 pub fn Heartbeat::clear(Self) -> Result[Unit, String]
 pub fn Heartbeat::filename(Self) -> String;  pub fn Heartbeat::stale_after_sec(Self) -> Double
+pub fn Heartbeat::max_future_skew_sec(Self) -> Double        // 默认 60.0（vools 同值）
+pub fn Heartbeat::with_max_future_skew(Self, Double) -> Self  // ≤0 回落 60s
+    // 未来时间戳超出容差 ⇒ fail-closed 判 dead（与 vools 一致）；容差也可从 queue.heartbeat.max_future_skew_sec 读
 pub struct HeartbeatPump { … }
 pub fn HeartbeatPump::new(Heartbeat) -> Self
 pub fn HeartbeatPump::start(Self) -> Result[Unit, String]
@@ -1263,8 +1271,8 @@ pub fn TaskSync::export_and_mark(Self, Int32, String) -> Result[(Json, Int32), S
 | ⚠️ 未应用 | exec 的 `workdir` / `env` / `shell:true` | 仅按语言白名单 spawn；显式不支持 shell（安全取舍） |
 | ⚠️ 简化 | 同步冲突 | 仅 `version` 新者胜，无 field merge / 墓碑 |
 | ⛔ 未复刻 | `task/cli.py` / `task/daemon.py` / `task/local_runner.py` | 命令行、task 守护、本机执行快捷路径 |
-| **B1 偏差** | **心跳文件格式不同** | vools 纯文本（`<ISO> [worker]`/closed_token）↔ 本项目 JSON ⇒ **双向不可互读**；混部时 Python 写的心跳会被 MoonBit 判 dead，必须先统一格式 |
-| **B2 偏差** | **未来时间戳判定相反** | vools 超 `max_future_skew` fail-closed；本项目 `age < 0` 判 alive（fail-open） |
+| ~~B1~~ ✅ 已解决 | 心跳文件格式 | 已按 vools 字节级对齐：`beat` 写纯文本 `<ISO.%fZ>`（`include_worker~` 默认 false）、`mark_closed` 写字面量 `"closed"`、`read` 三级兼容；**真 vools Heartbeat 双向互操作 6/6**（T0r15）|
+| ~~B2~~ ✅ 已解决 | 未来时间戳判定 | `max_future_skew_sec` 默认 **60s**（vools 同值）+ `with_max_future_skew`，超容差 **fail-closed** 判 dead（T0r15）|
 | B5 偏差 | 结果截断 | 用自定义 `__truncated__` 结构，vools 用尾部截断+省略号 |
 
 **复用而非重造**：载荷加密用 Batch B 的 `@rp.RhopCrypto`；摘要用 Batch A 的 `@rp.sha256_hex_of_utf8`；

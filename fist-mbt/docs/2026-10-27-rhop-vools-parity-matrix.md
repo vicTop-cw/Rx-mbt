@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | **v2（2026-10-28 09:3x，Batch A/B/C/D + clipboard 全部落地后复核）**；v1 2026-10-27 起稿、v1.1 更新 actions 行 |
+| 文档版本 | **v4（2026-10-28 11:3x，T0r15 字节级对齐后收口：B1/B2 已解决、rhop_task js 99、全模块 js 765）**；v1 起稿 / v1.1 actions / v2 C-D+clipboard / v3 P2 入矩阵 |
 | 参考实现 | `E:\IDEProjects\AI\vools\rhop\vools\rhop`（vools-rhop **0.9.0**，Python 3.13 实测） |
 | 本项目 | `E:\IDEProjects\AI\rx-mbt`，MoonBit 模块 `vicTop-cw/RX-MBT`，包 `rhop/` |
 | 执行契约 | `fist-mbt/plans/decisions/2026-10-27-rhop-vools-parity-decision.md` §2/§3/§4 |
@@ -55,7 +55,7 @@
 | **契约范围小计** | **192** | **178** | **4** | **1** | **0** | **9** | — |
 | `actions/jump.py` | 14 | 1 | 0 | 0 | 0 | 13 | 仅 `jump.probe` 内建（`actions_test.mbt` 覆盖） |
 | `secret.py` | 1 | 0 | 0 | 0 | 0 | 1 | CLI 工具，不迁 |
-| `task/` 子包（含 `task/store/`） | 230 | 0 | 21 | 0 | 0 | 209 | P2 已落地 P2a+P2b（8 文件 / 46·90·46 例，见 §5.9；仅模块级映射，未逐符号） |
+| `task/` 子包（含 `task/store/`） | 230 | 0 | 21 | 0 | 0 | 209 | P2 已落地 P2a+P2b（8 文件 / **46·99·46** 例，见 §5.9；仅模块级映射，未逐符号） |
 | **vools 全量** | **437** | **179** | **4** | **1** | **0** | **253** | — |
 
 ## 2. Batch A（协议/摘要层，已验收 · owner impl-core）
@@ -404,7 +404,7 @@
 > vools `task/` 是独立的通用任务队列（A 提交加密 JSON → B 解密执行；SQLite 管依赖/状态；存储可换后端）。
 > 契约 §3 把它列为 P2（「不列入本轮验收硬门槛」）。本项目已分两批落地：
 > **P2a**（数据/配置/密文）+ **P2b**（存储/队列/心跳/执行/同步），共 8 个文件；
-> 测试 `test-suit/rhop_task`：**wasm/native 46 例、js 90 例，全绿**（7 个测试文件 js-only）。
+> 测试 `test-suit/rhop_task`：**wasm/native 46 例、js 99 例，全绿**（7 个测试文件 js-only，含与真 vools Heartbeat 的双向互操作用例）。
 
 | vools 模块 | MoonBit 文件 | 关键符号 | 状态 | 测试 |
 |---|---|---|---|---|
@@ -439,15 +439,21 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | A6 | **同步冲突仅「version 新者胜」**：无 field-level merge、无墓碑（删除标记） | 并发双向同步可能丢字段更新 | ⚠️ |
 | A7 | **`local_runner` / `daemon`（task 版）/ `cli` 未复刻** | 本机执行快捷路径、task 守护进程、命令行入口均不提供 | ⛔ |
 
-#### P2 · B. 已知偏差（重点 B1 / B2）
+#### P2 · B. 早期偏差已解决（B1 / B2 → ✅ 已对齐，2026-10-28 T0r15）
 
-| # | 偏差 | 处置 / 影响 |
-|---|---|---|
-| **B1** | **心跳文件格式不同**：vools 是纯文本（`<ISO 时间> [worker]` 或 closed_token），本项目是 JSON（`HeartbeatSnapshot`，含 ts/epoch/worker/closed 等字段）⇒ **双向不可互读**。混部场景下，Python 端写的心跳 MoonBit 会解析失败并判 dead；反之 Python 也读不懂我们的 JSON | 混部（Python + MoonBit 同队列）前必须统一心跳格式；单栈部署无影响。已在 README「安全/互操作」提示 |
-| **B2** | **未来时间戳的判定方向相反**：vools 对超过 `max_future_skew` 的未来时间戳 fail-closed（判 unknown/dead），本项目 `age < 0` 直接判 alive（fail-open） | 时钟回拨/跨机时钟漂移时，本项目更宽松；安全敏感场景请自行校验时间戳 |
-| B5 | **结果截断用自定义 `__truncated__` 结构**（vools 用尾部截断 + 省略号） | 读取方需识别该键；仅影响超长 stdout/stderr |
-| B7 | **显式不支持 `shell: true`**（安全取舍：不经过 shell，避免注入） | 需要 shell 语义的动作请自行封装脚本并走白名单 |
-| B8 | **action 注册表仅进程内**（`register_action` 无持久化） | 进程重启后自定义动作需重新注册；内置动作不受影响 |
+> T0r15 由 impl-crypto 完成 vools 字节级对齐并实测：`beat` 输出 vools 同形纯文本（`<ISO.%fZ>`，微秒精度，
+> MoonBit 侧 ms 精度补 `000`），`include_worker~` 默认 **false**；`mark_closed` 写字面量 `closed_token`
+> （已核对 vools = `"closed"`）；`read` 三级兼容（`closed_token` → JSON 存量 → 纯文本，ISO 秒/微秒都收）；
+> `max_future_skew_sec` 默认 **60s**（vools 值）+ `with_max_future_skew` + 可从 `queue.heartbeat` 读，超容差 **fail-closed** 判 dead；
+> **真 vools `Heartbeat` 类双向互操作 6/6 通过**（不是字符串模拟）。
+
+| # | 原偏差（v3 记录） | 现状 | 证据 |
+|---|---|---|---|
+| **B1** | 心跳文件格式：vools 纯文本 ↔ 本项目 JSON ⇒ 双向不可互读 | ✅ **已对齐**：`beat` 写 vools 同形纯文本（微秒 ISO；`include_worker=false` 时仅时间戳，true 时 `<ts> <worker>`）；`mark_closed` 写字面量 `"closed"`；`read` 三级兼容（vools closed_token / vools 纯文本 / 历史 JSON 存量） | 真 vools `Heartbeat` 双向互操作 **6/6**；`test-suit/rhop_task` 心跳用例在三目标全绿（js 99 例整体全绿） |
+| **B2** | 未来时间戳方向：vools fail-closed ↔ 本项目 fail-open | ✅ **已对齐**：`max_future_skew_sec` 默认 **60s**（与 vools 同值），超出容差的未来时间戳 **fail-closed** 判 dead；容差可经 `with_max_future_skew` 或 `queue.heartbeat.max_future_skew_sec` 配置 | 同上（单测覆盖 ±容差边界） |
+| B5 | 结果截断用自定义 `__truncated__` 结构 | ⚠️ 仍为有意偏差（读取方需识别该键；仅影响超长 stdout/stderr） | — |
+| B7 | 显式不支持 `shell: true`（安全取舍） | ⚠️ 有意取舍，保持不变 | — |
+| B8 | action 注册表仅进程内（无持久化） | ⚠️ 保持不变（内置动作不受影响） | — |
 
 #### P2 · C. 有意增量（P2b 新增，vools 无对应物）
 
@@ -467,8 +473,8 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | `TaskConfig` / `SecretResolver` | P2a | P2b 的 store/queue/heartbeat 全部读同一配置与密文解析 |
 | `TaskState` ↔ `@rp.TaskStatus` 显式桥接 | Batch A | `TaskState::to_status` / `from_status`，任务队列与信封状态机同源 |
 
-**这些是「尽量复刻」的真实账**：P2 的 8 个文件是**可用**的（46·90·46 例全绿），但 A1–A7 与 B1–B8 必须与
-「已对齐」区分开看；混部前务必确认心跳格式（B1）与时间戳判定方向（B2）。
+**这些是「尽量复刻」的真实账**：P2 的 8 个文件是**可用**的（46·99·46 例全绿），A1–A7 与 B5/B7/B8 必须与「已对齐」
+区分开看；**B1/B2 已在 T0r15 解决** —— 心跳与 vools 双向互操作、未来时间戳按 60s 容差 fail-closed，混部（Python + MoonBit）现在可用。
 
 ## 6. 有意增量（契约外新增 API，不代表 vools 有对应物）
 
@@ -522,8 +528,8 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | 14 | **sync_folder 无独立 Source 抽象**：vools `LocalDirSource`（list_files / open_bytes / describe）；本项目由 `SyncFolder` 内部承担 + 公开 `sync_glob_match` | 同步实现 | 语义等价（源目录即本地目录）；无独立 describe |
 | 15 | **HTTP / 端点 / 子进程能力仅 js**：`HttpEndpoint`、clipboard 后端、`RelayServer` 子进程 | 相关类型 | 非 js 返回可诊断 `Err` 或 `available()=false`；三目标均可编译 |
 | 16 | **CLI 与 P2 task 队列**：vools 有 CLI 入口与完整 `task/` 队列（230 符号）；本项目不迁 CLI，`rhop_task` 覆盖数据/配置/密文（P2a）+ 存储/队列/心跳/执行/同步（P2b）共 8 文件，尚未移植 `task/cli.py`、`task/daemon.py`、`task/local_runner.py`、Postgres 后端 | P2 | 见 §5.9 与 §11 |
-| 17 | **P2 心跳文件格式不互通（B1）**：vools 纯文本 `<ISO> [worker]`/closed_token，本项目 JSON 快照 | 混部（Python + MoonBit 同队列） | **双向不可互读**：Python 写的心跳 MoonBit 判 dead、反之亦然。单栈部署无影响；混部前必须统一格式（见 §5.9 B1） |
-| 18 | **P2 未来时间戳判定方向相反（B2）**：vools 超 `max_future_skew` fail-closed，本项目 `age<0` 判 alive（fail-open） | 时钟回拨/跨机漂移 | 安全敏感场景请自行校验；差异与其余 P2 缺口见 §5.9 A/B 节 |
+
+> 历史条目（v3 的第 17/18 条：P2 心跳文件格式不互通、未来时间戳判定方向）**已于 2026-10-28 T0r15 解决**（vools 字节级对齐 + 真 vools 双向互操作 6/6），已移出本表，证据见 §5.9 B1/B2。
 
 ## 8. 统计与覆盖率
 
@@ -544,7 +550,7 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 1. **契约范围内 192 个符号中 178 个已完全对齐（92.7%），加上语义等价（🟡 4）与部分（⚠️ 1，watch 的无公开 `DEFAULT_EXTENSIONS` 常量）达 95.3%**；余下 9 个 ⛔ 全是明确不做项（SFTP 远端文件操作 8 + CLI 入口 1）。
 2. Batch A/B（124）保持 91.1%，跨实现字节级对齐有 qa fixture 硬证据（envelope checksum/字节、canonical JSON 7 例、digest 13 例、signer 3 例）。
 3. Batch C/D **全部落地且测试全绿**：session 7 / interact 2 / config 11 / mirror 12 / daemon 3+1CLI / requester 6 / executor 7 / sync_folder 9 / actions 2（`actions_test.mbt` 10 例）/ clipboard 6✅+2🟡（25 例）。
-4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 90 全绿），按模块级映射 21/230 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 209 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
+4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 99 全绿），按模块级映射 21/230 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 209 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
 
 ## 9. 复核方式（可重复执行）
 
@@ -589,10 +595,10 @@ moon test -p test-suit/rhop_task --target js
 | `moon test test-suit/rhop_business`（wasm/native） | `Total tests: 10, passed: 10, failed: 0.` |
 | `moon test test-suit/rhop_business --target js` | `Total tests: 41, passed: 41, failed: 0.` |
 | `moon test test-suit/rhop_task`（wasm/native） | `Total tests: 46, passed: 46, failed: 0.`（P2a 纯逻辑部分）|
-| `moon test test-suit/rhop_task --target js` | `Total tests: 90, passed: 90, failed: 0.`（P2a+P2b）|
+| `moon test test-suit/rhop_task --target js` | `Total tests: 99, passed: 99, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
 | 项目级 `moon test`（wasm） | `Total tests: 587, passed: 587, failed: 0.` |
 | 项目级 `moon test --target native` | `Total tests: 587, passed: 587, failed: 0.` |
-| 项目级 `moon test --target js` | `Total tests: 756, passed: 756, failed: 0.`（P2b 落地后的终版计数）|
+| 项目级 `moon test --target js` | `Total tests: 765, passed: 765, failed: 0.`（T0r15 后的终版计数）|
 
 > 判绿纪律：只认 `moon test` 汇总行（`Total tests: N, passed: N, failed: 0`），不认 exit code。
 > 本表所有数字均在表格标注时刻实际运行得到；P2 / Batch D 在途项恢复后应重跑并把 `rhop_business` 一行改为 38/38。
@@ -626,14 +632,14 @@ moon test -p test-suit/rhop_task --target js
 | `test-suit/rhop_business/sync_folder_test.mbt` + `sync_glob_test.mbt` | 5 + 5 | `sync_folder.py` | js |
 | `test-suit/rhop_business/nonjs_test.mbt` + helpers | 5（+ 0 例 helper 模块） | 非 js 降级路径 | wasm/native |
 | **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 41（js）** | — | — |
-| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 90（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync） | wasm/js/native（7 个文件 js-only） |
+| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 99（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
 
 **rhop 相关合计**
 
-- **js 口径**：135(rhop) + 52(rhop_js) + 25(clipboard) + 13(interact) + 41(business) + 90(task) = **356 例**
+- **js 口径**：135(rhop) + 52(rhop_js) + 25(clipboard) + 13(interact) + 41(business) + 99(task) = **365 例**
 - **wasm / native 口径**：131(rhop) + 10(business) + 46(task) = **187 例**（不含 js-only 包）
-- **全模块（项目级）**：wasm **587** / js **756** / native **587**，三目标全绿
-- 其中 vools 契约范围（A–D + clipboard）占 263 例（js），P2 占 90 例（js）
+- **全模块（项目级）**：wasm **587** / js **765** / native **587**，三目标全绿
+- 其中 vools 契约范围（A–D + clipboard）占 263 例（js），P2 占 99 例（js）
 
 ## 11. 本轮完成情况与「待终轮更新」清单
 
@@ -650,6 +656,6 @@ moon test -p test-suit/rhop_task --target js
 - `actions_test.mbt` 已交付（10 例，包级全绿）→ §5.5 三行改 ✅。
 
 **待终轮更新（P2 收尾后需要再刷一遍）**
-1. （已关闭）项目级三目标汇总行均已补齐：wasm 587/587、native 587/587、js 756/756，全绿（P2b 落地后实测）。
+1. （已关闭）项目级三目标汇总行均已补齐：wasm 587/587、native 587/587、js 765/765，全绿（T0r15 字节级对齐后实测，Windows 与 WSL 双平台 `scripts/test_all.sh` 均 PASS）。
 2. P2b：`rhop_task` 与 vools `task/`（230 符号）逐符号对照表 + native 目标结论。
 3. 覆盖率：当前契约范围 **92.7%**（178/192），已无在途 ⏳ 项；仅剩 ⚠️ 1（watch 常量）与 ⛔ 9（明确不做）。

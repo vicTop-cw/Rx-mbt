@@ -256,7 +256,7 @@ subject.on_completed()
 | 会话 | `session.mbt` / `config.mbt` / `interact.mbt` | 通道链（relay > online > shared）、配置构建与脱敏、execute/request/roundtrip 三模式 |
 | 业务 | `mirror.mbt` / `requester.mbt` / `executor.mbt` / `daemon.mbt` / `actions.mbt` / `sync_folder.mbt` | 镜像 SQLite（乐观锁）、需求端/执行端 API、中继守护、动作注册表、目录同步 |
 | 剪贴板 | `clipboard.mbt` | 本机剪贴板读写（Windows PowerShell / Linux wl-paste|xclip / macOS pbpaste 探测）+ 共享盘 push/pull 交换协议 |
-| P2 | `rhop_task/` | 通用任务队列（A 提交加密 JSON → B 解密执行，SQLite 管依赖/状态）：**P2a+P2b 已落地 8 文件**；未实现 Postgres 后端 / 大载荷落文件 / 任务执行明细表，未复刻 CLI·task-daemon·local_runner；**心跳文件格式与 vools 不互通（混部需统一）** —— 详见矩阵 §5.9 A/B 节 |
+| P2 | `rhop_task/` | 通用任务队列（A 提交加密 JSON → B 解密执行，SQLite 管依赖/状态）：**P2a+P2b 已落地 8 文件**；**心跳与 vools 互操作**（纯文本 `<ISO.%fZ> [worker]` / `closed_token="closed"` 哨兵，读端三级兼容；未来时间戳容差 60s fail-closed，与 vools 一致，真 vools 双向互操作 6/6）；未实现 Postgres 后端 / 大载荷落文件 / 任务执行明细表，未复刻 CLI·task-daemon·local_runner —— 详见矩阵 §5.9 A/B 节 |
 | 既有 | `packet.mbt` / `cipher.mbt` | 本仓库早期的简版 `RhopPacket` / `RhopEnvelope` / `RhopCipher`（不是 vools 对照面） |
 
 ### 跨平台可用性
@@ -307,7 +307,7 @@ let result = req.get_result(task_id)
 
 ### 与 vools-rhop 0.9.0 的对照与差异摘要
 
-对外统计（2026-10-28 10:1x 终版复核，详见矩阵）：契约范围 **192** 个 vools 公开符号中 **178 个完全对齐（92.7%）**，
+对外统计（2026-10-28 11:3x 终版复核，详见矩阵）：契约范围 **192** 个 vools 公开符号中 **178 个完全对齐（92.7%）**，
 加上语义等价与部分实现达 **95.3%**；vools 全量 437 符号（含 P2 `task/` 230）覆盖率 41.0%。
 
 主要差异（都不改变可观察协议语义）：
@@ -331,12 +331,12 @@ moon test --target js              # js 后端（rhop 相关 135 + 52 + 25 + 13 
 moon test --target native          # native 后端（rhop 相关 131 例，全绿）
 moon test -p test-suit/rhop_clipboard --target js   # 剪贴板 25 例
 moon test test-suit/rhop_business --target js       # 业务层 41 例（wasm/native 10 例）
-moon test test-suit/rhop_task --target js           # P2 任务队列 90 例（wasm/native 46 例）
+moon test test-suit/rhop_task --target js           # P2 任务队列 99 例（wasm/native 46 例）
 moon run demo/rhop_demo --target js -- send <共享目录>   # 端到端 demo（发 5 条加密包）
 bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓三目标汇总行）
 ```
 
-**最新实测计数（2026-10-28 10:1x 终版，Windows 11 / moon 0.1.20261016 / node v25.2.1；WSL 侧独立复核同数字）**
+**最新实测计数（2026-10-28 11:3x 终版，Windows 11 / moon 0.1.20261016 / node v25.2.1；Windows 与 WSL 的 `scripts/test_all.sh` 双平台均 PASS）**
 
 | 测试包 | 用例数 | 结果 |
 |---|---:|---|
@@ -345,8 +345,8 @@ bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓�
 | `test-suit/rhop_clipboard`（js） | 25 | 全绿 |
 | `test-suit/rhop_interact`（js） | 13 | 全绿 |
 | `test-suit/rhop_business`（wasm / js / native） | 10 / 41 / 10 | 全绿 |
-| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 90 / 46 | 全绿 |
-| **全模块（项目级）** | **wasm 587 / js 756 / native 587** | 全绿 |
+| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 99 / 46 | 全绿 |
+| **全模块（项目级）** | **wasm 587 / js 765 / native 587** | 全绿 |
 
 跨实现一致性由 `test-suit/rhop_js/fixtures/vools_vectors.json`（真实 vools-rhop 生成的 envelope 字节 /
 checksum / canonical JSON / digest / signer 向量）锁定，`scripts/verify_interop.py` 可反向复核。
