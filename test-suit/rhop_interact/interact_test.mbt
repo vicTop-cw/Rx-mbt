@@ -800,7 +800,12 @@ test "interact · roundtrip：预置陈旧 res_ 不被采信，取回后删除�
 ///|
 test "interact · roundtrip：发送失败立即 error(phase=send)，不返回上一轮结果（C1-F1）" {
   let dir = it_dir("rhop-it-sendfail")
-  // 用普通文件挡住写端：shared.write 的父路径是文件 → 写入必失败
+  // 用普通文件挡住写端：shared.write 的父路径是文件 → 写入必失败。
+  //
+  // 平台无关性（WSL/Linux 回归）：探测判「写端可用」的依据是**父路径存在**，
+  // 不是「父路径是目录」—— Windows(Win32 词法归一的 `x/..`) 与 POSIX
+  // （字符串求父路径 + existsSync，见 rhop/session.mbt 的 sp_write_parent_exists）
+  // 都得到「父存在 → 可写」，于是真正写入时才失败 → 走 status:error 收据。
   assert_true(ffi_write(dir + "/blocker", "not-a-dir"))
   let cfg = it_cfg(
     itj(
@@ -840,7 +845,9 @@ test "interact · handle_request：回执写失败 → status:error + phase=resp
     Ok(j) => assert_eq(it_str(j, "status"), "ok")
     Err(e) => abort("请求包写入失败: " + e)
   }
-  // 接收端：读端正常、写端落在「父路径是文件」的位置 → 回执写必然失败
+  // 接收端：读端正常、写端落在「父路径是文件」的位置 → 回执写必然失败。
+  // 同 F1 用例：两平台都先判「父存在 → 写端可用」，再在真正写回执时失败，
+  // 因此 handle_request 必须回 status:error + phase=response（而不是 Err）。
   assert_true(ffi_write(dir + "/blocker", "x"))
   let read_sp : &@rp.SharedPath = @rp.LocalSharedPath::new(dir)
   let write_sp : &@rp.SharedPath = @rp.LocalSharedPath::new(
@@ -885,7 +892,11 @@ test "interact · available()/select() 不建目录；只读接收端可收（C1
     Err(e) => abort("构造会话失败: " + e)
   }
   assert_true(!ffi_exists(fresh))
-  // 父目录存在 → 写端可用；但探测本身不能建目录
+  // 父目录存在 → 写端可用；但探测本身不能建目录。
+  //
+  // 平台无关性（WSL/Linux 回归）：`fresh/..` 在 POSIX 下是 ENOENT（不做词法归一），
+  // 只靠 exists("..") 会在 Linux/WSL 上误判不可用；产品侧已改为
+  // 「exists(".") || exists("..") || 本地根父路径 existsSync」，两平台一致为 true。
   assert_true(s.available())
   assert_true(!ffi_exists(fresh))
   assert_eq(s.select().transport, "shared")

@@ -4,10 +4,10 @@
   "alg": "fernet-vtext-compatible",
   "key": "rx-mbt-rhop-test-key-v1",
   "payload_json": "{\"msg\":\"你好 rhop（MoonBit 侧生成）\",\"n\":7,\"ok\":true,\"arr\":[1,2],\"nested\":{\"k\":\"v\"}}",
-  "envelope_json": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WWN2TTVtanNNT2lYbjMyUGlFLWdtYUpPZ2ZOSHQyWEt3YjlkN2poTjcyZkRiNHZxa09EQUMyM3RSS190bzVBUWNWQkZpOVVRUkFtMDctVFVGQWlqMGhlaWdzT1F2S01XSHVNdlpIOTRxMFk4dnpuWDFjamZCLWNTbU5HZE42cVdMZjlKNnRxU2Ywb1hUU0lfWWdhNk1JOTNSYTFaQkx5U0VFY1ZWUmY5c2JjNThkOF9PZ09aNVRIUTlMcmQwbEV3WW15\"}",
-  "secret": "RHOP-ENC:Z0FBQUFBQnE0WWN2cVJlaGhOSWtoWVJNNUxpRjBDS0NDcGZBYXFCMUJsdEZXZHRYc2RENjV1WmRfU1ZPZHI3bFdUdk5vMTlqUWJpMjF1UUlVUUMwWDc1UC00M1AxWWI2NkE9PQ==",
+  "envelope_json": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WXRfaDZFaElxMHh5dWpmRnY3UmljR09uNksta1BreTFFTDVsLXZCWWxqRlVPTU55Q25HTTU0U0VZMUpqZml6WTNQTnVTVjVGQmhvcXdZRl9fMklLNHZGR0xOMTBZU3MwcjRRRHFQdWtkbmdWTUZNakktY3V3WG5rYVBwOXRpb1QxSDBULWhGX2JacHFiSXUxR2hSQ29wOWpmWWFtN0N2aFRJWHVidk5jeUtZOHgzd09KZHBFUjVmT0hLOFhJNGVnV2ZS\"}",
+  "secret": "RHOP-ENC:Z0FBQUFBQnE0WXRfNHNvUUlxM2lMWjJ6dEpxTFllWHpNOXZnaE9SeXBtLVZUUnJEN2ZNME9lYWxxSGJ4UG1hRnJ1eTY3bzQ0NjRRb2tNZTRXTlZzb0NIMFJjcHYxc1EzbEE9PQ==",
   "secret_plain": "moonbit-s3cr3t",
-  "envelope_nonjson": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WWN2V3ZfQ2FQclVWMFA1b3NrTWo1bGc0WVpQaTNLOXduVGlPeXppQld2WnljZ21KUTdQa0FUTW9tWXllQjZCRUZQb3UwenN6TGJ0emdSZUk2UkQzaDBWaks5bTZmbHJ6QVV4WW92Nkg4UFVSQjg9\"}",
+  "envelope_nonjson": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WXRfejFtLXVyVGwtNjZLZktQbXNWQkVnQ2daLXp2NF8wdVVjMTViSU02S2lPSHZCVk5McDV0SWFPaTQ3djNHQmtjenZldi1sczFlNmZUd085Ykd1clEyVWdXYlFVMkRxS1JEMUxqcW1QaUw3N1E9\"}",
   "expect": {
     "envelope_json": "decrypt_verify -> OK",
     "secret": "decrypt_secret -> moonbit-s3cr3t",

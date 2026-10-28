@@ -238,38 +238,123 @@ fn Session::pick_online(self : Session) -> &OnlineChannel? {
 }
 
 ///|
-/// shared path 单侧可用性探测（**无副作用**：不建目录、不写文件）。
+/// 介质是否指向**本地文件系统**（端点适配器的 `name()` 前缀判别）。
 ///
-/// 已知本地根的介质用 `exists(".")` / `exists("..")` 纯探测：
-/// - 读侧：根目录已存在（且是目录）；
-/// - 写侧：根目录已存在，或其父目录已存在（真正写入时由 write_text 建目录）。
-///
-/// 未知根的介质（内存 / 远端 / HTTP 抽象实现）没有可探测的本地状态，
-/// 回退契约 `available()` —— 这类实现自己保证无副作用。
-///
-/// 为什么不再直接用 `SharedPath::available`：`LocalSharedPath::available`
-/// 的实现是 mkdir -p，探测本身会产生副作用；而 `SharedPathView::available`
-/// 又要求写端可建目录，导致「写端只读 + 读端可读」的接收端被判整条不可用。
-/// 端点适配器（`EndpointSharedPath`，`root()` 恒 `None`）是否指向本地文件系统。
-///
-/// 本地端点**不能用** `available()` 探测：`LocalSharedPath::available` 走
-/// `fs_ensure_dir`（会建目录），在 `available()/select()` 这类纯探测路径上产生副作用。
+/// 端点适配器 `EndpointSharedPath` 的 `root()` 恒 `None`，所以本地/远端只能看
+/// `name()` 前缀：
+/// - `shared:local:<绝对路径>`：本地裸路径端点；
+/// - `shared:file-url:<url>`：file:// URL 端点（解析后仍是本地路径）；
+/// - `shared:http-url:<url>`：HTTP 端点（真·远端，探测只能走 `available()`）。
 fn sp_is_local_endpoint(sp : &SharedPath) -> Bool {
   let n = SharedPath::name(sp)
   n.has_prefix("shared:local:") || n.has_prefix("shared:file-url:")
 }
 
 ///|
-/// 单侧可用性探测（**无副作用**）：不建目录、不写文件。
+/// 取介质的**本地根路径**（不是本地文件系统就 None）。
 ///
-/// - `root()` 已知（`LocalSharedPath` / 测试 mock）：用存在性判定，
-///   读侧要求根目录已存在，写侧要求根目录或父目录存在（写入时会自建目录）。
-/// - 端点适配器：先做存在性探测（本地/远端都无副作用）；本地端点若连父目录都不存在
-///   则直接判不可用（绝不为了探测而建目录）；远端端点退回 `available()` 探活。
+/// - `LocalSharedPath` / 已知根的测试 mock：`root()` 直接给出；
+/// - 端点适配器：`root()` 恒 `None`，从 `name()` 前缀里取
+///   （local 段就是绝对路径；file-url 用 `file_url_to_path` 还原成本地路径）；
+/// - HTTP 端点 / 抽象 mock：None（不做本地路径探测）。
+fn sp_local_root(sp : &SharedPath) -> String? {
+  match SharedPath::root(sp) {
+    Some(root) => Some(root)
+    None => {
+      let name = SharedPath::name(sp)
+      if name.has_prefix("shared:local:") {
+        match name.get_view(start=13) {
+          Some(v) => Some(v.to_owned())
+          None => None
+        }
+      } else if name.has_prefix("shared:file-url:") {
+        match name.get_view(start=16) {
+          Some(v) =>
+            match file_url_to_path(v.to_owned()) {
+              Ok(p) => Some(p)
+              Err(_) => None
+            }
+          None => None
+        }
+      } else {
+        None
+      }
+    }
+  }
+}
+
+///|
+/// 路径的父目录（纯字符串运算，统一 "/" 分隔）。
+///
+/// 边界：`/` 与盘符根没有有意义的父目录 → `""`；`/x` → `/`；`E:/x` → `E:/`。
+fn path_parent(p : String) -> String {
+  let norm = normalize_path(p)
+  if norm == "" || norm == "/" {
+    return ""
+  }
+  // Windows 盘符根（"E:" / "E:/"）：父就是它自己
+  if norm.length() == 2 && norm.get_char(1) == Some(':') {
+    return norm + "/"
+  }
+  match norm.rev_split_once("/") {
+    Some(pair) => {
+      let head = pair.0.to_owned()
+      if head == "" {
+        "/"
+      } else if head.length() == 2 && head.get_char(1) == Some(':') {
+        head + "/"
+      } else {
+        head
+      }
+    }
+    None => ""
+  }
+}
+
+///|
+/// 写侧「父目录是否存在」探测（**跨平台**）。
+///
+/// 1. 先问介质自己（`exists("..")`）：内存 mock 可直接回答；Windows/Win32 在
+///    进入内核前会先做词法归一，所以 `x/..` 即使 x 不存在也能解到父路径；
+/// 2. **POSIX（Linux / macOS / WSL）不做词法归一**：`stat("x/..")` 在 x 不存在时
+///    返回 ENOENT —— 于是本地根再补一次「按字符串求父路径 → 真实存在性探测」。
+///    这一步只读文件系统（`existsSync` 语义）、绝不建目录。
+///
+/// 两条探测合起来，`available()`/`select()` 在两平台给出**同一答案**：
+/// 「根不存在但父目录存在」判可写（真正写入时才 mkdir -p），
+/// 「根与父都不存在」判不可写（发送侧给「写端不可用」专门 Err）。
+fn sp_write_parent_exists(sp : &SharedPath) -> Bool {
+  if SharedPath::exists(sp, "..") {
+    return true
+  }
+  match sp_local_root(sp) {
+    Some(root) => {
+      let parent = path_parent(root)
+      parent != "" && sp_path_exists(parent)
+    }
+    None => false
+  }
+}
+
+///|
+/// 单侧可用性探测（**无副作用**：不建目录、不写文件）。
+///
+/// - `root()` 已知（`LocalSharedPath` / 测试 mock）：用存在性判定 ——
+///   读侧要求根目录已存在；写侧要求根目录或父目录存在（真正写入时才由
+///   `write_text` 建目录，探测本身绝不建目录）。
+/// - 端点适配器：先做存在性探测；本地端点连父目录都不存在则判不可用
+///   （绝不为了探测而建目录）；HTTP 等远端端点退回 `available()` 探活。
+///
+/// 为什么不再直接用 `SharedPath::available`：`LocalSharedPath::available` 的实现是
+/// mkdir -p，探测本身会产生副作用；`SharedPathView::available` 又要求写端可建目录，
+/// 会把「写端只读 + 读端可读」的接收端整条判死。
+///
+/// 跨平台回归（WSL）：写侧的「父目录存在」**不能**只靠 `exists("..")`（Windows 词法
+/// 归一成立、POSIX 不成立），统一走 `sp_write_parent_exists`。
 fn sp_side_usable(sp : &SharedPath, for_write : Bool) -> Bool {
   let dot = SharedPath::exists(sp, ".")
   if for_write {
-    if dot || SharedPath::exists(sp, "..") {
+    if dot || sp_write_parent_exists(sp) {
       return true
     }
   } else if dot {
@@ -664,4 +749,39 @@ pub fn Session::describe(self : Session) -> Json {
     "relay": relay_base,
     "has_crypto": Json::boolean(self.has_crypto()),
   })
+}
+
+// ---------------------------------------------------------------------------
+// 路径存在性探测（只读、无副作用）
+//
+// 会话层只做「父目录是否存在」这一件本地探测（见 sp_write_parent_exists）。
+// 不复用 transport_local.mbt 的私有 fs 原语（那是文件读写层，且会建目录/mkdir -p），
+// 这里要的是**纯存在性**语义：existsSync 不建任何东西，也不会因权限失败而误判。
+//
+// 目标说明：仅 js 目标可探测；wasm/native 恒 false（那两目标本就没有文件系统，
+// 本地介质本就不可用，行为与修复前一致）。
+// ---------------------------------------------------------------------------
+
+///|
+/// js：路径是否存在（node:fs `existsSync`，只读、不建目录）。
+#cfg(target="js")
+extern "js" fn ffi_sp_path_exists(p : String) -> Bool =
+  #| (p) => { try { return process.getBuiltinModule("node:fs").existsSync(String(p)); } catch (_e) { return false; } }
+
+///|
+/// js：路径存在性探测（空串直接 false，避免把 cwd 当父目录）。
+#cfg(target="js")
+fn sp_path_exists(p : String) -> Bool {
+  if p.trim().length() == 0 {
+    return false
+  }
+  ffi_sp_path_exists(p)
+}
+
+///|
+/// 非 js：无文件系统 API，恒 false（本地介质在 wasm/native 本就不可用）。
+#cfg(not(target="js"))
+fn sp_path_exists(p : String) -> Bool {
+  let _ = p
+  false
 }
