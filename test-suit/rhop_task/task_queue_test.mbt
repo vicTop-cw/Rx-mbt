@@ -7,7 +7,7 @@
 
 ///|
 extern "js" fn ffi_qt_mkdtemp(prefix : String) -> String =
-  #| (prefix) => { try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const path = process.getBuiltinModule("node:path"); return fs.mkdtempSync(path.join(os.tmpdir(), String(prefix) + "-")); } catch (_e) { return ""; } }
+  #| (prefix) => { try { const G = globalThis; if (!G.__rxmbt_tmp_reg) { G.__rxmbt_tmp_reg = new Set(); } if (!G.__rxmbt_tmp_hook) { G.__rxmbt_tmp_hook = true; process.on("exit", () => { try { const fsm = process.getBuiltinModule("node:fs"); for (const d of G.__rxmbt_tmp_reg) { try { fsm.rmSync(d, { recursive: true, force: true }); } catch (_e) {} } G.__rxmbt_tmp_reg.clear(); } catch (_e2) {} }); } const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const path = process.getBuiltinModule("node:path"); const d = fs.mkdtempSync(path.join(os.tmpdir(), String(prefix) + "-")); G.__rxmbt_tmp_reg.add(d); return d; } catch (_e) { return ""; } }
 
 ///|
 extern "js" fn ffi_qt_join(dir : String, name : String) -> String =
@@ -181,8 +181,8 @@ test "queue · 结果超限截断（带 __truncated__ 标记）" {
   }
   match rec.back_info {
     Some(back) => {
-      assert_true(back.contains("__truncated__"))
-      assert_true(back.contains("limit_bytes"))
+      assert_true(back.contains("\"truncated\":true"))
+      assert_true(back.contains("truncate_hint"))
       // 截断后的整体长度受控
       assert_true(back.length() < 400)
     }

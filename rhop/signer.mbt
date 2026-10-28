@@ -90,7 +90,7 @@ pub impl AbstractSigner for FileHashSigner with fn verify(
 /// 因此 `NPUSigner::sign` **恒不为 `None`**：本库不 spawn 子进程、无法区分
 /// 「npu-smi 不存在」与「工具在但无序列号」，统一按可签名的 `UNKNOWN_NPU`
 /// 处理（vools 在『工具不存在』时返回 `None`，该分支无法在本抽象中表达，
-/// 见矩阵 §7 差异 17）。测试/真机由调用方注入 provider，三目标一致。
+/// 见矩阵 §7 差异 22）。测试/真机由调用方注入 provider，三目标一致。
 pub struct NPUSigner {
   /// 签名前缀标记（默认 `NPU_MARKER`）
   marker : String

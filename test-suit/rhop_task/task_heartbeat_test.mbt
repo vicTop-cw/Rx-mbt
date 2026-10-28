@@ -7,7 +7,7 @@
 
 ///|
 extern "js" fn ffi_hb_mkdtemp(prefix : String) -> String =
-  #| (prefix) => { try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const path = process.getBuiltinModule("node:path"); return fs.mkdtempSync(path.join(os.tmpdir(), String(prefix) + "-")); } catch (_e) { return ""; } }
+  #| (prefix) => { try { const G = globalThis; if (!G.__rxmbt_tmp_reg) { G.__rxmbt_tmp_reg = new Set(); } if (!G.__rxmbt_tmp_hook) { G.__rxmbt_tmp_hook = true; process.on("exit", () => { try { const fsm = process.getBuiltinModule("node:fs"); for (const d of G.__rxmbt_tmp_reg) { try { fsm.rmSync(d, { recursive: true, force: true }); } catch (_e) {} } G.__rxmbt_tmp_reg.clear(); } catch (_e2) {} }); } const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const path = process.getBuiltinModule("node:path"); const d = fs.mkdtempSync(path.join(os.tmpdir(), String(prefix) + "-")); G.__rxmbt_tmp_reg.add(d); return d; } catch (_e) { return ""; } }
 
 ///|
 extern "js" fn ffi_hb_rmrf(p : String) -> Unit =
@@ -460,6 +460,127 @@ test "B2 · from_config 从 queue.heartbeat 读 closed_token 与 max_future_skew
   match hb.read() {
     Ok(Some(snap)) => assert_true(snap.closed)
     _ => fail("配置里的 closed_token 未生效")
+  }
+  ffi_hb_rmrf(dir)
+}
+
+// ---------------------------------------------------------------------------
+// C3 互操作：与真实 Python vools 的**字节级双向互读**
+//
+// B1/B2（心跳格式与 fail-closed）已在工作树中实现；本用例证明「实现之间真的能互读」，
+// 而不只是我方单方面自洽：
+//   ① Python vools 写心跳 → MoonBit 读（解析出 worker_id/ts 且判 alive）
+//   ② MoonBit 写心跳 → Python vools 读（vools 判 state=alive）
+// 环境缺 python / vools 时**软跳过**（打印原因），不影响 CI 判绿。
+// ---------------------------------------------------------------------------
+
+///|
+/// 运行 `python test-suit/rhop_task/fixtures/hb_interop.py <dir> <action>`，
+/// 返回其 stdout（单行 JSON）。返回 "" 表示 python 不可用（调用方软跳过）。
+extern "js" fn ffi_hb_run_python(
+  repo_root : String,
+  dir : String,
+  action : String,
+) -> String =
+  #| (repoRoot, dir, action) => { try { const cp = process.getBuiltinModule("node:child_process"); const path = process.getBuiltinModule("node:path"); const script = path.join(String(repoRoot), "test-suit", "rhop_task", "fixtures", "hb_interop.py"); const env = Object.assign({}, process.env); env.PYTHONIOENCODING = "utf-8"; const cands = ["python3", "python", "py"]; try { const la = process.env.LOCALAPPDATA; if (la) { cands.push(path.join(la, "Microsoft", "WindowsApps", "python.exe")); } } catch (_e2) {} cands.push("/usr/bin/python3"); for (const exe of cands) { try { const out = cp.execFileSync(exe, [script, String(dir), String(action)], { encoding: "utf8", timeout: 60000, env: env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); return String(out).trim(); } catch (e) { const so = (e && e.stdout) ? String(e.stdout).trim() : ""; if (so) { return so; } } } return ""; } catch (_e) { return ""; } }
+
+///|
+/// 定位仓库根（从 cwd 逐级上溯找 moon.mod）。
+extern "js" fn ffi_hb_repo_root() -> String =
+  #| () => { const fs = process.getBuiltinModule("node:fs"); const path = process.getBuiltinModule("node:path"); let d = process.cwd(); for (;;) { try { if (fs.existsSync(path.join(d, "moon.mod"))) { return d; } } catch (_e) {} const p = path.dirname(d); if (p === d) { return process.cwd(); } d = p; } }
+
+///|
+test "heartbeat · 与真实 Python vools 字节级双向互读（C3 互操作）" {
+  let repo = ffi_hb_repo_root()
+  let dir = ffi_hb_mkdtemp("rhop-hb-interop")
+  // ① Python vools 写 → MoonBit 读
+  let written = ffi_hb_run_python(repo, dir, "write")
+  if written == "" {
+    println("[heartbeat] python 不可用 → 互操作用例软跳过")
+    ffi_hb_rmrf(dir)
+    return
+  }
+  let wj = @json.parse(written) catch {
+    _ => {
+      println("[heartbeat] helper 输出非 JSON → 软跳过: " + written)
+      ffi_hb_rmrf(dir)
+      return
+    }
+  }
+  match wj {
+    { "ok": True, "content": String(content), .. } => {
+      // vools 写出的字节形态：`<ISO 带微秒>Z <worker_id>`（纯文本，空格分隔）
+      assert_true(content.contains("T"))
+      assert_true(content.contains("Z"))
+      assert_true(content.contains("python-vools-worker"))
+      assert_false(content.has_prefix("{"))
+      // MoonBit 侧读同一个文件：必须解析出 worker_id 与 ts，并判 alive
+      let sp : &@rp.SharedPath = @rp.LocalSharedPath::new(dir)
+      let hb = @rt.Heartbeat::new(
+        Some(sp),
+        "interop.heartbeat",
+        5.0,
+        600.0,
+        "closed",
+        "moonbit-worker",
+      )
+      match hb.read() {
+        Ok(Some(snap)) => {
+          assert_eq(snap.worker_id, "python-vools-worker")
+          assert_true(snap.ts.contains("T"))
+          assert_false(snap.closed)
+          assert_true(snap.epoch > 0L)
+        }
+        Ok(None) =>
+          fail("MoonBit 读不出 vools 写的心跳（B1 互读失败）")
+        Err(e) => fail("读失败: \{e}")
+      }
+      assert_true(hb.is_alive(None))
+      match hb.check(None) {
+        Ok(pair) => assert_true(pair.0)
+        Err(e) => fail("check: \{e}")
+      }
+    }
+    _ => {
+      println(
+        "[heartbeat] vools 不可用（helper 报错）→ 软跳过: " +
+        written,
+      )
+      ffi_hb_rmrf(dir)
+      return
+    }
+  }
+  // ② MoonBit 写 → Python vools 读
+  let sp2 : &@rp.SharedPath = @rp.LocalSharedPath::new(dir)
+  let hb2 = @rt.Heartbeat::new(
+    Some(sp2),
+    "interop.heartbeat",
+    5.0,
+    600.0,
+    "closed",
+    "moonbit-worker",
+  )
+  // 默认 include_worker=false（与 vools 默认一致）；这里显式带上 worker，验证 worker 字段双向可读
+  assert_eq(hb2.beat(None, include_worker=true), Ok(()))
+  // 我方写出的是纯文本（非 JSON），vools 按空白切分才能读
+  match @rp.SharedPath::read_text(sp2, "interop.heartbeat") {
+    Ok(text) => {
+      assert_false(text.has_prefix("{"))
+      assert_true(text.contains("moonbit-worker"))
+    }
+    Err(e) => fail("读回自己写的心跳失败: \{e}")
+  }
+  let checked = ffi_hb_run_python(repo, dir, "check")
+  let cj = @json.parse(checked) catch {
+    _ => fail("helper check 输出非 JSON: " + checked)
+  }
+  match cj {
+    { "ok": True, "state": String(state), "worker_id": String(wid), .. } => {
+      // vools 判定必须是 alive（不是 stale/unknown/missing）⇒ 字节级互读成立
+      assert_eq(state, "alive")
+      assert_eq(wid, "moonbit-worker")
+    }
+    _ => fail("vools 读我方心跳失败: " + checked)
   }
   ffi_hb_rmrf(dir)
 }

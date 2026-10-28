@@ -243,6 +243,42 @@ fn build_envelope(fx : Json) -> (Array[Json], Int32) {
           }),
         )
       }
+      { "expect_error": True, .. } => {
+        // 负向用例（tampered_checksum）：**MoonBit 必须拒绝**被篡改的信封。
+        // 这里做本地断言（失败即 abort），并把「拒绝了 + 实际错误文本」写进产物，
+        // 供 verify_interop.py 的 --require-negative 门禁消费。
+        expected_count = expected_count + 1
+        let name = need_str(c, "name")
+        let hex = need_str(c, "to_rhop_bytes_utf8_hex")
+        let want = need_str(c, "expect_error_contains")
+        let raw = match @rp.bytes_from_hex(hex) {
+          Ok(b) => b
+          Err(e) => abort("tampered hex 解码失败（\{name}）: \{e}")
+        }
+        let (rejected, actual) = match @rp.Envelope::from_rhop_bytes(raw) {
+          Ok(_) => (false, "accepted")
+          Err(msg) => (true, msg)
+        }
+        if !rejected {
+          abort(
+            "MoonBit 未拒绝被篡改信封（\{name}）⇒ 完整性校验失效",
+          )
+        }
+        if !actual.contains(want) {
+          abort(
+            "拒绝理由不符（\{name}）：期望含 \{want}，实际 \{actual}",
+          )
+        }
+        out.push(
+          Json::object({
+            "name": Json::string(name),
+            "to_rhop_bytes_utf8_hex": Json::string(hex),
+            "rejected": Json::boolean(rejected),
+            "actual_error": Json::string(actual),
+            "expect_error_contains": Json::string(want),
+          }),
+        )
+      }
       _ => ()
     }
   }
@@ -364,7 +400,7 @@ test "vectors · 用真实 rhop API 生成五分节产物并写盘" {
   // fixture 条数自证：四类合计 = 各分节条数之和，且非空
   assert_eq(canonical_n, 7)
   assert_eq(digest_n, 5 + 5 + 2 + 1)
-  assert_eq(envelope_n, 2)
+  assert_eq(envelope_n, 3)
   assert_eq(crypto_json_n, 3)
   assert_eq(crypto_secret_n, 2)
   assert_eq(signer_n, 3)
@@ -446,7 +482,8 @@ test "vectors · 产物文件五节非空且条数 == fixture 对应条数" {
     let mut env_n = 0
     for c in envelope {
       match c {
-        { "fields": _, .. } => env_n = env_n + 1
+        // 正向（有 fields）+ 负向（有篡改字节）都计入 envelope 分节条数
+        { "to_rhop_bytes_utf8_hex": _, .. } => env_n = env_n + 1
         _ => ()
       }
     }

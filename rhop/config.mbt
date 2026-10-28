@@ -72,8 +72,11 @@ pub fn RhopConfig::new(
 /// 4. **`{"path": …}` / `{"env": …}` / `{"source": …}`**：交给 `load_key`
 ///    （优先级 source > path > env，env 缺省 `RHOP_KEY`）。
 ///
-/// 其它形态（数组 / null / 布尔）返回可诊断 Err；数字与布尔按 JSON 文本当密钥
-/// （vools 走 `str(key_cfg)`，口径近似；这是边界形态，不建议依赖）。
+/// 其它形态（数组 / null）返回可诊断 Err；数字与布尔按 **JSON 文本**当密钥。
+///
+/// **与 vools 的差异（D10）**：vools 走 Python `str(key_cfg)`，布尔会得到 `"True"/"False"`
+/// （首字母大写），本项目得到 JSON 文本 `"true"/"false"`；数字两者一致（`"12345"`）。
+/// 这是边界形态（正常配置不会拿布尔当密钥），**不建议依赖**，仅为与 vools 的错差留档。
 pub fn _key_from_cfg(key_cfg : Json?) -> Result[String, String] {
   let cfg = match key_cfg {
     None =>
@@ -439,7 +442,13 @@ pub fn RhopConfig::build_session(
 ///|
 /// 给动作执行用的 cfg：sftp 配置（FTP_connect 形态）+ 密钥存在性 + 配置名。
 ///
-/// **不含密钥原文**（动作不需要，也不该拿到）。
+/// **不含 `key`（本地固定密钥）原文** —— 只给 `has_key` 布尔。
+///
+/// ⚠️ **但 `sftp` 是原文**（含 `password` / `key_path`）：`jump.push/pull/sync` 真连 SFTP
+/// 需要凭据，掩码后动作就跑不了。因此：
+/// - 本方法的返回值**严禁直接写日志 / 落盘 / 放进普通 trace**；
+/// - 需要回显诊断信息时走 `rhop.echo`（它会对 cfg 做深度掩码，见 `actions.mbt`）；
+/// - `to_dict()` 是给「配置回执」用的脱敏视图，两者**不要混用**。
 pub fn RhopConfig::action_cfg(self : RhopConfig) -> Json {
   Json::object({
     "sftp": cfg_json_or_null(self.sftp),
@@ -481,6 +490,10 @@ fn cfg_snippet(raw : String, max : Int32) -> String {
 
 ///|
 /// 便捷入口：配置对象 JSON / JSON 文本 / JSON 文件路径 → `RhopConfig`。
+///
+/// **与 vools 的差异（D9）**：vools 的 `load_config(path_or_dict)` 只有「dict / 路径」两形态；
+/// 本项目多接受一种「**JSON 文本**」（字符串以 `{`/`[` 开头即按文本解析），
+/// 好处是跨进程回执里可以直接传配置正文；代价是必须做形状判定（C2-01 的坑）。
 ///
 /// 形态判定（**顺序敏感**，见 C2-01）：
 /// 1. JSON 对象 → 直接 `from_dict`；

@@ -20,10 +20,6 @@
 // ---------------------------------------------------------------------------
 
 ///|
-extern "js" fn ffi_tmp(prefix : String) -> String =
-  #| (prefix) => { try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const path = process.getBuiltinModule("node:path"); return fs.mkdtempSync(path.join(os.tmpdir(), String(prefix) + "-")); } catch (_e) { return ""; } }
-
-///|
 extern "js" fn ffi_write(p : String, content : String) -> Bool =
   #| (p, content) => { try { process.getBuiltinModule("node:fs").writeFileSync(String(p), String(content), "utf8"); return true; } catch (_e) { return false; } }
 
@@ -80,12 +76,16 @@ fn it_str2(j : Json, a : String, b : String) -> String {
 
 ///|
 /// 临时目录归一化（"/" 分隔，可直接写进 JSON 字符串与 file:// URL）。
+///
+/// C3-01（temp 卫生）：走**产品侧** `@rp.rhop_temp_workspace`，它会把目录登记到
+/// 进程退出钩子（`process.on("exit")` → `fs.rmSync(recursive, force)`），
+/// 测试进程结束时统一递归清理。此前用裸 `fs.mkdtempSync`，每跑一轮就在
+/// `%TEMP%` 留 18 个 `rhop-it-*` / `rhop-c2-*` 目录（Windows 与 WSL 同样堆积）。
 fn it_dir(tag : String) -> String {
-  let raw = ffi_tmp(tag)
-  if raw == "" {
-    abort("无法创建临时目录（node:fs 不可用）: " + tag)
+  match @rp.rhop_temp_workspace(tag + "-") {
+    Ok(dir) => @rp.normalize_path(dir)
+    Err(e) => abort("无法创建临时目录（" + tag + "）: " + e)
   }
-  @rp.normalize_path(raw)
 }
 
 ///|
@@ -1144,4 +1144,47 @@ test "interact · C2-05：同名缺省请求包「后写者胜」（并发方必
   )
   assert_true(body.contains("BBB"))
   assert_false(body.contains("AAA"))
+}
+
+// ---------------------------------------------------------------------------
+// C3-06：跨平台 secret 文件形态（Windows 写 / WSL 读）
+// ---------------------------------------------------------------------------
+
+///|
+test "interact · C3-06：CRLF 外层密钥文件两平台都能解锁主密钥" {
+  let dir = it_dir("rhop-c3-crlf")
+  let outer_key = "outer-key-crlf"
+  let inner_key = "inner-key-crlf"
+  let cipher = @rp.RhopCrypto::from_key(outer_key).encrypt_secret(inner_key)
+  assert_true(cipher.has_prefix("RHOP-ENC:"))
+  let key_path = dir + "/outer.key"
+  // Windows 侧编辑器常写 CRLF；POSIX 侧读同一份文件必须照样能解（load_key 走 trim）
+  assert_true(ffi_write(key_path, outer_key + "\r\n"))
+  assert_eq(ffi_read(key_path).length(), outer_key.length() + 2)
+  let cfg = it_cfg(
+    itj(
+      "{\"key\": {\"cipher\": \"" +
+      cipher +
+      "\", \"path\": \"" +
+      key_path +
+      "\"}}",
+    ),
+  )
+  assert_eq(cfg.build_crypto().key_material(), inner_key)
+  // 反例：外层密钥文件内容被截断 → 解不开（不能静默拿到密文本身）
+  let bad_path = dir + "/bad.key"
+  assert_true(ffi_write(bad_path, "wrong-outer-key\r\n"))
+  match
+    @rp.load_config(
+      itj(
+        "{\"key\": {\"cipher\": \"" +
+        cipher +
+        "\", \"path\": \"" +
+        bad_path +
+        "\"}}",
+      ),
+    ) {
+    Ok(_) => abort("错外层密钥应当 Err")
+    Err(e) => assert_true(e.contains("key.cipher 解密失败"))
+  }
 }

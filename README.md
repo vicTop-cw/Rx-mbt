@@ -251,7 +251,7 @@ subject.on_completed()
 | 协议 | `core.mbt` / `envelope.mbt` | `Side`（requester/executor）、`TaskStatus` 六态状态机、`Envelope` + checksum（`sha256:` + 规范化 JSON） |
 | 摘要 | `digest.mbt` / `json_canonical.mbt` | 纯 MoonBit sha256 / md5 / hmac-sha256 / pbkdf2-hmac-sha256；两套 JSON 规范口径（见下） |
 | 签名 | `signer.mbt` / `integrity.mbt` | `AbstractSigner`（FileHashSigner / NPUSigner）、信封完整性校验 |
-| 密码学 | `key.mbt` / `crypto.mbt` | `VerifyResult` 三态 reason、Fernet 信封加解密、`RHOP-ENC:` 秘密串（js 目标） |
+| 密码学 | `key.mbt` / `crypto.mbt` / `rhop_js.mbt` | `VerifyResult` 三态 reason、Fernet 信封加解密、`RHOP-ENC:` 秘密串（js）；另有既有 `Aes256GcmCipher`（AES-256-GCM，js-only，读历史文件用） |
 | 传输 | `transport_base.mbt` / `transport_local.mbt` / `transport_endpoint.mbt` / `transport_selector.mbt` / `online.mbt` / `relay.mbt` | `SharedPath` / `OnlineChannel` 抽象、本地原子写、`file://`+`http(s)://` 端点、在线优先选择、Git/SFTP 探测、自建中转服务 |
 | 会话 | `session.mbt` / `config.mbt` / `interact.mbt` | 通道链（relay > online > shared）、配置构建与脱敏、execute/request/roundtrip 三模式 |
 | 业务 | `mirror.mbt` / `requester.mbt` / `executor.mbt` / `daemon.mbt` / `actions.mbt` / `sync_folder.mbt` | 镜像 SQLite（乐观锁）、需求端/执行端 API、中继守护、动作注册表、目录同步 |
@@ -321,6 +321,9 @@ let result = req.get_result(task_id)
 | 5 | **`run_forever` 形态**：vools 阻塞线程 + `stop_event` | 本项目 `@rx.Observable`（订阅即首轮、`dispose()` 停止），阻塞等价物 `sync_rounds(n)` |
 | 6 | **平台强依赖项**：Fernet、文件系统、SQLite、子进程、剪贴板真实读写 | 仅 js 目标有真实实现；wasm/native API 齐备但显式返回「不可用」 |
 | 7 | **不做项**：`secret.py` CLI、SFTP 远端文件操作（`put/get/listdir/...`）、`daemon.main` CLI | 属 P1/P2 或 CLI 范畴，已在矩阵中标 ⛔ 并说明原因 |
+| 8 | **回执按方向分流（D1）**：`send_package` 回执含 `role`、`recv_package` 回执含 `payload` | 矩阵 §4.1 与本表同口径；避免同名字段在收发两个方向语义漂移 |
+| 9 | **文件名白名单 + 删除契约（D6/D7，纯增量）**：`safe_filename` 拒绝路径穿越/纯点号/Windows 设备名；`Session::remove_package` 提供一次性 `res_` 清理 | vools 无这两项；本项目为安全与闭环清理而加 |
+| 10 | **一次性 token 与入参形态（D8/D12）**：发送前清理陈旧 `res_`、消费后删除；`interact` 只接受 `RhopConfig`（vools `_coerce` 接受三种形态） | 降低陈旧回执误配、类型更显式 |
 
 ### 测试
 
@@ -337,7 +340,17 @@ moon run demo/rhop_demo --target js -- send <共享目录>   # 端到端 demo（
 bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓三目标汇总行）
 ```
 
-**最新实测计数（2026-10-28 14:2x 快照，Windows 11 / moon 0.1.20261016 / node v25.2.1）**
+**测试入口退出码（`scripts/test_all.sh` / `test_all.ps1`，C2 起两入口语义一致）**
+
+| 退出码 | 含义 |
+|---|---|
+| `0` | 全部判绿（check 0 error 且三/四步测试 failed=0、汇总行齐全） |
+| `1` | 有步骤真实失败（编译错 / 测试红 / 汇总行缺失） |
+| `2` | 用法错误或环境缺失（未知参数、moon/node 不在 PATH 等） |
+| `3` | 一步都没执行（`--skip` 全跳过；**不能当 PASS**） |
+| `4` | 构建锁等待超时（`with_moon_lock.sh` 并发冲突；非产品红，重试即可） |
+
+**最新实测计数（2026-10-28 15:3x C3 终版快照，Windows 11 / moon 0.1.20261016 / node v25.2.1）**
 
 > ⚠️ C2 轮并行 lane（crypto/session/business）仍在持续追加测试，**跨 lane 总数会继续变化**；
 > 本表数字为上述快照时点实测，最终数字以 `bash scripts/test_all.sh`（qa 终验）输出为准；
@@ -349,10 +362,10 @@ bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓�
 | `test-suit/rhop_vectors`（js，互操作产物生产者） | 0 / 2 / 0 | 全绿 |
 | `test-suit/rhop_js`（js） | 56 | 全绿 |
 | `test-suit/rhop_clipboard`（js） | 25 | 全绿 |
-| `test-suit/rhop_interact`（js） | 22 | 全绿 |
-| `test-suit/rhop_business`（wasm / js / native） | 10 / 53 / 10 | 全绿 |
-| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 101 / 46 | 全绿 |
-| **全模块（项目级）** | **wasm 612 / js 819 / native 612**（快照，随并行 lane 变化） | 全绿 |
+| `test-suit/rhop_interact`（js） | 23 | 全绿 |
+| `test-suit/rhop_business`（wasm / js / native） | 10 / 57 / 10 | 全绿 |
+| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 102 / 46 | 全绿 |
+| **全模块（项目级）** | **wasm 612 / js 825 / native 612**（C3 快照） | 全绿 |
 
 跨实现一致性由 `test-suit/rhop_js/fixtures/vools_vectors.json`（真实 vools-rhop 生成的 envelope 字节 /
 checksum / canonical JSON / digest / signer 向量）锁定，`scripts/verify_interop.py` 可反向复核。
@@ -363,7 +376,8 @@ checksum / canonical JSON / digest / signer 向量）锁定，`scripts/verify_in
 - **Fernet 密钥**来自 `RHOP_KEY` 环境变量、文件或配置字符串（`key.rb` 的 `load_key` 优先级 `source > path > env`）；
   密钥不进信封，配置 `to_dict()` 会把 `sftp.password` / `sftp.key_path` 脱敏为 `"***"`。
 - **`RHOP-ENC:` 秘密串**只是「避免明文落盘」的便利封装，不是密钥托管方案。
-- **`NPUSigner` 不做硬件调用**：序列号由注入的 `serial_provider` 提供，缺失时 `sign()` 返回 `None`（不伪造签名）。
+- **`NPUSigner` 不做硬件调用**：序列号由注入的 `serial_provider` 提供；**provider 返回 `None` 时用 `UNKNOWN_NPU` 兜底**，因此 `sign()` 恒返回签名（`<marker>:UNKNOWN_NPU:<md5>`）——
+  它明确标注「序列号未知」，**不伪造硬件序列号**；`has_serial()` 只表示是否拿到真实序列号，不代表能否签名。
 - 明文信道（`RhopCipherNone`）仅用于测试；生产请用 `RhopCrypto`。
 
 ## 与 Rx-Rust 的差异

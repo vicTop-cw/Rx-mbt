@@ -222,11 +222,18 @@ fn TaskQueue::encode_result(self : TaskQueue, result : Json) -> String {
       Some(v) => v.to_owned()
       None => payload
     }
+    // C3 ③：键名与 vools `_shrink_result_to_bytes` 对齐（`truncated` + `truncate_hint`），
+    // 便于 Python 侧消费方用同一判据识别截断；另保留 result_head/result_chars 作为诊断补充。
+    // 与 vools 的差异（已文档化）：vools 是两阶段（先裁 stdout/stderr 到 2000 字符，
+    // 仍超预算再退化成紧凑摘要）；本实现是单阶段「head 截断」，语义等效、粒度更粗。
     return Json::stringify(
       Json::object({
-        "__truncated__": Json::boolean(true),
-        "limit_bytes": Json::number(self.result_max_bytes.to_double()),
-        "head": Json::string(head),
+        "truncated": Json::boolean(true),
+        "truncate_hint": Json::string(
+          "结果超过 result_max_bytes，已截断；大结果请写文件并用 payload 里的引用路径回传。",
+        ),
+        "result_chars": Json::number(payload.length().to_double()),
+        "result_head": Json::string(head),
       }),
     )
   }

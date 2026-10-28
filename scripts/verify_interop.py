@@ -76,7 +76,7 @@ class Report(object):
         return [i for i in self.items if i["status"] == "FAIL"]
 
     def render_console(self):
-        order = {"FAIL": 0, "SKIP": 1, "PASS": 2}
+        order = {"FAIL": 0, "WARN": 1, "SKIP": 2, "PASS": 3}
         rows = sorted(self.items, key=lambda i: (order.get(i["status"], 3), i["section"], i["name"]))
         width = max([len("%s/%s" % (i["section"], i["name"])) for i in rows] + [16])
         for item in rows:
@@ -87,8 +87,8 @@ class Report(object):
             print("  [%-4s] %s  %s" % (item["status"], label, detail))
         print(
             "  ---------------------------------------------------------------------\n"
-            "  PASS=%d  FAIL=%d  SKIP=%d  (total %d)"
-            % (self.count("PASS"), self.count("FAIL"), self.count("SKIP"), len(self.items))
+            "  PASS=%d  FAIL=%d  WARN=%d  SKIP=%d  (total %d)"
+            % (self.count("PASS"), self.count("FAIL"), self.count("WARN"), self.count("SKIP"), len(self.items))
         )
 
 
@@ -245,7 +245,7 @@ def check_digest(fixtures, produced, report):
     )
 
 
-def check_envelope(fixtures, produced, v, report):
+def check_envelope(fixtures, produced, v, report, require_negative=False):
     all_cases = {c["name"]: c for c in fixtures.get("envelope", []) if "to_rhop_bytes_utf8_hex" in c}
     expected = {n: c for n, c in all_cases.items() if not c.get("expect_error")}
     tamper = {n: c for n, c in all_cases.items() if c.get("expect_error")}
@@ -301,6 +301,16 @@ def check_envelope(fixtures, produced, v, report):
             )
     for name in sorted(set(expected) - {i.get("name") for i in items}):
         report.add("envelope", name, "SKIP", "MoonBit 未产出该用例")
+
+    # C3 审计 Q4（互操作盲区）：fixture 里有「篡改信封必须被拒」的负向用例，
+    # 但产物若从不产出它，"MoonBit 能否正确拒绝被篡改的信封"在互操作层就没有任何证据
+    # （--strict 也只要求"已产出的分节齐全"，不会因此报错）。默认给 WARN，
+    # 加 --require-negative 时升级为 FAIL，把这条盲区变成可门禁的判据。
+    produced_names = {i.get("name") for i in items}
+    missing_negative = sorted(n for n in tamper if n not in produced_names)
+    if missing_negative and (expected or items):
+        detail = "产物未包含负向（篡改）用例 %s ⇒ 「拒绝被篡改信封」无跨实现证据" % (",".join(missing_negative))
+        report.add("envelope", "negative-coverage", "FAIL" if require_negative else "WARN", detail)
 
 
 def check_crypto(fixtures, produced, v, report):
@@ -495,7 +505,7 @@ def check_flat_produced(produced, fixtures, v, report, strict=False):
             report.add(_section, "*", "SKIP", _why + "（扁平产物未复核；--strict 判失败）")
 
 
-def run_checks(produced, fixtures, v, do_self_check=True, strict=False):
+def run_checks(produced, fixtures, v, do_self_check=True, strict=False, require_negative=False):
     """按产物形状分派到对应校验器，返回 Report（main 与 --self-test 共用）。"""
     report = Report()
     if do_self_check:
@@ -511,7 +521,7 @@ def run_checks(produced, fixtures, v, do_self_check=True, strict=False):
     else:
         check_canonical_json(fixtures, cases.get("canonical_json"), report)
         check_digest(fixtures, cases.get("digest"), report)
-        check_envelope(fixtures, cases.get("envelope"), v, report)
+        check_envelope(fixtures, cases.get("envelope"), v, report, require_negative=require_negative)
         check_crypto(fixtures, cases.get("crypto"), v, report)
         check_signer(fixtures, cases.get("signer"), v, report)
     return report
@@ -763,6 +773,8 @@ def main(argv=None):
     parser.add_argument("--strict", action="store_true", help="SKIP 也算失败（验收模式：要求每一项都有产物）")
     parser.add_argument("--no-self-check", action="store_true", help="跳过 fixture 自检")
     parser.add_argument("--self-test", action="store_true", help="自检校验器本身：正向放行 + 注入 5 类错误必须判红")
+    parser.add_argument("--require-negative", action="store_true",
+                        help="要求产物包含篡改信封负向用例（缺失即 FAIL；默认只 WARN）")
     parser.add_argument(
         "--self-test-shapes", action="store_true",
         help="C1-F1 回归自测：扁平/分节两种产物形状 × strict/非 strict 四组合",
@@ -812,7 +824,8 @@ def main(argv=None):
     if is_flat:
         print(" [!] 产物是扁平形状（非分节 schema），走通用适配器复核")
 
-    report = run_checks(produced, fixtures, v, do_self_check=not args.no_self_check, strict=args.strict)
+    report = run_checks(produced, fixtures, v, do_self_check=not args.no_self_check,
+                        strict=args.strict, require_negative=args.require_negative)
 
     print()
     report.render_console()
@@ -823,8 +836,10 @@ def main(argv=None):
 
     print()
     if rc == 0:
-        print(" RESULT: PASS -- 所有已产出项经 vools 复核一致%s"
-              % ("" if not skipped else "（%d 项 SKIP；验收模式请加 --strict）" % len(skipped)))
+        warns = report.count("WARN")
+        print(" RESULT: PASS -- 所有已产出项经 vools 复核一致%s%s"
+              % ("" if not skipped else "（%d 项 SKIP；验收模式请加 --strict）" % len(skipped),
+                 "" if not warns else "；⚠ %d 项 WARN（见上表，互操作盲区请加 --require-negative 门禁）" % warns))
     else:
         if failed:
             print(" RESULT: FAIL -- %d 项不一致，首项：%s/%s %s"
@@ -847,6 +862,7 @@ def main(argv=None):
                     "counts": {
                         "pass": report.count("PASS"),
                         "fail": report.count("FAIL"),
+                        "warn": report.count("WARN"),
                         "skip": report.count("SKIP"),
                         "total": len(report.items),
                     },

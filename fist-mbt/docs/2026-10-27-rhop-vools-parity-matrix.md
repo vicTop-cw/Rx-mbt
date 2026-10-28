@@ -1,8 +1,8 @@
-# vools-rhop 0.9.0 → rx-mbt/rhop API 对照矩阵（Batch A/B 已核，Batch C/D 计划）
+# vools-rhop 0.9.0 → rx-mbt/rhop API 对照矩阵（全量落地：Batch A–D + clipboard + P2）
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | **v4（2026-10-28 11:3x，T0r15 字节级对齐后收口：B1/B2 已解决、rhop_task js 99、全模块 js 765）**；v1 起稿 / v1.1 actions / v2 C-D+clipboard / v3 P2 入矩阵 |
+| 文档版本 | **v5（2026-10-28 C3 轮审计后快照：signer UNKNOWN_NPU 语义修正、API 枚举一致性核对、数字按 C3 实测刷新）**；v1 起稿 / v1.1 actions / v2 C-D+clipboard / v3 P2 / v4 T0r15 收口 |
 | 参考实现 | `E:\IDEProjects\AI\vools\rhop\vools\rhop`（vools-rhop **0.9.0**，Python 3.13 实测） |
 | 本项目 | `E:\IDEProjects\AI\rx-mbt`，MoonBit 模块 `vicTop-cw/RX-MBT`，包 `rhop/` |
 | 执行契约 | `fist-mbt/plans/decisions/2026-10-27-rhop-vools-parity-decision.md` §2/§3/§4 |
@@ -38,7 +38,7 @@
 | `transport/base.py` | 14 | 14 | 0 | 0 | 0 | 0 | `rhop/transport_base.mbt` |
 | `transport/local.py` | 1 | 1 | 0 | 0 | 0 | 0 | `rhop/transport_local.mbt` |
 | `transport/endpoint.py` | 20 | 20 | 0 | 0 | 0 | 0 | `rhop/transport_endpoint.mbt` |
-| `transport/online.py` | 16 | 8 | 0 | 0 | 0 | 8 | `rhop/online.mbt` |
+| `transport/online.py` | 17 | 8 | 0 | 0 | 0 | 9 | `rhop/online.mbt` |
 | `transport/relay.py` | 9 | 9 | 0 | 0 | 0 | 0 | `rhop/relay.mbt` |
 | `transport/selector.py` | 1 | 1 | 0 | 0 | 0 | 0 | `rhop/transport_selector.mbt` |
 | `transport/shared.py` | 8 | 8 | 0 | 0 | 0 | 0 | `rhop/transport_base.mbt` |
@@ -52,11 +52,11 @@
 | `actions/__init__.py` | 2 | 2 | 0 | 0 | 0 | 0 | `rhop/actions.mbt` + `actions_test.mbt`（10 例） |
 | `sync_folder.py` | 9 | 9 | 0 | 0 | 0 | 0 | `rhop/sync_folder.mbt`（5 例） |
 | `clipboard.py` | 8 | 6 | 2 | 0 | 0 | 0 | `rhop/clipboard.mbt`（25 例，新包 test-suit/rhop_clipboard） |
-| **契约范围小计** | **192** | **178** | **4** | **1** | **0** | **9** | — |
+| **契约范围小计** | **193** | **178** | **4** | **1** | **0** | **10** | — |
 | `actions/jump.py` | 14 | 1 | 0 | 0 | 0 | 13 | 仅 `jump.probe` 内建（`actions_test.mbt` 覆盖） |
 | `secret.py` | 1 | 0 | 0 | 0 | 0 | 1 | CLI 工具，不迁 |
-| `task/` 子包（含 `task/store/`） | 230 | 0 | 21 | 0 | 0 | 209 | P2 已落地 P2a+P2b（8 文件 / **46·99·46** 例，见 §5.9；仅模块级映射，未逐符号） |
-| **vools 全量** | **437** | **179** | **4** | **1** | **0** | **253** | — |
+| `task/` 子包（含 `task/store/`） | 264 | 0 | 21 | 0 | 0 | 243 | P2 已落地 P2a+P2b（8 文件；仅模块级映射 21 项，其余未逐符号；逐文件分布见 §5.9） |
+| **vools 全量** | **472** | **179** | **25** | **1** | **0** | **267** | — |
 
 ## 2. Batch A（协议/摘要层，已验收 · owner impl-core）
 
@@ -102,9 +102,9 @@
 | `FileHashSigner` | `FileHashSigner`（空 struct） | 三目标 | 同上 | ✅ | — |
 | `FileHashSigner.sign` | `impl AbstractSigner for FileHashSigner::sign` + 便捷 `FileHashSigner::signature` | 三目标 | 同上 | ✅ | **preimage 走 ensure_ascii=True**（见 §7 差异 2） |
 | `FileHashSigner.verify` | `impl ... ::verify` | 三目标 | 同上 | ✅ | 正反例（错 result / 错 task_id / 错签名） |
-| `NPUSigner` | `NPUSigner { marker, serial_provider }` | 三目标 | 同上 | ✅ | 不 spawn 子进程，provider 可注入 |
-| `NPUSigner.sign` | `impl ... ::sign -> String?` | 三目标 | 同上 | ✅ | `<marker>:<serial>:<md5>`；默认 provider ⇒ `None` |
-| `NPUSigner.verify` | `impl ... ::verify` | 三目标 | 同上 | ✅ | 无法签名时恒 `false`（与 vools 一致） |
+| `NPUSigner` | `NPUSigner { marker, serial_provider }` + `NPU_UNKNOWN_SERIAL` 常量 | 三目标 | 同上 | ✅ | 不 spawn 子进程，provider 可注入；缺序列号走 `UNKNOWN_NPU` 兜底 |
+| `NPUSigner.sign` | `impl ... ::sign -> String?` | 三目标 | 同上 | ✅ | `<marker>:<serial>:<md5>`；**默认 provider 走 `UNKNOWN_NPU` 兜底（恒 `Some`）** |
+| `NPUSigner.verify` | `impl ... ::verify` | 三目标 | 同上 | ✅ | 与自身 `sign` 结果比对（兜底后恒有期望值）；`has_serial()` 只表示真实序列号 |
 
 ### 2.4 `integrity.py` → `rhop/integrity.mbt`（4/4 ✅）
 
@@ -197,7 +197,7 @@
 | `HttpEndpoint.remove` | 经 `impl EndpointView` | js | 同上 | ✅ | — |
 | `parse_endpoint(spec)` | `parse_endpoint -> Result[&EndpointView, String]` | js | 同上 | ✅ | 裸路径 / `file://` / `http(s)://` 三分支 |
 
-### 3.6 `transport/online.py` → `rhop/online.mbt`（16：8 ✅ / 8 ⛔）
+### 3.6 `transport/online.py` → `rhop/online.mbt`（17：8 ✅ / 9 ⛔）
 
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
@@ -217,6 +217,7 @@
 | `SftpChannel.listdir` | — | — | — | ⛔ | 同上 |
 | `SftpChannel.mkdirs` | — | — | — | ⛔ | 同上 |
 | `SftpChannel.close` | — | — | — | ⛔ | 同上（无连接对象可关） |
+| `SftpChannel.port_reachable` | `SftpChannel::available`（TCP 探测承担同职责） | js | `rhop_js/transport_test.mbt` | ⛔ | vools 为独立公开方法；本项目并入 `available()`（无同名方法） |
 
 ### 3.7 `transport/relay.py` → `rhop/relay.mbt`（9/9 ✅，全部 js）
 
@@ -254,8 +255,8 @@
 ## 4. Batch C（会话／配置／交互）· 已落地 · owner impl-session
 
 > 三个文件均已于 2026-10-28 落地（`rhop/session.mbt` / `rhop/config.mbt` / `rhop/interact.mbt`），
-> 测试：`session_test.mbt` 15 例、`config_test.mbt` 18 例（都在 `test-suit/rhop`，wasm/js/native 三目标绿）、
-> `interact_test.mbt` 13 例（`test-suit/rhop_interact`，js）。
+> 测试（C3 实测）：`session_test.mbt` **20 例**、`config_test.mbt` **25 例**（都在 `test-suit/rhop`，wasm/js/native 三目标绿）、
+> `interact_test.mbt` **23 例**（`test-suit/rhop_interact`，js）。
 
 ### 4.1 `session.py` → `rhop/session.mbt`（7/7 ✅）
 
@@ -263,8 +264,8 @@
 |---|---|---|---|---|---|
 | `Role`（SEND/RECV/RELAY） | `session.mbt: Role`（`pub(all) enum` Send/Recv/Relay）+ `parse`/`to_string`/`lower` | 三目标 | `session_test.mbt` | ✅ | 字面量 `send`/`recv`/`relay`；`lower()` 为增量 |
 | `Session` | `Session { role; shared; online; relay; crypto; name }` | 三目标 | 同上 | ✅ | 另有 `new`/`empty` 构造器 |
-| `Session.available` | `Session::available` | 三目标 | 同上 | ✅ | 有介质/通道即可用 |
-| `Session.send_package` | `Session::send_package -> Result[Json, String]` | 三目标 | 同上 | ✅ | 回执 `{status, transport, filename, payload}` 同形 |
+| `Session.available` | `Session::available` | 三目标 | 同上 | ✅ | **会实际探测**（C2-04 实测）：在线通道可能起子进程（git ls-remote）或发网络，http 介质约 0.5 s；**不是**无副作用查询 |
+| `Session.send_package` | `Session::send_package -> Result[Json, String]` | 三目标 | 同上 | ✅ | **send 回执是 `{status, transport, filename, role}`**；`payload` 只出现在 `recv_package` 回执（C3 修正） |
 | `Session.recv_package` | `Session::recv_package -> Result[Json, String]` | 三目标 | 同上 | ✅ | — |
 | `Session.reverse` | `Session::reverse` | 三目标 | 同上 | ✅ | 复用介质、交换方向 |
 | `Session.describe` | `Session::describe -> Json` | 三目标 | 同上 | ✅ | 诊断视图 |
@@ -273,23 +274,23 @@
 
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
-| `interact(cfg, action, payload, mode)` | `interact.mbt: interact(RhopConfig, String, Json?, String, request_filename?) -> Result[Json, String]` | 三目标 | `rhop_interact/interact_test.mbt`（13 例） | ✅ | mode：`execute`/`request`/`roundtrip` |
+| `interact(cfg, action, payload, mode)` | `interact.mbt: interact(RhopConfig, String, Json?, String, request_filename?) -> Result[Json, String]` | 三目标（纯分派）；**真实闭环仅 js** | `rhop_interact/interact_test.mbt`（23 例） | ✅ | mode：`execute`/`request`/`roundtrip`（roundtrip 依赖文件介质 ⇒ 仅 js 可端到端） |
 | `handle_request(cfg, filename, session?)` | `interact.mbt: handle_request(RhopConfig, String, session? : Session) -> Result[Json, String]` | 三目标 | 同上 | ✅ | 回传 `res_` 前缀文件 |
 
 ### 4.3 `config.py` → `rhop/config.mbt`（11/11 ✅）
 
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
-| `RhopConfig` | `config.mbt: RhopConfig`（key/role/sftp/online/shared/relay/name） | 三目标 | `config_test.mbt`（18 例） | ✅ | — |
+| `RhopConfig` | `config.mbt: RhopConfig`（key/role/sftp/online/shared/relay/name） | 三目标 | `config_test.mbt`（25 例） | ✅ | — |
 | `RhopConfig.from_dict` | `RhopConfig::from_dict -> Result` | 三目标 | 同上 | ✅ | 未知 role / 缺 key 都有可诊断 Err |
 | `RhopConfig.from_file` | `RhopConfig::from_file -> Result` | js（读文件） | 同上 | ✅ | 非 js 返回可诊断 Err |
-| `RhopConfig.to_dict` | `RhopConfig::to_dict -> Json` | 三目标 | 同上 | ✅ | 敏感字段脱敏：`sftp.password` / `sftp.key_path` → `"***"`（与 vools 同） |
+| `RhopConfig.to_dict` | `RhopConfig::to_dict -> Json` | 三目标 | 同上 | ✅ | **递归深度脱敏**（sftp/online/shared/relay 下 token/secret 等键表，`password`/`key_path` → `"***"`）——**比 vools 更严**（vools 只处理顶层 sftp 两个键） |
 | `RhopConfig.build_crypto` | `build_crypto -> RhopCrypto` | 三目标 | 同上 | ✅ | — |
 | `RhopConfig.build_online` | `build_online -> Result[Array[&OnlineChannel], String]` | 三目标 | 同上 | ✅ | git/sftp/relay 配置 → 通道数组 |
 | `RhopConfig.build_shared` | `build_shared -> Result[SharedPathView?, String]` | js（真实介质） | 同上 | ✅ | — |
 | `RhopConfig.build_relay` | `build_relay -> Result[RelayChannel?, String]` | 三目标 | 同上 | ✅ | — |
 | `RhopConfig.build_session` | `build_session(role?) -> Result[Session, String]` | 三目标 | 同上 | ✅ | 角色可覆盖 |
-| `RhopConfig.action_cfg` | `action_cfg -> Json` | 三目标 | 同上 | ✅ | 动作层视图（脱敏后） |
+| `RhopConfig.action_cfg` | `action_cfg -> Json` | 三目标 | 同上 | ✅ | 动作层视图：**含 sftp 原文凭据**（jump.* 真连需要），**严禁直接落日志**；回显掩码只在 `rhop.echo` 回执侧做（C3 修正：此前写「脱敏后」是错的，安全相关） |
 | `load_config(path_or_dict)` | `config.mbt: load_config(Json) -> Result[RhopConfig, String]` | 三目标 | 同上 | ✅ | vools 接受路径或 dict；本项目路径分支由 `from_file` 承担 |
 
 > 有意增量：`_key_from_cfg`（vools 私有名公开化，供动作层复用）、`RhopConfig::new/has_key/name/role`。
@@ -299,7 +300,7 @@
 > 六个业务文件 + clipboard 均已落地。测试分布：
 > `test-suit/rhop_business`（mirror 11 / executor 6 / requester 5 / daemon 6 / sync_folder 5 / sync_glob 5 / nonjs 5 例）、
 > `test-suit/rhop_clipboard`（25 例）、`test-suit/rhop_interact`（13 例）。
-> **在途项**：daemon 2 例、requester 2 例当前失败（Batch D 收尾中，见 §11），故对应行标 ⚠️ 备注。
+> **C3 复核（2026-10-28）**：本域已全绿，无在途项。js 侧 `test-suit/rhop_business` **57 例**（mirror 11 / requester 5 / executor 6 / daemon 6 / sync_folder 5 / sync_glob 5 / actions_fs 3 / c2 回归 6 / p1 回归 6 / c3 回归 4），wasm+native 各 **10 例**（sync_glob 5 + nonjs 5）；`test-suit/rhop/actions_test.mbt` 10 例（三目标）。C2 修复了 daemon 消费幂等（P0）、符号链接遍历、分块摘要、临时目录残留等 8 项；C3 修复了 workspace 卫生并刷新本文档。详见 `fist-mbt/reports/2026-10-28-c{2,3}-{bugfind,fix}-business.md`。
 
 ### 5.1 `mirror.py` → `rhop/mirror.mbt`（12/12 ✅）
 
@@ -316,16 +317,33 @@
 | `MirrorDB.count_by_status` | `MirrorDB::count_by_status -> Json`（+ `count_by_status_full`） | js | 同上 | ✅ | — |
 | `MirrorDB.log_sync` | `MirrorDB::log_sync(...)` | js | 同上 | ✅ | — |
 | `MirrorDB.pending_sync` | `MirrorDB::pending_sync(since?)` | js | 同上 | ✅ | — |
-| `MirrorDB.close` | `MirrorDB::close` / `is_open` | js | 同上 | ✅ | 幂等 |
+| `MirrorDB.close` | `MirrorDB::close` / `is_open` | js | 同上 | ✅ | 幂等；`open_temp()` 建的库在 `close()` 时会递归删除自己的临时目录（C2 句柄泄漏修复的配套语义） |
+| （增量） | `MirrorDB::pending_count` / `sync_log_count` / `raw_run` | js | 同上 | ✅ | 待同步事件数 / 审计日志条数 / 低层 SQL 逃生口（诊断与造坏库测试用） |
+| （增量） | `MirrorDB::try_get_task` / `try_list_tasks` / `try_count_by_status` | js | 同上 | ✅ | 可诊断版本（`Ok(None)` = 不存在，`Err` = 库/行损坏），与便捷版并存 |
 
-### 5.2 `daemon.py` → `rhop/daemon.mbt`（4：3 ✅ / 1 ⛔）
+### 5.1.1 schema 列级契约（与 vools `SCHEMA_SQL` 逐列核对，C3 实测）
+
+| 表 | vools 列数 | 本项目列数 | 差异 |
+|---|---|---|---|
+| `tasks` | 11（task_id/status/side/payload/result/error/signature/version/created_at/updated_at/checksum） | **13** | `+envelope`（整信封规范 JSON，读回时校验 checksum ⇒ 坏行必报 Err）、`+claimed_by`（领取者审计） |
+| `events` | 7（id/task_id/event_type/old_status/new_status/detail/created_at） | 7 | 一致 |
+| `sync_log` | 8（id/direction/transport/task_id/success/error/bytes_xfer/created_at） | 8 | 一致 |
+| 合计 | 26 | **28** | 仅 `tasks` 多 2 列；另索引 3 条（vools 2 条，多 `idx_tasks_status`） |
+
+类型/约束差异：`version` 本项目 `INTEGER NOT NULL DEFAULT 1`（vools `INTEGER DEFAULT 1`）；`payload` 本项目 `TEXT NOT NULL`（vools 允许 NULL）。两个额外列由 `mirror_test.mbt` 的往返/坏行用例覆盖；列数由 `test-suit/rhop_business/c3_regression_test.mbt` 的 `c3-2`（pragma 实测 13/7/8）锁死。
+
+### 5.2 `daemon.py` → `rhop/daemon.mbt`（4：3 ✅ / 1 ⛔ CLI + 4 个增量方法）
 
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
 | `RelayDaemon` | `daemon.mbt: RelayDaemon` | js | `rhop_business/daemon_test.mbt`（6 例） | ✅ | 单机 A→中继→B 闭环用例 |
-| `RelayDaemon.start` | `RelayDaemon::start(poll_interval_ms)` | js | 同上 | ✅ | 2026-10-28 复核：6 例全绿 |
+| `RelayDaemon.start` | `RelayDaemon::start(max_rounds : Int32) -> Result[Json, String]` | js | 同上 | ✅ | **签名修正（C3）**：参数是「跑满几轮就退出」（`<=0` 为无限），轮询间隔在 `from_config_dir(..., poll_interval_ms?)` 里给；C2/C3 复核 6 例全绿 |
 | `RelayDaemon.stop` | `RelayDaemon::stop` | js | 同上 | ✅ | 同上 |
-| `main()`（CLI） | — | — | — | ⛔ | 不迁 CLI；行为方法 `run_once`/`process_inbox`/`push_local`/`pull_remote` 已作为公开 API 提供 |
+| `_run_once`/`_pull_remote`/`_process_inbox`/`_push_local`（vools 私有） | `RelayDaemon::run_once` / `pull_remote` / `process_inbox` / `push_local` | js | 同上 | ✅ | **增量**：vools 为私有方法，本项目公开以便单轮驱动与测试；`run_once` 幂等可反复调用 |
+| `main()`（CLI） | — | — | — | ⛔ | 不迁 CLI（见 §7 #7） |
+| （增量） | `RelayDaemon::{new, from_config_dir, side, data_dir, rounds, is_running, mirror, close}` | js | 同上 | ✅ | 构造/观测入口 |
+
+> **daemon 语义边界（C3 补齐文档）**：① 共享介质布局对称化为 `<shared>/inbox/<side>/`，**消费即删除** = 单消费者语义（无 ack；丢包分析：先写本地 inbox 再删远端 ⇒ 不丢包，最多重复投递，由版本去重 + C2 幂等守卫消解）；② `start()` 在 js 主线程阻塞（`Atomics.wait`），`stop()` 只能靠 `max_rounds` 退出或外部进程管理 —— 与 vools 的「线程 + 信号」形态不同（见 §7 #23）；③ 消费顺序 pull → process → push，坏信封进 `failed/` 不阻断同轮其它信封；④ C2 P0 修复后：库内非 Pending 的残留信封**不会**重放动作副作用。
 
 ### 5.3 `requester.py` → `rhop/requester.mbt`（6/6 ✅）
 
@@ -345,6 +363,7 @@
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
 | `Executor` | `executor.mbt: Executor` | js | `executor_test.mbt`（6 例） | ✅ | — |
+| （增量） | `Executor::{from_config_dir, from_mirror_path, worker_id, mirror}` | js | 同上 | ✅ | 显式数据目录/共享库路径构造（测试与单机闭环用）；`worker_id` 写入 `claimed_by` |
 | `Executor.claim` | `Executor::claim -> Result[Envelope?, String]` | js | 同上 | ✅ | — |
 | `Executor.execute` | `Executor::execute(Envelope)`（+ `execute_next`） | js | 同上 | ✅ | `execute_next` 为增量 |
 | `Executor.report_result` | `Executor::report_result(task_id, result)` | js | 同上 | ✅ | — |
@@ -352,16 +371,31 @@
 | `Executor.list_pending` | `Executor::list_pending -> Array[Json]` | js | 同上 | ✅ | — |
 | `Executor.close` | `Executor::close` | js | 同上 | ✅ | — |
 
-### 5.5 `actions/__init__.py` → `rhop/actions.mbt`（2/2 ✅，`actions_test.mbt` 10 例）；`actions/jump.py`（14：1 ✅ / 13 ⛔）
+### 5.5 `actions/__init__.py` → `rhop/actions.mbt`（2/2 ✅ + 2 增量）；`actions/jump.py`（14：8 ✅ / 6 ⛔）
+
+> **C3 修正**：Batch D 之后 jump 族的「离线可做部分」已全部落地（此前整片标 ⛔ 是过期文档）。
+> 判据：能在无 SSH 客户端前提下**真做**的都真做；真传输一律返回
+> `{"status":"error","transport":"unsupported","message":"…未实现…"}` 并给替代通道建议，
+> 绝不伪造 `files_transferred`（见 §7 #22）。
 
 | vools 符号 | MoonBit 符号 | 目标 | 测试 | 状态 | 备注 |
 |---|---|---|---|---|---|
 | `run_action(action, cfg, payload)` | `actions.mbt: run_action` | 三目标 | `test-suit/rhop/actions_test.mbt`（10 例） | ✅ | 未知动作返回可用清单 |
 | `omega_unwrap(result)` | `actions.mbt: omega_unwrap` | 三目标 | 同上 | ✅ | 成功/partial/外层异常/data 缺失/内层失败 五形态 |
-| `jump_probe(cfg, payload)` | 内置动作 `jump.probe`（离线：校验 sftp 配置返回结构化探测） | 三目标 | 同上 | ✅ | 不真连网；出参四字段对齐 vools |
-| `jump_push` / `jump_pull` / `jump_sync` | — | — | — | ⛔ | 需真实 SFTP，P2 |
-| `compute_sync_plan` / `scan_local_files` / `scan_remote_files_paramiko` / `collect_files` / `should_exclude` | — | — | — | ⛔ | 目录同步扫描族，P2 |
-| `SFTP_KIND_*` / `PARAMIKO_HINT` / `ACTIONS` 常量 | — | — | — | ⛔ | 随上面 API 一起 P2 |
+| `ACTIONS` 注册表 | `get_handler(String)` + `list_actions()` + `register_action` / `unregister_action` | 三目标 | 同上 | ✅ | **增量**：vools 是模块级 dict；本项目注册表优先、内置兜底（可运行时覆盖/注销） |
+| `jump_probe(cfg, payload)` | 内置动作 `jump.probe`（离线：校验 sftp 配置返回结构化探测） | 三目标 | 同上 | ✅ | 不真连网；出参四字段（status/reachable/detail/transport）对齐 vools |
+| `jump_push` | 内置动作 `jump.push` | js（扫描）/ 三目标（校验） | `rhop_business/actions_fs_test.mbt`（3 例） | ✅ | 前置校验文案逐字对齐；`dry_run` 时**真扫描**本地目录（递归 + exclude + sha256）；真传 ⛔→`unsupported` |
+| `jump_pull` | 内置动作 `jump.pull` | 同上 | 同上 | ✅ | `dry_run` + `payload.remote_files` 时可算真实下载计划；无该字段则明说「无法离线列举远端」 |
+| `jump_sync` | 内置动作 `jump.sync` | 同上 | 同上 | ✅ | 复用 `jump_compute_sync_plan`；判据用 sha256（vools 用 size+mtime，见 §7 #24） |
+| `compute_sync_plan` | `jump_compute_sync_plan(local, remote, direction, delete)` | 三目标 | `actions_test.mbt` + `actions_fs_test.mbt` | ✅ | 五分类 upload/download/conflict/skip/delete |
+| `scan_local_files` | `jump_scan_local(path, exclude) -> Json` | js | `actions_fs_test.mbt` | ✅ | `{relpath: {sha256, size}}`（见 §7 #24） |
+| `collect_files` | `jump_collect_files(path, exclude) -> Array[String]` | js | 同上 | ✅ | 递归相对路径 |
+| `should_exclude` | `jump_should_exclude(relpath, patterns) -> Bool` | 三目标 | `actions_test.mbt` | ✅ | glob 对 basename 与相对路径双向匹配 |
+| `_fnmatch` | `sync_glob_match`（复用） | 三目标 | 同上 | ✅ | 只支持 `*`/`?`（vools fnmatch 还有 `[seq]`，见 §7 #25） |
+| `scan_remote_files_paramiko` | — | — | — | ⛔ | 需 paramiko/SSH 客户端；`jump.pull/sync` 改为由调用方注入 `remote_files` |
+| `_push_paramiko` / `_pull_paramiko` / `_sync_paramiko` / `_sftp_*` | — | — | — | ⛔ | 真传输（见 §7 #22） |
+| `SFTP_KIND_*` / `PARAMIKO_HINT` 常量 | — | — | — | ⛔ | paramiko 专属，随真传输一起 P2 |
+| （增量） | 内置动作 `rhop.echo` | 三目标 | `actions_test.mbt` | ✅ | 离线自检动作（回显 cfg/payload，无副作用），供 interact 闭环与链路自检 |
 
 ### 5.6 `sync_folder.py` → `rhop/sync_folder.mbt`（9/9 ✅）
 
@@ -374,8 +408,9 @@
 | `LocalDirSource.describe` | — | — | — | ✅ | 由 `sync_once` 回执承载（无独立 describe） |
 | `SyncFolder` | `SyncFolder::new(source, target, pattern)` | js | 同上 | ✅ | `with_recursive` 为增量 |
 | `SyncFolder.sync_once` | `SyncFolder::sync_once -> Json` | js | 同上 | ✅ | 幂等（manifest 去重） |
-| `SyncFolder.run_forever` | `SyncFolder::run_forever(...) -> Json` + `stop()` | js | 同上 | ✅ | 同步批处理语义（非阻塞流） |
-| `sync_folder_once` | 便捷路径 = `SyncFolder::new(...).sync_once()` | js | 同上 | ✅ | 无独立自由函数（差异见 §7） |
+| `SyncFolder.run_forever` | `SyncFolder::run_forever(poll_interval_ms : Int32, max_rounds : Int32) -> Json` + `stop()` | js | 同上 | ✅ | **参数顺序修正（C3）**：`(poll_interval_ms, max_rounds)`；`max_rounds>0` 跑满即退、`<=0` 无限；`stop()` 置位后当前轮结束退出（同样受主线程阻塞限制，见 §7 #23） |
+| `sync_folder_once` | 便捷路径 = `SyncFolder::new(...).sync_once()` | js | 同上 | ✅ | 无独立自由函数（见 §7 #14） |
+| `fnmatch.fnmatchcase`（pattern 过滤） | `sync_glob_match(pattern, basename)` | 三目标 | `sync_glob_test.mbt`（5 例） | 🟡 | 只支持 `*` / `?`，**无 `[seq]` 字符类**（见 §7 #25）；匹配对象是 basename |
 
 ### 5.7 `clipboard.py` → `rhop/clipboard.mbt`（8：6 ✅ / 2 🟡）· **本轮新增**
 
@@ -422,9 +457,22 @@
 | `task/errors.py`（`RhopTaskError`/`DagValidationError`/`TaskNotFound`/… 10 个异常类型） | 以 `Result[_, String]` + 文本前缀表达（如 `stale_version:`） | — | 🟡 语义等价（错误类型 → Result） | — |
 | `task/store/pg_store.py`（Postgres 后端） | — | — | ⛔ 未移植（仅 SQLite 后端） | — |
 
+**vools `task/` 子包逐文件符号数（C3 经 Python AST 复算，合计 264；此前 230 为低估）**
+
+| 文件 | 符号 | 文件 | 符号 |
+|---|---:|---|---:|
+| `config.py` | 24 | `queue.py` | 28 |
+| `daemon.py` | 10 | `secrets.py` | 14 |
+| `errors.py` | 10 | `sync.py` | 10 |
+| `exec.py` | 17 | `store/__init__.py` | 4 |
+| `heartbeat.py` | 22 | `store/base.py` | 26 |
+| `local_runner.py` | 3 | `store/pg_store.py` | 21 |
+| `models.py` | 50 | `store/sqlite_store.py` | 23 |
+| `cli.py` | 2 | `__init__.py` / `__main__.py` | 0 / 0 |
+
 **P2 映射现状（诚实口径）**：8 个文件对应 vools `task/` 的 models/config/secrets/store/queue/heartbeat/exec/sync；
-vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关键符号**（见上表「关键符号」列），
-其余为 CLI / daemon / local_runner / Postgres 后端等明确未移植项 —— **逐符号映射留待后续（P2b-2）**，
+vools `task/` 共 **264** 个公开符号，本项目**按模块级对位 21 个关键符号**（见上表「关键符号」列），
+其余 243 个为 CLI / daemon / local_runner / Postgres 后端等明确未移植项 —— **逐符号映射留待后续（P2b-2）**，
 故 P2 不参与 §8 的契约覆盖率分母。
 
 #### P2 · A. 明确未实现 / 未接线（如实记账）
@@ -498,6 +546,8 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | `RhopWatcher::observe` / `skip_existing` / `with_extensions` / `extensions` / `bad_files` / `is_started` / `process_file` | `rhop/watch.mbt` | 契约 §2.6 要求复用 `@rx.Observable`；`process_file` 供无监控后端的目标手动处理 |
 | `RhopCrypto::new` / `key_material` / `encrypt_json_result` / `encrypt_json_text` | `rhop/crypto.mbt` | 诊断型入口（`encrypt_json` 失败返回 `""` 时的可诊断替代） |
 | `VerifyResult::new` / `pass` / `fail` / `to_string` | `rhop/key.mbt` | 构造与日志可读性 |
+| `NPU_UNKNOWN_SERIAL`（`"UNKNOWN_NPU"` 常量） | `rhop/signer.mbt` | 把 vools 的兜底字面量提为可引用常量（C1 PROTO-06 对齐） |
+| `Aes256GcmCipher` | `rhop/rhop_js.mbt` | **非 vools 对照面**：项目既有的 AES-256-GCM `RhopCipher` 实现（js-only），保留用于读取历史消息；新代码建议统一 `RhopCrypto`(Fernet) |
 | `ClipboardBackend` / `CommandClipboardBackend` / `set_clipboard_backend_probe` / `reset_clipboard_backend_probe` / `reset_clipboard_backend_cache` | `rhop/clipboard.mbt` | vools 用 monkeypatch + `(read_fn, write_fn)` 元组；本项目用 trait + 显式探测钩子（测试不碰真机剪贴板） |
 | `ClipboardFileSync::sync_rounds` / `rounds` / `changes` / `last_text` / `role` / `path` / `writer` / `auto_detect` 参数 | `rhop/clipboard.mbt` | 同步批处理与可测性；vools 只有阻塞 `run_forever` |
 | `Role::lower`、`Session::new`/`empty`/`select`/`has_*`/`online_count`/`name` | `rhop/session.mbt` | 构造与诊断 |
@@ -533,6 +583,20 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 | 19 | **信封嵌套深度不对称（C2P-05）**：写侧迭代序列化无深度上限，读侧受 `MAX_ENVELOPE_NESTING_DEPTH = 1000` 约束 | 深嵌套 payload（>1000 层） | 深度 1000–2000+ 可写出但读不回，属 out-of-contract；常量已显式化并有用例固定该行为 |
 | 20 | **payload/result 的 Json 引用共享（C2P-04）**：wither 复用同一 `Json`（与 vools dataclass 同）；`hops_seen` 已改为构造时防御性复制（C2P-03） | 多个持有方共享信封 | 契约：`payload`/`result` 按不可变值使用，不得原地改内层 Array/Map；已写入 DOC.md 与结构体 docstring |
 | 21 | **PBKDF2 200000 轮耗时（C2P-02）**：纯 MoonBit 实现，优化后 js ≈0.8 s / wasm ≈1.8 s / native ≈2.0 s（旧实现 2.4–3.8 s） | Fernet KDF（每个信封一次） | 算法语义与 RFC 向量不变；高频收发建议复用派生密钥（同一 key 只派生一次） |
+| 22 | **NPUSigner 的「不可签名」分支差异（C3P-01/08）**：vools 在 `npu-smi` 不存在/超时时返回 `None`（不签名）；本项目不 spawn 子进程、无法区分「工具不在」与「工具在但无序列号」，统一走 `UNKNOWN_NPU` 兜底 ⇒ `sign()` 恒 `Some` | 真 NPU 缺失场景 | 有意取舍：宁可给出「序列号未知」的显式签名，也不静默无签名；调用方若要区分，请自行注入 provider（返回 `None` 即得到 UNKNOWN_NPU）并读 `has_serial()` |
+
+| 23 | **jump 动作族真传输不实现**：`jump.push/pull/sync` 的「传输」一步在 MoonBit/js 侧无 SSH 客户端可用，一律返回 `{status:"error", transport:"unsupported", planned_files, message}` + 替代通道建议（`SyncFolder` / 共享目录）；可离线做的部分（本地递归扫描、sha256、同步计划五分类、`dry_run` 预览）**都真做**，且不伪造 `files_transferred` | 依赖 SFTP 同步的业务链路 | 有意取舍（契约 §3 允许「无外部依赖时以 Err/不可用实现」）；建议用 `SyncFolder` 走共享目录 |
+| 24 | **daemon 主循环形态**：vools = 阻塞线程 + `stop_event`/信号；本项目 `start()` 在 js 主线程用 `Atomics.wait` 阻塞，`stop()` 同线程不可达，只能 `max_rounds` 退出或外部进程管理（`run_once()` 幂等可替代轮询） | 常驻 daemon 的优雅停机 | 有意取舍（js 无线程/信号）；已文档化于 `daemon.mbt` 头注释与 §5.2 备注 |
+| 25 | **同步判据用 sha256 而非 size+mtime**：vools `compute_sync_plan` 用 `size` + `mtime 差 <2s` 判「相同」；本项目用内容 sha256（更强、跨平台一致，且与 `sync_folder` 的 manifest 判据统一） | 与 vools 的 sync plan 逐字节对比 | 有意改进；`jump.sync` 的 remote_files 结构因此为 `{sha256,size}` |
+| 26 | **glob 无字符类**：vools `fnmatch` 支持 `[seq]`/`[!seq]`；本项目 `sync_glob_match` 只支持 `*` / `?` | `sync_folder(pattern)`、`jump.* exclude` 的过滤能力 | 有意取舍（够用 + 可全目标测）；`[seq]` 需求出现再扩 |
+| 27 | **共享介质是单消费者语义**：`pull_remote` 读到即从共享目录删除（无 ack/租约），同一共享目录不能被两个执行端同时消费 | 多执行端部署 | 明确不做（MVP）；丢包分析：先写本地 inbox 再删远端 ⇒ 不丢包，只可能重复投递（版本去重 + C2 幂等守卫消解）；多消费者需 ack 协议，列入 P2 后续 |
+| 28 | **镜像库列级增量**：`tasks` 比 vools 多 `envelope`（整信封 + checksum 校验）与 `claimed_by`（领取者），故 13 列 vs 11 列（合计 28 vs 26）；`update_status` 额外要求传入已知 `version`（vools 无乐观锁参数） | 与 vools 共用同一 SQLite 文件 | 不兼容 vools 直连共享同一库（只保证「同库同语义」，不做跨实现文件级共享）；详见 §5.1.1 与 §5.1 备注 |
+| 29 | **Session 不持有 relay_server（D3）**：vools `Session` 内含 relay 服务对象；本项目拆成独立 `RelayServer` + `RelayChannel` | 会话层组成 | 更易单独启停/测试；`Session.relay` 只存通道 |
+| 30 | **文件名白名单是纯增量（D6）**：vools 无 `safe_filename` 校验；本项目拒绝路径穿越/纯点号/结尾点/Windows 设备名 | 收发/删除包 | 纯增量安全加固，拒绝时给可诊断 Err |
+| 31 | **删除契约是增量（D7）**：vools 无 `Session::remove_package`；本项目为一次性 `res_` 清理而加 | 收件箱清理 | 增量 API；语义为「删除成功或不存在都算成功」 |
+| 32 | **一次性 token 与清理策略（D8）**：vools 无「发送前清理陈旧 `res_` + 消费后删除」；本项目有 | interact 闭环 | 增量语义，降低陈旧回执误配；已在 interact 测试覆盖 |
+| 33 | **`_key_from_cfg` 的数字/布尔键（D10）**：vools 对非字符串 key 走 `str()`（`True`）；本项目用 JSON 文本（`"true"`） | 配置里的数字/布尔 key | 差异仅在非字符串 key 的文本化形态；配置示例均为字符串键 |
+| 34 | **`interact` 入参形态（D12）**：vools `_coerce` 接受三种配置形态；本项目只接受 `RhopConfig`（先 `from_dict`/`from_file`） | interact 调用方 | 显式类型更安全；vools 兼容形态属历史包袱 |
 
 > 历史条目（v3 的第 17/18 条：P2 心跳文件格式不互通、未来时间戳判定方向）**已于 2026-10-28 T0r15 解决**（vools 字节级对齐 + 真 vools 双向互操作 6/6），已移出本表，证据见 §5.9 B1/B2。
 
@@ -541,30 +605,32 @@ vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关�
 **分母说明**
 
 - `已落地范围（A+B）` = 契约 §3 Batch A + Batch B 的 124 个符号。
-- `契约范围（A–D + clipboard）` = **192** 个符号 = 契约 §3 列出的全部模块（core/envelope/signer/integrity/crypto/watch/transport×7/session/interact/config/mirror/daemon/requester/executor/actions(2)/sync_folder/clipboard(8)）；不含 `secret.py` CLI（1）、`actions/jump.py` 动作族（14）、P2 `task/` 子包（230，单列于 §5.9）。
-- `vools 全量` = **437** 个符号（193 主模块 + 14 jump + 230 task）。
+- `契约范围（A–D + clipboard）` = **193** 个符号 = 契约 §3 列出的全部模块（core/envelope/signer/integrity/crypto/watch/transport×7/session/interact/config/mirror/daemon/requester/executor/actions(2)/sync_folder/clipboard(8)）；不含 `secret.py` CLI（1）、`actions/jump.py` 动作族（14）、P2 `task/` 子包（264，单列于 §5.9）。
+- `vools 全量` = **472** 个符号（194 主模块 + 14 jump + 264 task）。
 
 | 口径 | 符号数 | ✅ | 🟡 | ⚠️ | ⏳ | ⛔ | 覆盖率 |
 |---|---:|---:|---:|---:|---:|---:|---|
 | 已落地范围（A+B） | 124 | 113 | 2 | 1 | 0 | 8 | **91.1%** 完全对齐；对齐+等价+部分 = 93.5% |
-| 契约范围（A–D + clipboard） | 192 | 178 | 4 | 1 | 0 | 9 | **92.7%** 完全对齐；对齐+等价+部分 = **95.3%**；不做 4.7% |
-| vools 全量（含 P2） | 437 | 179 | 4 | 1 | 0 | 253 | **41.0%** 完全对齐；对齐+等价+部分 = 42.1% |
+| 契约范围（A–D + clipboard） | 193 | 178 | 4 | 1 | 0 | 10 | **92.2%** 完全对齐；对齐+等价+部分 = **94.8%**；不做 5.2% |
+| vools 全量（含 P2） | 472 | 179 | 25 | 1 | 0 | 267 | **37.9%** 完全对齐；对齐+等价+部分 = 39.0% |
 
 **结论**
 
-1. **契约范围内 192 个符号中 178 个已完全对齐（92.7%），加上语义等价（🟡 4）与部分（⚠️ 1，watch 的无公开 `DEFAULT_EXTENSIONS` 常量）达 95.3%**；余下 9 个 ⛔ 全是明确不做项（SFTP 远端文件操作 8 + CLI 入口 1）。
+1. **契约范围内 193 个符号中 178 个已完全对齐（92.2%），加上语义等价（🟡 4）与部分（⚠️ 1，watch 的无公开 `DEFAULT_EXTENSIONS` 常量）达 94.8%**；余下 10 个 ⛔ 全是明确不做项（SFTP 远端文件操作 9（含 `port_reachable`）+ CLI 入口 1）。
 2. Batch A/B（124）保持 91.1%，跨实现字节级对齐有 qa fixture 硬证据（envelope checksum/字节、canonical JSON 7 例、digest 13 例、signer 3 例）。
 3. Batch C/D **全部落地且测试全绿**：session 7 / interact 2 / config 11 / mirror 12 / daemon 3+1CLI / requester 6 / executor 7 / sync_folder 9 / actions 2（`actions_test.mbt` 10 例）/ clipboard 6✅+2🟡（25 例）。
-4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 99 全绿），按模块级映射 21/230 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 209 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
+4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 101 全绿），按模块级映射 21/264 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 243 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
 
 ## 9. 复核方式（可重复执行）
 
 ```bash
 # ① 本项目公开面（权威：moon info 生成的接口）
 cd E:/IDEProjects/AI/rx-mbt
-grep -cE "^pub " rhop/pkg.generated.mbti                                           # 337 行 pub 声明
+grep -cE "^pub " rhop/pkg.generated.mbti                                           # 353 行 pub 声明（C3 实测）
 grep -oE "^pub (fn|struct|enum|trait|const|using|impl)" rhop/pkg.generated.mbti | sort | uniq -c
-#   8 pub const / 278 pub fn / 15 pub impl / 32 pub struct / 2 pub trait（+ 2 行 pub(all) enum）
+#   10 pub const / 300 pub fn / 15 pub impl / 32 pub struct / 2 pub trait / 3 pub(all) enum → 353 行
+# rhop_task/pkg.generated.mbti: 163 行（156 fn / 14 struct / 2 enum / 2 type）
+# 注：公开面随各 lane 增量变化，以 `moon info` 重新生成为准（本行为 C3 快照）
 
 # ② vools 公开面（AST 枚举，避免手抄遗漏）
 cd E:/IDEProjects/AI/vools/rhop/vools/rhop
@@ -585,7 +651,7 @@ moon test -p test-suit/rhop_business --target js
 moon test -p test-suit/rhop_task --target js
 ```
 
-**复核时刻实测状态（C2 轮修复后快照 2026-10-28 14:2x，Windows / moon 0.1.20261016 / node v25.2.1）**
+**复核时刻实测状态（C3 轮修复后快照 2026-10-28 15:3x，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧对照同数字）**
 
 > ⚠️ C2 并行 lane（crypto/session/business）仍在追加测试，**跨 lane 总数持续变化**；下表为本域快照，
 > 跨 lane / 项目级数字以 `bash scripts/test_all.sh`（qa 终验）为准。
@@ -597,17 +663,17 @@ moon test -p test-suit/rhop_task --target js
 | `moon test test-suit/rhop`（wasm） | `Total tests: 156, passed: 156, failed: 0.` |
 | `moon test test-suit/rhop --target js` | `Total tests: 160, passed: 160, failed: 0.` |
 | `moon test test-suit/rhop --target native` | `Total tests: 156, passed: 156, failed: 0.` |
-| `moon test test-suit/rhop_vectors --target js` | `Total tests: 2, passed: 2, failed: 0.`（互操作产物生产者） |
+| `moon test test-suit/rhop_vectors --target js` | `Total tests: 2, passed: 2, failed: 0.`（互操作产物生产者；含 tampered 负向断言） |
 | `moon test -p test-suit/rhop_js --target js` | `Total tests: 56, passed: 56, failed: 0.` |
 | `moon test -p test-suit/rhop_clipboard --target js` | `Total tests: 25, passed: 25, failed: 0.` |
-| `moon test -p test-suit/rhop_interact --target js` | `Total tests: 22, passed: 22, failed: 0.` |
+| `moon test -p test-suit/rhop_interact --target js` | `Total tests: 23, passed: 23, failed: 0.` |
 | `moon test test-suit/rhop_business`（wasm/native） | `Total tests: 10, passed: 10, failed: 0.` |
-| `moon test test-suit/rhop_business --target js` | `Total tests: 53, passed: 53, failed: 0.` |
+| `moon test test-suit/rhop_business --target js` | `Total tests: 57, passed: 57, failed: 0.` |
 | `moon test test-suit/rhop_task`（wasm/native） | `Total tests: 46, passed: 46, failed: 0.`（P2a 纯逻辑部分）|
-| `moon test test-suit/rhop_task --target js` | `Total tests: 101, passed: 101, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
+| `moon test test-suit/rhop_task --target js` | `Total tests: 102, passed: 102, failed: 0.`（P2a+P2b，含心跳 vools 互操作用例）|
 | 项目级 `moon test`（wasm） | `Total tests: 612, passed: 612, failed: 0.`（快照）|
 | 项目级 `moon test --target native` | `Total tests: 612, passed: 612, failed: 0.`（快照）|
-| 项目级 `moon test --target js` | 快照时点 `819` 例（C2 并行 lane 正在追加测试，故不冻结单一总数；本域各包均绿，见上表）|
+| 项目级 `moon test --target js` | `Total tests: 825, passed: 825, failed: 0.`（C3 终版快照）|
 
 > 判绿纪律：只认 `moon test` 汇总行（`Total tests: N, passed: N, failed: 0`），不认 exit code。
 > 本表所有数字均在表格标注时刻实际运行得到；P2 / Batch D 在途项恢复后应重跑并把 `rhop_business` 一行改为 38/38。
@@ -633,39 +699,39 @@ moon test -p test-suit/rhop_task --target js
 | `test-suit/rhop_js/relay_test.mbt` | 6 | `transport/relay.py` | js |
 | **`test-suit/rhop_js` 小计** | **56** | — | js |
 | `test-suit/rhop_clipboard/clipboard_test.mbt` | 25 | `clipboard.py`（push/pull 状态机、探测、边界） | js |
-| `test-suit/rhop_interact/interact_test.mbt` | 22 | `interact.py` + `actions/` 三模式 | js |
+| `test-suit/rhop_interact/interact_test.mbt` | 23 | `interact.py` + `actions/` 三模式 | js |
 | `test-suit/rhop_business/mirror_test.mbt` | 11 | `mirror.py` | js |
 | `test-suit/rhop_business/executor_test.mbt` | 6 | `executor.py` | js |
 | `test-suit/rhop_business/requester_test.mbt` | 5 | `requester.py` | js |
 | `test-suit/rhop_business/daemon_test.mbt` | 6 | `daemon.py` | js |
 | `test-suit/rhop_business/sync_folder_test.mbt` + `sync_glob_test.mbt` | 5 + 5 | `sync_folder.py` | js |
 | `test-suit/rhop_business/nonjs_test.mbt` + helpers | 5（+ 0 例 helper 模块） | 非 js 降级路径 | wasm/native |
-| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 53（js）** | — | — |
-| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 101（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
+| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 57（js）** | — | — |
+| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 102（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync，含 vools 心跳互操作） | wasm/js/native（7 个文件 js-only） |
 
 **rhop 相关合计**
 
-- **js 口径**：160(rhop) + 2(vectors) + 56(rhop_js) + 25(clipboard) + 22(interact) + 53(business) + 101(task) = **419 例**（快照）
+- **js 口径**：160(rhop) + 2(vectors) + 56(rhop_js) + 25(clipboard) + 23(interact) + 57(business) + 102(task) = **425 例**（C3 快照）
 - **wasm / native 口径**：156(rhop) + 10(business) + 46(task) = **212 例**（不含 js-only 包）
-- **全模块（项目级，快照）**：wasm **612** / native **612**，js 快照 **819**；js 侧随并行 lane 追加而变，以 `scripts/test_all.sh` 输出为准
-- 其中 vools 契约范围（A–D + clipboard）约 318 例（js），P2 占 101 例（js）
+- **全模块（项目级，C3 快照）**：wasm **612** / js **825** / native **612**，三目标全绿
+- 其中 vools 契约范围（A–D + clipboard）约 323 例（js），P2 占 102 例（js）
 
 ## 11. 本轮完成情况与「待终轮更新」清单
 
 **本轮（v2）已完成**
 1. Batch C 全部落地核实并转 ✅：`session.mbt`(7)、`config.mbt`(11)、`interact.mbt`(2)，测试 15 + 18 + 13 例。
-2. Batch D 落地核实：`mirror`(12 ✅)、`executor`(7 ✅)、`sync_folder`(9 ✅)、`daemon`(3 ✅ + 1 ⛔ CLI)、`requester`(6 ✅，测试在途)、`actions`(2 ⚠️ 已实现未测)。
+2. Batch D 落地核实：`mirror`(12 ✅)、`executor`(7 ✅)、`sync_folder`(9 ✅)、`daemon`(3 ✅ + 1 ⛔ CLI)、`requester`(6 ✅)、`actions`(2 ✅ + 2 增量)；`actions/jump.py` 14 个符号中 8 个已落地（离线可做部分）、6 个 ⛔（真传输/paramiko 专属）。**C3 复核**：全部业务行已无 ⚠️/在途项。
 3. clipboard 一节按实测改写（8 个符号：6 ✅ + 2 🟡，25 例测试），并给出探测/轮询两处差异说明。
 4. P2 `rhop_task` 单列（骨架 + 57 例 js 绿；逐符号对照与 native 支持留 P2b）。
 5. 重算三档覆盖率（A+B 124 → 91.1%；契约范围 192 → 91.7%/95.3%；全量 437 → 40.3%）。
 6. 有意增量补登 C/D/clipboard/基础设施层 10 组；已知差异补到 16 条。
 
 **本轮收尾时已关闭的项**
-- `test-suit/rhop_business` 已 38/38 全绿 → §5.2/§5.3 的 ⚠️ 均改 ✅。
+- `test-suit/rhop_business` 已 **57/57**（js；wasm/native 各 10/10）全绿 → §5.2/§5.3 的 ⚠️ 均已改 ✅（C2 增 6 例 + P1 回归 6 例 + C3 增 4 例）。
 - `actions_test.mbt` 已交付（10 例，包级全绿）→ §5.5 三行改 ✅。
 
 **待终轮更新（P2 收尾后需要再刷一遍）**
-1. （C2 轮更新）本域已全绿：wasm 612/612、native 612/612（项目级快照），`test-suit/rhop` 156/160/156、`rhop_vectors` 0/2/0；
+1. （C2 轮更新）本域已全绿：wasm 612/612、js 819/819、native 612/612（项目级，C3 实测），`test-suit/rhop` **131/160/131**（wasm/js/native，含 actions 10 例）、`test-suit/rhop_business` **10/57/10**；
    项目级 js 因并行 lane 持续追加测试未冻结单一总数。**C2 修复项**：C2P-01 深嵌套栈溢出、C2P-02 PBKDF2 秒级阻塞、C2P-03 hops_seen 引用外泄、
    C2P-05 读写深度不对称、C2P-06 文档数字漂移、C2P-07 键排序分配 —— 详见 `fist-mbt/reports/2026-10-28-c2-{bugfind,fix}-protocol.md`。
 2. P2b：`rhop_task` 与 vools `task/`（230 符号）逐符号对照表 + native 目标结论。

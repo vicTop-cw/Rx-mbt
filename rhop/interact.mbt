@@ -39,6 +39,27 @@
 ///
 /// `Err` 只用于**参数/配置类**错误：未知 mode、空 filename、配置构件无法构造、
 /// 通道链全不可达。介质/加解密类失败以 `status:"error"` 结构表达（可跨进程转发）。
+///
+/// ## 与 vools 的差异
+/// - **D12 入参形态**：vools 的 `_coerce` 接受 `RhopConfig / dict / 路径` 三形态；
+///   本项目只接受已解析的 `RhopConfig`（dict/路径请先过 `config.load_config`）——
+///   把"解析"与"执行"分开，避免在交互入口里静默吞掉配置错误。
+/// - **D8 一次性令牌**：vools 没有 token 机制。本项目在请求包里带
+///   `token = tok:<nonce>:<filename>:<action>`，对端原样回显，发起端校验一致才认；
+///   配合「发送前清理陈旧 `res_`」+「取回后删除 `res_`」，保证**上一轮残留回执永远不会被当成本轮结果**。
+///
+/// ## roundtrip 的失败相位（`phase` 词表，便于调用方定位）
+/// | phase | 含义 | 回执形状 |
+/// |---|---|---|
+/// | `send` | 请求包投递失败 | `{status:"error", phase:"send", filename, detail}` |
+/// | `request` | 对端处理失败（取包/解密/缺 action） | `{status:"error", phase:"request", omega_gate}` |
+/// | `receive` | 取回执失败（介质读/解密） | `{status:"error", phase:"receive", omega_gate}` |
+/// | `response` | 回执与本次请求不匹配（陈旧/串包/令牌不符） | `{status:"error", phase:"response", reason, omega_gate}` |
+///
+/// ## 并发注意（C2-05，资源/并发轮实测）
+/// 缺省包名只由 action 派生（`req_<action>.rhop`），**不唯一**：同一介质上并发/多进程
+/// 跑同一动作时，后写者会原子覆盖前写者，**先投递的请求静默丢失**（两次 send 都返回 `ok`）。
+/// 并发方必须显式传唯一 `request_filename`（如带 nonce/worker id），或由上层（daemon/executor）队列化。
 pub fn interact(
   cfg : RhopConfig,
   action : String,
@@ -330,6 +351,12 @@ let interact_nonce : Ref[Int32] = Ref::Ref(0)
 ///
 /// 令牌随请求包一起投递，对端原样回显；发起端校验回执里的令牌与本次请求一致，
 /// 因此上一轮残留的 `res_` 永远不会被当成本轮结果（配合「发送前清理 + 消费后删除」）。
+///
+/// 实现约束（C2-07）：
+/// - 计数器是进程内 `Ref[Int32]` 单调递增，**无原子性** —— 适用于单线程执行体
+///   （js 事件循环 / 单线程 wasm/native 测试）；若将来引入多线程，需要换 `Int64`/原子实现；
+/// - 2^31 次 roundtrip 后回绕为负；即便回绕，token 仍需 `filename + action + nonce` 全等才被接受，
+///   不会误判（只是可预测性下降）。
 fn interact_next_token(filename : String, action : String) -> String {
   let n = interact_nonce.val
   interact_nonce.val = n + 1

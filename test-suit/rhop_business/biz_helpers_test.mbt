@@ -111,14 +111,59 @@ fn biz_action_payload(action : String) -> Json {
 }
 
 ///|
-/// 拿一个**唯一**临时工作目录（js：`rhop_temp_workspace`，每次调用新建
-/// `rhop-biz-<rand>/`；这些目录登记在进程退出钩子里统一递归删除）。
+/// 本进程「上一个」workspace（新建前会被清掉，保证任意时刻存活 ≤1 个）。
+let biz_last_workspace : Ref[String] = Ref::new("")
+
+///|
+/// 是否已经做过一次「陈旧残留清扫」（每进程只需一次）。
+let biz_stale_swept : Ref[Bool] = Ref::new(false)
+
+///|
+/// 扫掉 `%TEMP%/rhop-biz-*` 历史残留（上一次被 kill/超时打断留下的），返回清理个数。
 ///
-/// 非 js 目标无文件系统 ⇒ `abort`（只在 js 测试文件里调用）。
+/// 前缀 `rhop-biz-` 是本包专属，因此不会误伤其它 lane 的临时目录；
+/// 非 js 目标无文件系统 ⇒ 恒返回 0。
+fn biz_sweep_stale() -> Int32 {
+  biz_ffi_sweep_stale("rhop-biz-")
+}
+
+///|
+/// 拿一个**唯一**临时工作目录，并让「任意时刻最多 1 个 workspace 存活」。
+///
+/// C3 卫生硬化（QA C2-V1）：
+///   - 首次调用先清扫本包历史残留（测试进程被 kill 时退出钩子不执行，会留下
+///     `%TEMP%/rhop-biz-*`）；
+///   - 每次新建前删掉上一个 workspace ⇒ 即使进程被强杀，也最多残留 1 个目录；
+///   - 目录本身仍登记在 `rhop_temp_workspace` 的退出钩子里，正常退出自动清理。
+///
+/// 用例收尾请调用 `biz_cleanup(dir)`（幂等）；非 js 目标无文件系统 ⇒ `abort`
+/// （只在 js 测试文件里调用）。
 fn biz_temp_workspace() -> String {
-  match @rp.rhop_temp_workspace("rhop-biz-") {
+  if !biz_stale_swept.val {
+    biz_stale_swept.val = true
+    ignore(biz_sweep_stale())
+  }
+  let prev = biz_last_workspace.val
+  if prev != "" {
+    ignore(@rp.rhop_remove_dir_all(prev))
+  }
+  let dir = match @rp.rhop_temp_workspace("rhop-biz-") {
     Ok(dir) => dir
     Err(e) => abort("rhop_temp_workspace 失败（需要 js 目标）: \{e}")
+  }
+  biz_last_workspace.val = dir
+  dir
+}
+
+///|
+/// 收尾清理某个 workspace（幂等；不存在视为成功），并把「上一个 workspace」指针清空。
+fn biz_cleanup(dir : String) -> Unit {
+  if dir == "" {
+    return
+  }
+  ignore(@rp.rhop_remove_dir_all(dir))
+  if biz_last_workspace.val == dir {
+    biz_last_workspace.val = ""
   }
 }
 
@@ -131,4 +176,22 @@ fn assert_status(value : Json, expected : String) -> Unit {
       "status 期望 \{expected}，实际 \"\{actual}\"（回执: \{@rp.canonical_json(value)}）",
     )
   }
+}
+
+// ---------------------------------------------------------------------------
+// 测试专用 FFI：陈旧 workspace 清扫（js）/ 空实现（wasm、native）
+// ---------------------------------------------------------------------------
+
+///|
+/// js：删除 `%TEMP%` 下所有以 `prefix` 开头的目录，返回删除个数。
+#cfg(target="js")
+extern "js" fn biz_ffi_sweep_stale(prefix : String) -> Int32 =
+  #| (prefix) => { try { const fs = process.getBuiltinModule("node:fs"); const os = process.getBuiltinModule("node:os"); const pathMod = process.getBuiltinModule("node:path"); const tmp = os.tmpdir(); const pre = String(prefix); let n = 0; for (const name of fs.readdirSync(tmp)) { if (String(name).indexOf(pre) === 0) { try { fs.rmSync(pathMod.join(tmp, name), { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); n = n + 1; } catch (e) {} } } return n; } catch (e) { return 0; } }
+
+///|
+/// 非 js：无文件系统，恒 0。
+#cfg(not(target="js"))
+fn biz_ffi_sweep_stale(prefix : String) -> Int32 {
+  let _ = prefix
+  0
 }

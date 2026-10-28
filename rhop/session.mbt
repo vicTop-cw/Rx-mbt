@@ -81,10 +81,21 @@ pub fn Role::parse(text : String) -> Result[Role, String] {
 ///|
 /// 包文件名白名单校验（安全边界：防路径穿越 / 任意路径写入）。
 ///
-/// 规则：长度 1..128；字符集仅 `A-Za-z0-9._-`；禁止 `.` / `..` 及任何连续 `..`。
-/// 路径分隔符、盘符、URI 前缀、空白与控制字符都因字符集被拒 ——
-/// `send_package` / `recv_package` / `remove_package` 与 `interact` 的缺省包名
-/// 统一走这一处校验，介质层因此拿不到可穿越的文件名。
+/// 规则（逐条按序校验，任一失败即 Err）：
+/// 1. 长度 1..128；
+/// 2. 禁止任何连续 `..`（含 `.` / `..` 本身，防路径穿越）；
+/// 3. 字符集仅 `A-Za-z0-9._-` —— 路径分隔符、盘符、URI 前缀、空白与控制字符都被它拒掉；
+/// 4. 拒绝**纯点号**名（`.`、`...`）：介质层会把目录当目标，`exists(".")` 还恒为真；
+/// 5. 拒绝**结尾点**（`a.`）：Win32 会静默抹掉、POSIX 保留 → 同一逻辑名两平台指向不同文件；
+/// 6. 拒绝 **Windows 保留设备名**（`CON/PRN/AUX/NUL/CLOCK$`、`COM1-9`、`LPT1-9`，base = 首个 `.` 之前，
+///    大小写不敏感）：Node 走 `\?\` 长路径会建成真文件，但 cmd/PowerShell/普通 Win32 会当设备 →
+///    换实现就「假成功丢数据」。
+///
+/// `send_package` / `recv_package` / `remove_package` 与 `interact` 的缺省包名统一走这一处校验，
+/// 介质层因此拿不到可穿越的文件名。
+///
+/// **与 vools 的差异（D6）**：vools 没有这层校验，直接把文件名拼进路径；白名单是本项目**纯增量**，
+/// 调用方传非法名会得到 `Err`（而不是在介质层炸出难懂的 ENOENT/EPERM）。
 pub fn safe_filename(name : String) -> Result[String, String] {
   if name.length() == 0 {
     return Err("包文件名不能为空")
@@ -183,6 +194,10 @@ fn is_windows_device_name(name : String) -> Bool {
 ///
 /// `shared` 用 `SharedPathView`（多端写/读视图）；`online` 是按优先级排列的在线通道；
 /// `relay` 是本端作为**投递方**视角的中转通道（中转服务端由 RelayServer 另管）。
+///
+/// **与 vools 的差异（D3）**：vools 的 `Session` 还持有 `relay_server`（会话内挂中转服务端）；
+/// 本项目把中转**服务端**拆成独立的 `RelayServer`（显式 `start`/`stop`，生命周期由调用方掌握），
+/// `Session` 只保留投递方视角的 `RelayChannel`。因此 `reverse()` 也不会带上服务端句柄。
 pub struct Session {
   /// 会话角色
   role : Role
@@ -466,8 +481,13 @@ fn Session::pick_shared_write(self : Session) -> SharedPathView? {
 ///|
 /// 介质链是否至少有一条可用（中转 > 在线 > shared path）。
 ///
-/// 注意：会**真实探测**（中转 /health、在线通道 available、shared 存在性），
-/// 但探测过程**不产生副作用**（不建目录、不写文件），因此可用于配置自检与热路径。
+/// 注意：会**真实探测**（中转 /health、在线通道 available、shared 存在性）。
+///
+/// **无文件系统副作用**：不建目录、不写文件（本地介质用 `exists(".")/exists("..")/existsSync` 纯读探测）。
+/// **但有网络与进程副作用（C2-04 量化）**：relay / http 端点会发 HTTP 请求，
+/// 在线通道（SFTP 探测 / `git ls-remote`）与 http 请求都经由**子进程**执行 ——
+/// 实测 http 介质一次 `available()` ≈ **0.5 s**（本地目录 ≈ 0 ms）。
+/// 因此可以在配置自检里调用，但**不要放在热路径高频调用**。
 pub fn Session::available(self : Session) -> Bool {
   match self.pick_relay() {
     Some(_) => true
@@ -489,6 +509,9 @@ pub fn Session::available(self : Session) -> Bool {
 
 ///|
 /// 按通道选择链描述「此刻会走哪条通道」（不真正收发，但会真实探测）。
+///
+/// 探测代价与副作用同 `available()`（relay/http 会发请求并起子进程，实测 ≈0.5 s/次），
+/// 且**每次调用都重新探测**（不缓存）—— 热路径请勿反复调用。
 ///
 /// 返回的 `TransportSelection.transport` 用**会话层标签** `"relay"` / `"online"` /
 /// `"shared"` / `"none"`（与 vools `_pick_transport` 的 label 语义逐字对齐）；
@@ -730,6 +753,9 @@ pub fn Session::recv_package(
 ///|
 /// 从介质删除一包（**仅 shared path**；在线通道/中转没有删除契约）。
 ///
+/// **与 vools 的差异（D7）**：vools 没有删除包的 API（它把"取走即删"留给中转实现）；
+/// 本方法是为 roundtrip 的 F1「一次性响应包」而加的**增量**（取出 `res_` 后必须删除）。
+///
 /// 用途：roundtrip 的一次性响应包消费 —— 取出 `res_<filename>` 后必须删除，
 /// 否则下一轮请求可能读到上一轮的陈旧回执（见 F1）。
 /// 删除走**读视图**（响应包从读端取回，就在读端消失）。
@@ -767,6 +793,11 @@ fn recv_error(label : String, filename : String, reason : String) -> Json {
 ///
 /// 介质、密钥、中转通道原样复用（`reverse()` 不重建介质，只换角色标签），
 /// 因此 A/B 反向传递不必重新配置 —— 与 vools 同语义。
+///
+/// 实现细节（C2-09 注意项）：`online` 用 `Array::copy()` 做**浅拷贝**，元素是同一批
+/// `&OnlineChannel` 对象；`shared` / `relay` / `crypto` 也是共享同一份。当前各通道**无 `mut` 状态**
+/// （无连接池/游标），所以共享安全；若将来给通道加可变状态（如连接复用缓存），
+/// 两个方向的会话会互相影响，需要改为显式传入新建通道。
 pub fn Session::reverse(self : Session) -> Session {
   let new_role = match self.role {
     Relay => Relay
