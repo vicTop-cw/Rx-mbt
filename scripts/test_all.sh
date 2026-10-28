@@ -280,7 +280,12 @@ cleanup_orphans() {
   fi
   case "$PLATFORM" in
     windows)
-      if [ -z "$PS_EXE" ]; then
+      # PS_EXE 在改 PATH 之前捕获；这里再兜一层 command -v（便于被 source 复用时仍可用）
+      local ps_bin="${PS_EXE:-}"
+      if [ -z "$ps_bin" ]; then
+        ps_bin=$(command -v powershell.exe 2>/dev/null || command -v powershell 2>/dev/null || true)
+      fi
+      if [ -z "$ps_bin" ]; then
         echo "    (cleanup: 找不到 powershell，无法清理残留进程；请手工检查 node/moon；pattern=$pattern)"
         return 0
       fi
@@ -288,7 +293,7 @@ cleanup_orphans() {
       # 另：PS 5.1 的 Get-Process 没有 CommandLine 属性，必须走 CIM 取命令行。
       # 只杀 node.exe / moon.exe，且要求命令行命中本仓库 pattern（双重收窄）。
       local killed
-      killed=$("$PS_EXE" -NoProfile -Command \
+      killed=$("$ps_bin" -NoProfile -Command \
         "\$pat='${pattern}'; \$n=0; Get-CimInstance Win32_Process -Filter \"Name='node.exe' or Name='moon.exe'\" | Where-Object { \$_.CommandLine -match \$pat } | ForEach-Object { \$n++; Stop-Process -Id \$_.ProcessID -Force -ErrorAction SilentlyContinue }; \$n" \
         2>/dev/null | tr -d '\r' | tail -1)
       case "$killed" in ''|*[!0-9]*) killed=0 ;; esac

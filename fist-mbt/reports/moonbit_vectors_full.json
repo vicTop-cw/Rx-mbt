@@ -113,7 +113,7 @@
       "encrypt_json": [
         {
           "name": "simple_obj",
-          "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0Wm9STVh0ZlkzaVN1SnBZV3pacXM2MTVnVGZRVFFtWk56MHNtaF91bUFhYV9qVlVJOG1sUkpPVjhramliSG50QjdpN2NxM01WWC1uckRKOVBaLVVhWm9mZlE9PQ==\"}",
+          "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WjRQeTRUOHFDWDNLTkh3X1ZUOU1XdDdUSE5DcHVkcHl6dWsxX0o5aERDVjUzYkdJeTlJcFVvcGRKUnFoMG9CVng1NEhtZHBjdXF5eHJkQ1JuYl8ycE96d0E9PQ==\"}",
           "decrypt_payload": {
             "k": "v",
             "n": 1
@@ -121,7 +121,7 @@
         },
         {
           "name": "unicode_nested",
-          "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0Wm9SYXFlel9reUNteFJ1Y0E4amhxYTNRbWNsQjJjTGtWNnktd2F3bGhXYlBPd2pEemxxUHdwTWo3S2xhSFVIQnJXS0ROTVMwNkMwMzZOMkdZYnBrWHpubjE2U2x2eHFvT3J5N0tHc0J1MDRJS1hjUnpSNm9JVGVuVXluOHprdFRpazc0cDU2NWNZOFlwOTVXRVdKcjU4ZlZRPT0=\"}",
+          "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WjRQcDFpMXQ4bm1aMVJPM0l0clU1TWhHYVlwcHJvWVpJQ09TcGh5QTVxcVgxemhWQmFwY1h3bW1OQXlqOElGTERtWmtEUEZxLXIyS2dDVHF5QXdNV19HcndhdGQzQXNJY2dhQm9fdVZaWV9NNElwNTU4VWhkdVoyUXVOU0VrUjFvUHp1VC0zZFBvcGQ2LXRMbWJqQXpRa2N3PT0=\"}",
           "decrypt_payload": {
             "中文": "值",
             "列表": [
@@ -137,7 +137,7 @@
         },
         {
           "name": "plain_string_payload",
-          "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0Wm9Sd2g5TG1aQ2pQMXB4SlVCd0d2RWlBNTFDUTZNM1U3ZU9UdWZqRV9NRWFacTJtanRQS2UwdzR3WFRENDg0V0JmR0t1Z0hFbHdfRG1RQ3pqMW5iQXZWb0pwWkhIOFcybW1PcS1mcHBTaTZTbTQ9\"}",
+          "ciphertext_json_text": "{\"v\": 1, \"alg\": \"fernet\", \"ct\": \"Z0FBQUFBQnE0WjRQSldUQkNTeXZ0WlBJVzJydTdOcjVKQlhMcU9MLVhiZmhGOGROQ3FLWFBxZGpxUmVPT0psVVVVaGhwZWhVTldHWV9TLVVLZVgwLTlwaVotSUgyUnI3T0VocnZsVkR4anJUc1I3akxzQU8tX289\"}",
           "decrypt_payload": {
             "__text__": "just-a-string"
           }
@@ -146,11 +146,11 @@
       "encrypt_secret": [
         {
           "name": "password_ascii",
-          "secret": "RHOP-ENC:Z0FBQUFBQnE0Wm9ST3ZGM1VES2k3MWZPVU5RdmpKdGIyWUJlTTVtY0w3Z2draXZUcnNLakZrM0h5NWNhVmxxUnhEMWE2TUN3MEszNW90anBDOUtwUDA2cXFoUzdlV1RGaGc9PQ=="
+          "secret": "RHOP-ENC:Z0FBQUFBQnE0WjRRLVp2cS1WWTdsTWw4M0tTQXA1U1RXU2Q5RGMycDlRdHFrYW51dWpzb2R1XzFYTTFBbEUydXdtU0ZMU1NKamhZNEpkVVNkdlJRZFd0clZVWnY2Nl9JMFE9PQ=="
         },
         {
           "name": "token_unicode",
-          "secret": "RHOP-ENC:Z0FBQUFBQnE0Wm9SbzlfOWlYcmw5TW9UeEt2X2RxWUJROHhmY1NUdEt2Z1RKTEdFa2lzdDVOY0FHbjRoTlIzTzhSVWpjSk8xR2t0UkdLZzIxeGlVd0YxcU5qeXZqUTJESmI0bFdiRkhucEltOGlyZGZhcEQyRTQ9"
+          "secret": "RHOP-ENC:Z0FBQUFBQnE0WjRRY0h4M2RYbFpHVFIwWEtPSi1SLVRXSk9YTVlVQjlwTW5VUFlGNGdLdWJ6V2Vkdmt6ZEhuWXpva3hadnJCQzRGemZtcXlqYlk1QTJSa0lGWFB0YmNnWXBsUmN2UTdrd2dMWGZ5NTU1ZWh4aUU9"
         }
       ]
     },
