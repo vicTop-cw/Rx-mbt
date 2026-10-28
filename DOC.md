@@ -1,7 +1,7 @@
 # RX-MBT API 文档
 
 > 本文档由 `rx/pkg.generated.mbti`（`moon info` 生成）与源码注释整理，列出全部公开 API 的签名与语义说明。
-> 库版本：`vicTop-cw/RX-MBT@0.1.0`　工具链：`moon 0.1.20260724`　编译目标：`wasm`
+> 库版本：`vicTop-cw/RX-MBT@0.3.1`　工具链：`moon 0.1.20261016`　编译目标：`wasm`（rhop 相关 API 另见各条目标标注）
 
 ## 目录
 
@@ -23,6 +23,7 @@
 - [自由函数操作符](#自由函数操作符)
 - [Itor / Node（可控制迭代器）](#itor--node可控制迭代器)
 - [Haskell 迭代器 API 对照](#haskell-迭代器-api-对照)
+- [rhop（vools-rhop 协议复刻）](#rhopvools-rhop-协议复刻)
 - [行为约定](#行为约定)
 
 ---
@@ -608,3 +609,674 @@
 6. **虚拟时钟**：所有时间类操作符基于 `Clock`（默认 `default_clock`），测试用 `advance_time(ms)` 推进；`interval`/`timer` 需推进时钟才会触发。
 7. **错误类型**：`element_at` 越界、`timeout` 超时均发射 `E::default()`。
 8. **背压占位**：`backpressure_*` 在同步模型下透传（无积压场景），保留 Rx-Rust 签名便于后续异步扩展。
+
+## rhop（vools-rhop 协议复刻）
+
+> `rhop/` 包复刻 [vools-rhop 0.9.0](https://github.com/) 的对外 API：双方对等镜像任务中继协议。
+> 本节按文件分组列出**全部公开 API**（签名取自 `rhop/pkg.generated.mbti`，`moon info` 生成）。
+> 目标可用性标记：`三目标` = wasm/js/native；`js` = 仅 js 有真实实现，其余目标返回可诊断 `Err` / `available()=false`。
+> 逐符号与 vools 的对照见 `fist-mbt/docs/2026-10-27-rhop-vools-parity-matrix.md`。
+
+### 常量
+
+| 常量 | 值 | 文件 | 说明 |
+|---|---|---|---|
+| `CLIP_FILE` | `"clipboard.txt"` | `clipboard.mbt` | 剪贴板交换文件缺省名 |
+| `ENV_RHOP_KEY` | `"RHOP_KEY"` | `key.mbt` | 密钥环境变量名（另有 camelCase 别名 `env_rhop_key`） |
+| `SECRET_PREFIX` | `"RHOP-ENC:"` | `key.mbt` | 秘密串前缀（别名 `secret_prefix`） |
+| `NPU_MARKER_DEFAULT` | `"NPU_MARKER"` | `signer.mbt` | NPU 签名缺省 marker |
+| `SHA256_BLOCK_SIZE` / `SHA256_DIGEST_SIZE` / `MD5_DIGEST_SIZE` | 64 / 32 / 16 | `digest.mbt` | 摘要尺寸常量 |
+| `SYNC_MANIFEST_NAME` | `".sync_manifest.json"` | `sync_folder.mbt` | 目录同步清单文件名 |
+
+### core.mbt —— 协议基础模型（三目标）
+
+```moonbit
+pub(all) enum Side { Requester; Executor }
+pub fn Side::other(Self) -> Self
+pub fn Side::to_string(Self) -> String            // "requester" / "executor"
+pub fn Side::parse(String) -> Result[Self, String]
+
+pub(all) enum TaskStatus { Pending; Claimed; Running; Done; Failed; Cancelled }
+pub fn TaskStatus::to_string(Self) -> String      // "pending" … "cancelled"
+pub fn TaskStatus::parse(String) -> Result[Self, String]
+pub fn TaskStatus::can_transition(Self, Self) -> Bool
+pub fn TaskStatus::is_terminal(Self) -> Bool
+pub fn TaskStatus::all() -> Array[Self]           // 增量：全矩阵测试/计数用
+```
+
+流转表与 vools `core.py` 逐条一致：`Pending→{Claimed,Cancelled}`、`Claimed→{Running,Cancelled}`、`Running→{Done,Failed}`，其余终态。
+
+### digest.mbt —— 摘要与派生（纯 MoonBit，三目标）
+
+```moonbit
+pub fn sha256(Bytes) -> Bytes                     // 32 字节
+pub fn sha256_hex(Bytes) -> String                // 64 位小写 hex
+pub fn sha256_hex_of_utf8(String) -> String
+pub fn md5(Bytes) -> Bytes                        // 16 字节（仅签名对齐用，非安全用途）
+pub fn md5_hex(Bytes) -> String
+pub fn md5_hex_of_utf8(String) -> String
+pub fn hmac_sha256(Bytes, Bytes) -> Bytes         // key 超 64 字节自动折叠
+pub fn hmac_sha256_hex(Bytes, Bytes) -> String
+pub fn pbkdf2_hmac_sha256(Bytes, Bytes, Int32, Int32) -> Bytes       // (password, salt, iterations, dk_len)
+pub fn pbkdf2_hmac_sha256_hex(Bytes, Bytes, Int32, Int32) -> String
+pub fn bytes_of_utf8(String) -> Bytes             // 增量
+pub fn utf8_text(Bytes) -> String                 // 容错解码（U+FFFD 替换）
+pub fn bytes_from_hex(String) -> Result[Bytes, String]              // fixture 消费
+```
+
+**边界语义**：`iterations < 1` 或 `dk_len <= 0` 返回零长度 `Bytes`（不 panic；vools 抛 `ValueError`）。
+
+### json_canonical.mbt —— 两套 JSON 规范口径（三目标）
+
+```moonbit
+pub fn canonical_json(Json) -> String                  // ensure_ascii=false（envelope checksum 用）
+pub fn canonical_json_utf8(Json) -> Bytes
+pub fn canonical_json_ascii(Json) -> String            // ensure_ascii=true（signer preimage 用）
+pub fn canonical_json_ascii_utf8(Json) -> Bytes
+pub fn canonical_object(Array[(String, Json)]) -> Json // 便捷构造（输出按键升序）
+```
+
+口径 = Python `json.dumps(x, sort_keys=True)`：键按码点升序、分隔符 `", "` / `": "`、控制字符按 CPython 规则转义；
+`ensure_ascii=false` 时非 ASCII 原样，`true` 时转 `\uXXXX`（U+FFFF 以上输出代理对）。
+**已知限制**：浮点与 Python `repr` 不保证同形（`1.0`→`"1"`），语料只用 int/字符串/布尔/null/嵌套；解析侧用 `preserve_number_repr=true`。
+
+### envelope.mbt —— 任务信封（三目标）
+
+```moonbit
+pub struct Envelope {
+  task_id : String; status : TaskStatus; payload : Json;
+  result : Json?; error : String?; side : Side; version : Int32;
+  created_at : String; updated_at : String; hops_seen : Array[String];
+  signature : String?; checksum : String
+}
+pub fn Envelope::new(String, TaskStatus, Json, Side) -> Self                       // 自动算 checksum
+pub fn Envelope::new_full(String, TaskStatus, Json, Side, result? : Json, error? : String,
+  version? : Int32, created_at? : String, updated_at? : String, hops_seen? : Array[String],
+  signature? : String, checksum? : String) -> Self
+pub fn Envelope::compute_checksum(Self) -> String
+pub fn Envelope::to_rhop_bytes(Self) -> Bytes                                       // 规范 JSON（含 checksum）
+pub fn Envelope::from_rhop_bytes(Bytes) -> Result[Self, String]                     // 校验 checksum
+pub fn Envelope::to_dict(Self) -> Json                                              // 无 v 键、含 checksum
+pub fn Envelope::from_dict(Json) -> Result[Self, String]                            // checksum 缺省自动重算
+pub fn Envelope::with_result(Self, Json?) -> Self
+pub fn Envelope::with_updated_at(Self, String) -> Self
+pub fn Envelope::with_hops_seen(Self, Array[String]) -> Self
+pub fn Envelope::with_status(Self, TaskStatus) -> Self                              // 增量
+pub fn Envelope::with_signature(Self, String?) -> Self                              // 增量
+```
+
+**checksum 规则**：`"sha256:" + hex(sha256(canonical_json({v:1, task_id, status, payload, result, error, side, version,
+created_at, updated_at, hops_seen, signature})))`——不含 `checksum` 自身；未知字段也参与校验（与 vools `pop("checksum")` 后 re-dump 同口径）。
+`from_rhop_bytes` 对坏 JSON / 非法 UTF-8 / checksum 不匹配 / 缺必填字段 / 非法 status|side 全部返回 `Err(中文原因)`。
+
+### signer.mbt —— 签名（三目标）
+
+```moonbit
+pub trait AbstractSigner {
+  fn sign(Self, String, Json) -> String?            // None = 当前环境无法签名
+  fn verify(Self, String, Json, String) -> Bool
+}
+pub struct FileHashSigner {}
+pub fn FileHashSigner::new() -> Self
+pub fn FileHashSigner::signature(Self, String, Json) -> String      // 增量便捷
+pub struct NPUSigner { marker : String; serial_provider : () -> String? }
+pub fn NPUSigner::new(String) -> Self
+pub fn NPUSigner::with_default_marker() -> Self
+pub fn NPUSigner::with_serial_provider(Self, () -> String?) -> Self
+pub fn NPUSigner::marker(Self) -> String
+pub fn NPUSigner::has_serial(Self) -> Bool
+```
+
+- `FileHashSigner`：`"sha256:" + hex(sha256(preimage))`，preimage = `{"result":…,"task_id":…}` 键升序 + **ensure_ascii=True**。
+- `NPUSigner`：`"<marker>:<serial>:<md5(preimage)>"`；序列号由注入 provider 提供，缺省 `None` ⇒ `sign()` 返回 `None`（**不做硬件调用、不伪造签名**）。
+- 与 envelope 的口径差异是 vools 事实，不是笔误（见上一节两套 JSON）。
+
+### integrity.mbt —— 完整性校验（三目标）
+
+```moonbit
+pub struct IntegrityChecker {}
+pub fn IntegrityChecker::new() -> Self
+pub fn IntegrityChecker::verify(Envelope, Bytes) -> (Bool, String)      // 只校验 raw（env 参数保留以对齐 vools）
+pub fn IntegrityChecker::verify_bytes(Bytes) -> (Bool, String)
+pub fn IntegrityChecker::checksum_match(Envelope) -> Bool               // 序列化→反序列化比对
+pub fn integrity_verify(Envelope, Bytes) -> (Bool, String)              // 便捷
+pub fn integrity_verify_bytes(Bytes) -> (Bool, String)
+pub fn integrity_checksum_match(Envelope) -> Bool
+```
+
+### key.mbt —— 密钥与校验结果（三目标；path 分支仅 js）
+
+```moonbit
+pub struct VerifyResult { ok : Bool; payload : Json?; reason : String }   // reason: OK/MALFORMED/BAD_TOKEN/NOT_JSON
+pub fn VerifyResult::new(Bool, Json?, String) -> Self
+pub fn VerifyResult::pass(Json) -> Self
+pub fn VerifyResult::fail(String) -> Self
+pub fn VerifyResult::to_string(Self) -> String
+pub fn is_secret(String) -> Bool
+pub fn load_key(source? : String, path? : String, env_name : String) -> Result[String, String]   // 优先级 source > path > env
+pub fn load_key_from_path(String) -> Result[String, String]              // 仅 js
+pub fn load_key_from_env(String) -> Result[String, String]
+```
+
+### crypto.mbt —— Fernet 信封加密（js 有真实实现）
+
+```moonbit
+pub struct RhopCrypto { key : String }
+pub fn RhopCrypto::new(String) -> Self
+pub fn RhopCrypto::from_key(String) -> Self
+pub fn RhopCrypto::from_path(String) -> Result[Self, String]             // 仅 js
+pub fn RhopCrypto::from_env(String) -> Result[Self, String]
+pub fn RhopCrypto::key_material(Self) -> String
+pub fn RhopCrypto::encrypt_json(Self, Json) -> String                    // {"v":1,"alg":"fernet","ct":…}；失败返回 ""
+pub fn RhopCrypto::encrypt_json_result(Self, Json) -> Result[String, String]   // 增量：可诊断失败
+pub fn RhopCrypto::encrypt_json_text(Self, String) -> String
+pub fn RhopCrypto::encrypt_secret(Self, String) -> String                // "RHOP-ENC:" + token
+pub fn RhopCrypto::decrypt_secret(Self, String) -> Result[String, String]
+pub fn RhopCrypto::decrypt_verify(Self, String) -> VerifyResult
+```
+
+**Fernet 口径**（与 VText/vools 对齐）：`salt = sha256(key)[:16]`；`FK = base64url(PBKDF2-SHA256(key, salt, 200000, 32))`；
+token = `0x80 | ts_be8 | iv16 | ciphertext | hmac32`（AES-128-CBC + HMAC-SHA256）；`ct` 再 base64url 编码一次。
+非 js 目标：结构/校验逻辑可用，加解密返回 `""` 或 `BAD_TOKEN`（显式失败）。
+
+### watch.mbt —— 文件监控（js / native）
+
+```moonbit
+pub struct RhopWatcher { … }
+pub fn RhopWatcher::new(String, RhopCrypto) -> Self
+pub fn RhopWatcher::with_extensions(Self, Array[String]) -> Self         // 缺省 [".rhop"]
+pub fn RhopWatcher::skip_existing(Self, Bool) -> Self
+pub fn RhopWatcher::start(Self) -> Result[Unit, String]                  // wasm 返回可诊断 Err
+pub fn RhopWatcher::stop(Self) -> Unit                                   // 幂等
+pub fn RhopWatcher::observe(Self) -> @rx.Observable[(String, VerifyResult), String]
+pub fn RhopWatcher::process_file(Self, String) -> VerifyResult?          // 增量：手动处理单文件
+pub fn RhopWatcher::extensions(Self) -> Array[String]
+pub fn RhopWatcher::bad_files(Self) -> Int32
+pub fn RhopWatcher::is_started(Self) -> Bool
+```
+
+复用 `@monitor.watch_folder` + `@rx.PublishSubject`：只推 `ok=true` 的解密结果，坏文件计数后跳过、不中断流。
+
+### transport_base.mbt —— 传输抽象（三目标）
+
+```moonbit
+pub(open) trait SharedPath {
+  fn available(Self) -> Bool
+  fn write_text(Self, String, String) -> Result[Unit, String]           // 建议原子写
+  fn read_text(Self, String) -> Result[String, String]
+  fn exists(Self, String) -> Bool
+  fn remove(Self, String) -> Result[Unit, String]                        // 不存在视为成功
+  fn name(Self) -> String
+  fn root(Self) -> String?
+}
+pub(open) trait OnlineChannel {
+  fn available(Self) -> Bool
+  fn send(Self, String, String) -> Result[Unit, String]
+  fn receive(Self, String) -> Result[String, String]
+  fn name(Self) -> String
+}
+pub struct TransportSelection { transport : String; label : String; is_online : Bool; reason : String }
+pub fn TransportSelection::new(String, String, Bool, String) -> Self
+pub fn TransportSelection::to_json(Self) -> Json
+pub fn TransportSelection::to_string(Self) -> String
+pub struct SharedPathView { write_view : &SharedPath; read_view : &SharedPath }
+pub fn SharedPathView::write_name(Self) -> String
+pub fn SharedPathView::read_name(Self) -> String
+pub struct EndpointSharedPath { view : &EndpointView }
+pub fn EndpointSharedPath::new(&EndpointView) -> Self
+pub fn make_shared_path(String, String?) -> Result[SharedPathView, String]
+pub fn make_shared_path_from_views(&SharedPath, &SharedPath?) -> SharedPathView
+```
+
+### transport_local.mbt —— 本地介质（js 真实 IO）
+
+```moonbit
+pub struct LocalSharedPath { root : String }
+pub fn LocalSharedPath::new(String) -> Self
+pub fn normalize_path(String) -> String
+pub fn join_shared(String, String) -> String
+pub fn write_text_atomic(String, String, String) -> Result[Unit, String]   // tmp + rename
+pub fn read_text_at(String, String) -> Result[String, String]
+```
+
+### transport_endpoint.mbt —— 端点视图（仅 js）
+
+```moonbit
+pub(open) trait EndpointView {
+  fn kind(Self) -> String
+  fn name(Self) -> String
+  fn available(Self) -> Bool
+  fn exists(Self, String) -> Bool
+  fn read_text(Self, String) -> Result[String, String]
+  fn write_text(Self, String, String) -> Result[String, String]
+  fn remove(Self, String) -> Result[Unit, String]
+}
+pub struct LocalEndpoint { … };   pub fn LocalEndpoint::new(String) -> Self
+pub fn LocalEndpoint::path(Self) -> String
+pub struct FileUrlEndpoint { … }; pub fn FileUrlEndpoint::new(String) -> Result[Self, String]
+pub fn FileUrlEndpoint::url(Self) -> String
+pub struct HttpEndpoint { … }     // WebDAV 风格 PUT/GET/DELETE
+pub fn HttpEndpoint::new(String, String?, Int32) -> Self          // (base_url, token?, timeout_ms)
+pub fn HttpEndpoint::base(Self) -> String
+pub fn HttpEndpoint::url_of(Self, String) -> String
+pub fn parse_endpoint(String) -> Result[&EndpointView, String]     // 裸路径 / file:// / http(s)://
+pub fn is_file_url(String) -> Bool
+pub fn file_url_to_path(String) -> Result[String, String]
+pub fn http_request(String, String, String?, String, Int32) -> Result[HttpResp, String]
+pub struct HttpResp { status : Int32; body : String }
+```
+
+> 「URL 形态 ≠ 联网」：`file://` 与 `http(s)://` 都属 shared path 兜底层，不参与「在线优先」判定。
+
+### transport_selector.mbt / online.mbt / relay.mbt —— 通道与中转
+
+```moonbit
+pub fn select_transport(Array[&OnlineChannel], &SharedPath?) -> TransportSelection
+pub fn any_online_available(Array[&OnlineChannel]) -> Bool
+
+pub struct GitChannel { … }    // available() 真跑 git ls-remote；send/receive 无凭据返回可诊断 Err
+pub fn GitChannel::new(String) -> Self
+pub fn GitChannel::with_branch(Self, String) -> Self
+pub fn GitChannel::with_timeout(Self, Int32) -> Self
+pub fn GitChannel::remote(Self) -> String
+pub struct SftpChannel { … }   // available() 做 TCP 探测
+pub fn SftpChannel::new(String, Int32, String) -> Self             // (host, port, remote_dir)
+pub fn SftpChannel::with_username(Self, String) -> Self
+pub fn SftpChannel::with_timeout(Self, Int32) -> Self
+
+pub struct RelayServer { … }   // 子进程起 HTTP 中转（避免同进程事件循环互堵）
+pub fn RelayServer::new(String, Int32, String?, Int32) -> Self     // (host, port, token?, ttl_ms)
+pub fn RelayServer::start(Self) -> Result[Unit, String]
+pub fn RelayServer::stop(Self) -> Unit
+pub fn RelayServer::url(Self) -> String
+pub fn RelayServer::port(Self) -> Int32
+pub fn RelayServer::alive(Self) -> Bool
+pub fn RelayServer::process_alive(Self) -> Bool
+pub struct RelayChannel { … }
+pub fn RelayChannel::new(String, Int32, String?, Int32) -> Self
+pub fn RelayChannel::base(Self) -> String
+```
+
+### session.mbt —— 会话与通道链（三目标）
+
+```moonbit
+pub(all) enum Role { Send; Recv; Relay }
+pub fn Role::parse(String) -> Result[Self, String]
+pub fn Role::to_string(Self) -> String
+pub fn Role::lower(Self) -> String
+pub struct Session { role : Role; shared : SharedPathView?; online : Array[&OnlineChannel];
+                     relay : RelayChannel?; crypto : RhopCrypto?; name : String }
+pub fn Session::new(Role, SharedPathView?, Array[&OnlineChannel], RelayChannel?, RhopCrypto?, String) -> Self
+pub fn Session::empty(Role) -> Self
+pub fn Session::available(Self) -> Bool
+pub fn Session::select(Self) -> TransportSelection
+pub fn Session::send_package(Self, String, Json) -> Result[Json, String]
+pub fn Session::recv_package(Self, String) -> Result[Json, String]
+pub fn Session::reverse(Self) -> Self
+pub fn Session::describe(Self) -> Json
+pub fn Session::has_shared(Self) -> Bool; pub fn Session::has_relay(Self) -> Bool
+pub fn Session::has_crypto(Self) -> Bool; pub fn Session::online_count(Self) -> Int32
+pub fn Session::role(Self) -> Role;      pub fn Session::name(Self) -> String
+```
+
+通道链：`relay > online > shared`；`send_package` 回执 `{status, transport, filename, payload}` 与 vools 同形。
+
+### config.mbt —— 配置（file 分支仅 js）
+
+```moonbit
+pub struct RhopConfig { key : String; role : Role; sftp : Json?; online : Json?;
+                        shared : Json?; relay : Json?; name : String }
+pub fn RhopConfig::new(String, Role, Json?, Json?, Json?, Json?, String) -> Self
+pub fn RhopConfig::from_dict(Json) -> Result[Self, String]
+pub fn RhopConfig::from_file(String) -> Result[Self, String]          // 仅 js
+pub fn RhopConfig::to_dict(Self) -> Json                              // password/key_path → "***"
+pub fn RhopConfig::build_crypto(Self) -> RhopCrypto
+pub fn RhopConfig::build_online(Self) -> Result[Array[&OnlineChannel], String]
+pub fn RhopConfig::build_shared(Self) -> Result[SharedPathView?, String]
+pub fn RhopConfig::build_relay(Self) -> Result[RelayChannel?, String]
+pub fn RhopConfig::build_session(Self, role? : Role) -> Result[Session, String]
+pub fn RhopConfig::action_cfg(Self) -> Json
+pub fn RhopConfig::has_key(Self) -> Bool; pub fn RhopConfig::name(Self) -> String
+pub fn RhopConfig::role(Self) -> Role
+pub fn load_config(Json) -> Result[RhopConfig, String]
+pub fn _key_from_cfg(Json?) -> Result[String, String]                 // vools 私有名公开化
+```
+
+### interact.mbt / actions.mbt —— 交互与动作（三目标）
+
+```moonbit
+pub fn interact(RhopConfig, String, Json?, String, request_filename? : String) -> Result[Json, String]  // mode: execute/request/roundtrip
+pub fn handle_request(RhopConfig, String, session? : Session) -> Result[Json, String]                   // 回传 res_ 前缀
+pub fn run_action(String, Json, Json?) -> Json
+pub fn omega_unwrap(Json) -> Json
+pub fn register_action(String, (Json, Json?) -> Json) -> Unit
+pub fn list_actions() -> Array[String]
+```
+
+内置动作 `jump.probe`（离线，不联网）；未知动作返回结构化错误 JSON。
+
+### mirror.mbt —— 镜像库（仅 js，`node:sqlite`）
+
+```moonbit
+pub struct StaleVersionError { task_id : String; local_version : Int32; incoming_version : Int32 }
+pub fn StaleVersionError::new(String, Int32, Int32) -> Self
+pub fn StaleVersionError::task_id(Self) -> String
+pub fn StaleVersionError::to_string(Self) -> String
+pub fn is_stale_version_error(String) -> Bool
+pub struct MirrorDB { … }
+pub fn MirrorDB::open(String) -> Result[Self, String]
+pub fn MirrorDB::open_temp() -> Result[Self, String]
+pub fn MirrorDB::upsert_task(Self, Envelope) -> Result[Unit, String]        // 乐观锁冲突 → Err(stale_version: …)
+pub fn MirrorDB::get_task(Self, String) -> Envelope?                         // try_get_task 返回 Result
+pub fn MirrorDB::list_tasks(Self, status? : TaskStatus, limit? : Int32) -> Array[Envelope]
+pub fn MirrorDB::update_status(Self, String, TaskStatus, Int32, result? : Json, error? : String,
+                               signature? : String) -> Result[Int32, String]
+pub fn MirrorDB::claim_task(Self, String, String) -> Result[Envelope, String]
+pub fn MirrorDB::claim_next(Self, String) -> Result[Envelope?, String]
+pub fn MirrorDB::count_by_status(Self) -> Json                               // count_by_status_full / try_count_by_status
+pub fn MirrorDB::pending_count(Self) -> Int32
+pub fn MirrorDB::log_sync(Self, String, String, String, Bool, error? : String, bytes_xfer? : Int32) -> Result[Unit, String]
+pub fn MirrorDB::pending_sync(Self, since? : String) -> Array[Json]
+pub fn MirrorDB::sync_log_count(Self) -> Int32
+pub fn MirrorDB::raw_run(Self, String, Json) -> Result[Unit, String]
+pub fn MirrorDB::is_open(Self) -> Bool; pub fn MirrorDB::path(Self) -> String
+pub fn MirrorDB::close(Self) -> Unit
+```
+
+### requester.mbt / executor.mbt / daemon.mbt —— 业务 API（仅 js）
+
+```moonbit
+pub struct Requester { … }
+pub fn Requester::new(RhopConfig) -> Result[Self, String]
+pub fn Requester::from_config_dir(RhopConfig, String) -> Result[Self, String]
+pub fn Requester::from_mirror_path(RhopConfig, String, String) -> Result[Self, String]
+pub fn Requester::submit(Self, String, Json) -> Result[String, String]      // (task_id, payload) → task_id
+pub fn Requester::get_result(Self, String) -> Json?
+pub fn Requester::wait_result(Self, String, Int32, Int32) -> Json?          // (task_id, timeout_ms, poll_ms)
+pub fn Requester::list_tasks(Self, status? : TaskStatus) -> Array[Json]
+pub fn Requester::cancel(Self, String) -> Result[Unit, String]
+pub fn Requester::mirror(Self) -> MirrorDB; pub fn Requester::data_dir(Self) -> String
+pub fn Requester::close(Self) -> Unit
+
+pub struct Executor { … }
+pub fn Executor::new(RhopConfig) -> Result[Self, String]
+pub fn Executor::claim(Self) -> Result[Envelope?, String]
+pub fn Executor::execute(Self, Envelope) -> Result[Json, String]
+pub fn Executor::execute_next(Self) -> Result[Json, String]
+pub fn Executor::report_result(Self, String, Json) -> Result[Unit, String]
+pub fn Executor::report_failure(Self, String, String) -> Result[Unit, String]
+pub fn Executor::list_pending(Self) -> Array[Json]
+pub fn Executor::mirror(Self) -> MirrorDB; pub fn Executor::worker_id(Self) -> String
+pub fn Executor::close(Self) -> Unit
+
+pub struct RelayDaemon { … }
+pub fn RelayDaemon::new(RhopConfig) -> Result[Self, String]
+pub fn RelayDaemon::from_config_dir(RhopConfig, String, side? : Side, worker_id? : String,
+                                    poll_interval_ms? : Int32) -> Result[Self, String]
+pub fn RelayDaemon::start(Self, Int32) -> Result[Json, String]
+pub fn RelayDaemon::stop(Self) -> Unit
+pub fn RelayDaemon::run_once(Self) -> Result[Json, String]
+pub fn RelayDaemon::process_inbox(Self) -> Result[Json, String]
+pub fn RelayDaemon::push_local(Self) -> Result[Json, String]
+pub fn RelayDaemon::pull_remote(Self) -> Result[Json, String]
+pub fn RelayDaemon::rounds(Self) -> Int32; pub fn RelayDaemon::side(Self) -> Side
+pub fn RelayDaemon::mirror(Self) -> MirrorDB; pub fn RelayDaemon::is_running(Self) -> Bool
+pub fn RelayDaemon::data_dir(Self) -> String; pub fn RelayDaemon::close(Self) -> Unit
+```
+
+### sync_folder.mbt —— 目录同步（仅 js）
+
+```moonbit
+pub struct SyncFolder { … }
+pub fn SyncFolder::new(String, String, String) -> Self          // (source, target, pattern)
+pub fn SyncFolder::with_recursive(Self, Bool) -> Self
+pub fn SyncFolder::sync_once(Self) -> Json                       // 幂等（manifest 去重）
+pub fn SyncFolder::run_forever(Self, Int32, Int32) -> Json       // (rounds, poll_ms)
+pub fn SyncFolder::stop(Self) -> Unit
+pub fn SyncFolder::rounds(Self) -> Int32
+pub fn SyncFolder::manifest_path(Self) -> String
+pub fn sync_glob_match(String, String) -> Bool                    // pattern 匹配（* / ? / **）
+```
+
+### clipboard.mbt —— 剪贴板共享（状态机三目标；真实 IO 仅 js）
+
+```moonbit
+pub(open) trait ClipboardBackend {
+  fn name(Self) -> String
+  fn read(Self) -> String          // 失败返回 ""
+  fn write(Self, String) -> Bool
+}
+pub struct CommandClipboardBackend { … }
+pub fn CommandClipboardBackend::new(String, String, String, Bool) -> Self   // (name, read_argv_json, write_argv_json, strip_crlf)
+pub fn CommandClipboardBackend::backend_name(Self) -> String
+pub fn get_clipboard_backend() -> &ClipboardBackend?
+pub fn get_clipboard_backend_name() -> String?
+pub fn read_clipboard(backend? : &ClipboardBackend) -> String
+pub fn write_clipboard(String, backend? : &ClipboardBackend) -> Bool
+pub fn last_read_reason() -> String
+pub fn set_clipboard_backend_probe(() -> &ClipboardBackend?) -> Unit        // 测试钩子
+pub fn reset_clipboard_backend_probe() -> Unit
+pub fn reset_clipboard_backend_cache() -> Unit
+pub struct ClipboardFileSync { … }
+pub fn ClipboardFileSync::new(String, role? : String, filename? : String,
+                              backend? : &ClipboardBackend, writer? : String,
+                              auto_detect? : Bool) -> Result[Self, String]   // role: push / pull
+pub fn ClipboardFileSync::sync_once(Self) -> Json          // {changed, reason, text_len?, from_writer?}
+pub fn ClipboardFileSync::sync_rounds(Self, Int32) -> Json // {rounds, changes}
+pub fn ClipboardFileSync::run_forever(Self, poll_interval_ms? : Int32) -> @rx.Observable[Json, String]
+pub fn ClipboardFileSync::role(Self) -> String; pub fn ClipboardFileSync::path(Self) -> String
+pub fn ClipboardFileSync::writer(Self) -> String
+pub fn ClipboardFileSync::rounds(Self) -> Int32; pub fn ClipboardFileSync::changes(Self) -> Int32
+pub fn ClipboardFileSync::last_text(Self) -> String?
+```
+
+**协议语义**（与 vools 逐条对齐）：交换文件 `{"text","updated_at","writer"}` 原子写；
+push 比「剪贴板 vs 文件」，pull 比「文件 vs 上次/本机」；reason 原文短语：`内容一致` / `内容未变化` /
+`无可用剪贴板后端` / `交换文件不存在或未初始化` / `剪贴板写入失败` / `文件写入失败: …`。
+`text_len` 按码点计数（对齐 Python `len`）。后端探测：Windows PowerShell / Linux wl-paste|xclip / macOS pbpaste。
+
+### 基础设施原语（rhop_js.mbt 导出，供上层复用）
+
+```moonbit
+pub fn rhop_fs_read_text(String) -> Result[String, String];   pub fn rhop_fs_write_text(String, String) -> Result[Unit, String]
+pub fn rhop_fs_exists(String) -> Bool;                        pub fn rhop_fs_remove(String) -> Result[Unit, String]
+pub fn rhop_fs_mkdir_p(String) -> Result[Unit, String];       pub fn rhop_fs_list_dir(String) -> Array[String]
+pub fn rhop_fs_list_files_recursive(String) -> Array[String];  pub fn rhop_fs_copy(String, String) -> Result[Unit, String]
+pub fn rhop_fs_move(String, String) -> Result[Unit, String];   pub fn rhop_fs_parent(String) -> String
+pub fn rhop_fs_digest_file(String) -> Result[Json, String];    pub fn rhop_join(String, String) -> String
+pub fn rhop_db_open(String) -> Result[Int32, String];          pub fn rhop_db_run(Int32, String, Json) -> Result[Unit, String]
+pub fn rhop_db_all(Int32, String, Json) -> Result[Array[Json], String];  pub fn rhop_db_close(Int32) -> Unit
+pub fn rhop_ensure_data_dirs(String) -> Result[Unit, String]
+pub fn rhop_now_iso() -> String;  pub fn rhop_sleep_ms(Int32) -> Unit
+pub fn uri_encode(String) -> String;  pub fn uri_decode(String) -> String
+```
+
+### 既有协议类型（非 vools 对照面）
+
+```moonbit
+pub trait RhopCipher { fn alg_name(Self) -> String; fn encrypt(Self, String) -> String; fn decrypt(Self, String) -> String? }
+pub struct RhopCipherNone {}; pub fn RhopCipherNone::new() -> Self          // ct = base64(明文)，仅测试
+pub struct RhopPacket { id; source; kind; payload; at }
+pub fn RhopPacket::new(String, String, String, Json, Int64) -> Self
+pub fn RhopPacket::to_json_string(Self) -> String
+pub fn RhopPacket::from_json_text(String) -> Result[Self, String]
+pub struct RhopEnvelope { v : Int32; alg : String; ct : String }
+pub fn RhopEnvelope::encode(Int32, String, String) -> String
+pub fn RhopEnvelope::decode(String) -> Result[Self, String]
+```
+
+### P2：`rhop_task`（任务队列）
+
+> vools `task/` 子包（230 个公开符号）的 MoonBit 移植，分两批：**P2a**（数据/配置/密文，三目标纯逻辑）
+> 与 **P2b**（存储/队列/心跳/执行/同步，js 依赖 `node:sqlite`）。
+> 测试：`test-suit/rhop_task` **wasm/native 46 例、js 90 例**。
+
+**P2a（已落地）**
+
+```moonbit
+// task_models.mbt —— 状态与记录
+pub(all) enum TaskState { … }                       // 与 @rp.TaskStatus 显式桥接
+pub fn TaskState::to_status(Self) -> @rp.TaskStatus
+pub fn TaskState::from_status(@rp.TaskStatus) -> TaskState
+pub fn TaskState::parse(String) -> Result[Self, String]
+pub fn TaskState::is_terminal(Self) -> Bool;   pub fn TaskState::is_active(Self) -> Bool
+pub fn TaskState::is_claimable(Self) -> Bool;  pub fn TaskState::can_transition(Self, Self) -> Bool
+pub(all) struct TaskRecord { … }
+pub fn TaskRecord::new(String) -> Self
+pub fn TaskRecord::with_type/with_value/with_deps/with_priority/with_state/with_max_retries/
+  with_timeout_min/with_retry_delay_min/with_payload/with_tags/with_queue/with_owner/
+  with_scheduled_at/with_created_at(…) -> Self
+pub fn TaskRecord::validate(Self) -> Result[Unit, String]
+pub fn TaskRecord::to_dict(Self) -> Json;  pub fn TaskRecord::from_dict(Json) -> Result[Self, String]
+pub fn utcnow_iso() -> String;  pub fn parse_iso(String) -> Int64?;  pub fn to_iso(String) -> String?
+pub fn iso_add_seconds(String, Double) -> String;  pub fn utcnow_seconds() -> Int64
+pub fn task_record_from_json_text(String) -> Result[TaskRecord, String]
+
+// task_config.mbt —— 配置与角色
+pub(all) enum TaskRole { … }
+pub fn normalize_role(String) -> Result[TaskRole, String]
+pub(all) struct TaskConfig { … }
+pub fn TaskConfig::from_dict(Json) -> Result[Self, String]
+pub fn TaskConfig::from_json_text(String) -> Result[Self, String]
+pub fn TaskConfig::from_file(String) -> Result[Self, String]        // 仅 js
+pub fn TaskConfig::to_dict(Self, mask : Bool) -> Json               // mask=true 脱敏
+pub fn TaskConfig::describe(Self) -> Json
+pub fn TaskConfig::build_crypto(Self) -> @rp.RhopCrypto?            // 复用 Batch B
+pub fn TaskConfig::worker_id(Self) -> String
+pub fn TaskConfig::plaintext_findings(Self) -> Array[SecretFinding]
+pub fn load_task_config(String) -> Result[TaskConfig, String]
+pub fn default_queue() -> Json;  pub fn default_exec() -> Json
+
+// task_secrets.mbt —— 密文解析与脱敏
+pub(all) struct SecretResolver { … }
+pub fn SecretResolver::new(…);  pub fn SecretResolver::with_warner(…)
+pub fn SecretResolver::resolve(Self, Json) -> Result[Json, String]
+pub fn SecretResolver::flag_plaintext(Self) -> Unit
+pub fn SecretResolver::findings(Self) -> Array[SecretFinding]
+pub(all) struct SecretFinding / SecretField
+pub fn find_secret_fields(Json) -> Array[SecretField]
+pub fn is_sensitive_leaf(String) -> Bool
+pub fn mask_value(String, Int) -> String;  pub fn mask_value_default(String) -> String
+pub fn resolve_config_secrets(Json, …) -> Result[(Json, Array[SecretFinding]), String]
+```
+
+**P2b（已落地，js 依赖 sqlite）**
+
+```moonbit
+// task_store.mbt —— SQLite 存储（表名白名单 + 句柄注册表）
+pub(all) struct TaskStoreSpec { … }
+pub fn TaskStoreSpec::for_kind(String, String) -> Result[Self, String]   // 仅 sqlite 形态
+pub fn schema_sql(String) -> String
+pub struct SqliteTaskStore { … }
+pub fn SqliteTaskStore::open(TaskStoreSpec) -> Result[Self, String]
+pub fn SqliteTaskStore::init_schema(Self) -> Result[Unit, String]
+pub fn SqliteTaskStore::insert_tasks(Self, Array[TaskRecord]) -> Result[Int32, String]
+pub fn SqliteTaskStore::claim_next(Self, String, String, Double?) -> Result[TaskRecord?, String]
+pub fn SqliteTaskStore::set_state(Self, String, TaskState, Int32?, Bool, Json, String) -> Result[Bool, String]
+pub fn SqliteTaskStore::update_fields(Self, String, Json, String) -> Result[Bool, String]
+pub fn SqliteTaskStore::clean_stale_locks(Self, String) -> Result[Int32, String]
+pub fn SqliteTaskStore::requeue(Self, String, String) -> Result[Bool, String]
+pub fn SqliteTaskStore::set_cancel_requested(Self, String, Bool, String) -> Result[Bool, String]
+pub fn SqliteTaskStore::get_task(Self, String) -> Result[TaskRecord?, String]
+pub fn SqliteTaskStore::require_task(Self, String) -> Result[TaskRecord, String]
+pub fn SqliteTaskStore::list_tasks(Self, TaskState?, Int32) -> Result[Array[TaskRecord], String]
+pub fn SqliteTaskStore::all_task_names(Self) -> Result[Array[String], String]
+pub fn SqliteTaskStore::count_by_state(Self) -> Result[Map[String, Int32], String]
+pub fn SqliteTaskStore::active_tasks(Self) -> Result[Array[TaskRecord], String]
+pub fn SqliteTaskStore::is_all_done(Self) -> Result[Bool, String]
+pub fn SqliteTaskStore::summary(Self) -> Result[Json, String]
+pub fn SqliteTaskStore::apply_task(Self, TaskRecord) -> Result[String, String]
+pub fn SqliteTaskStore::describe(Self) -> Json
+pub fn SqliteTaskStore::table(Self) -> String;  pub fn SqliteTaskStore::path(Self) -> String
+pub fn SqliteTaskStore::is_closed(Self) -> Bool;  pub fn SqliteTaskStore::close(Self) -> Unit
+
+// task_queue.mbt —— 队列编排（加密载荷 + sha 校验）
+pub(all) struct TaskQueue { … }
+pub fn TaskQueue::new(SqliteTaskStore, @rp.RhopCrypto?, Double, Bool, Int32) -> Self
+pub fn TaskQueue::from_config(SqliteTaskStore, TaskConfig) -> Self
+pub fn TaskQueue::submit(Self, Array[TaskRecord], String) -> Result[Int32, String]
+pub fn TaskQueue::claim(Self, String, String) -> Result[TaskRecord?, String]
+pub fn TaskQueue::mark_running(Self, String, String) -> Result[Bool, String]
+pub fn TaskQueue::mark_done(Self, String, Json, String) -> Result[Bool, String]
+pub fn TaskQueue::mark_failed(Self, String, String, String) -> Result[Bool, String]
+pub fn TaskQueue::cancel(Self, String, String) -> Result[Bool, String]
+pub fn TaskQueue::retry_failed(Self, String, String) -> Result[Bool, String]
+pub fn TaskQueue::requeue(Self, String, String) -> Result[Bool, String]
+pub fn TaskQueue::list_tasks(Self, TaskState?, Int32) -> Result[Array[TaskRecord], String]
+pub fn TaskQueue::status_counts(Self) -> Result[Map[String, Int32], String]
+pub fn TaskQueue::decrypt_payload(Self, TaskRecord) -> Result[Json, String]
+pub fn TaskQueue::verify_payload_sha(Self, TaskRecord) -> Bool          // 增量
+pub fn TaskQueue::crypto_enabled(Self) -> Bool;  pub fn TaskQueue::store_of(Self) -> SqliteTaskStore
+pub fn TaskQueue::close(Self) -> Unit
+
+// task_heartbeat.mbt —— 心跳（JSON 快照 + 泵）
+pub(all) struct HeartbeatSnapshot { … };  pub(all) struct Heartbeat { … }
+pub fn Heartbeat::new(&@rhop.SharedPath?, String, Double, Double, String, String) -> Self
+pub fn Heartbeat::from_config(&@rhop.SharedPath?, TaskConfig) -> Self
+pub fn Heartbeat::beat(Self, String?) -> Result[Unit, String]
+pub fn Heartbeat::mark_closed(Self, String?) -> Result[Unit, String]
+pub fn Heartbeat::read(Self) -> Result[HeartbeatSnapshot?, String]
+pub fn Heartbeat::is_alive(Self, Int64?) -> Bool
+pub fn Heartbeat::check(Self, Int64?) -> Result[(Bool, String), String]
+pub fn Heartbeat::clear(Self) -> Result[Unit, String]
+pub fn Heartbeat::filename(Self) -> String;  pub fn Heartbeat::stale_after_sec(Self) -> Double
+pub struct HeartbeatPump { … }
+pub fn HeartbeatPump::new(Heartbeat) -> Self
+pub fn HeartbeatPump::start(Self) -> Result[Unit, String]
+pub fn HeartbeatPump::stop(Self) -> Unit
+pub fn HeartbeatPump::shutdown(Self) -> Result[Unit, String]
+pub fn HeartbeatPump::is_running(Self) -> Bool;  pub fn HeartbeatPump::last_ok(Self) -> Bool
+
+// task_exec.mbt —— 执行策略与处理器注册表
+pub(all) struct ExecPolicy { … }
+pub fn ExecPolicy::new(Array[String], Bool, Double) -> Self
+pub fn ExecPolicy::default() -> Self
+pub fn ExecPolicy::from_config(TaskConfig) -> Self
+pub fn ExecPolicy::allows(Self, String) -> Bool
+pub(all) struct ExecResult { … }                                        // 增量：结构化执行结果
+pub fn register_handler(String, (Json) -> Result[Json, String]) -> Unit
+pub fn get_handler(String) -> ((Json) -> Result[Json, String])?
+pub fn list_handlers() -> Array[String];  pub fn clear_handlers() -> Unit
+pub fn detect_language(Json) -> String                                  // 增量
+pub fn run_payload(ExecPolicy, Json) -> ExecResult
+
+// task_sync.mbt —— 任务同步（加密导出包）
+pub(all) struct TaskSync { … }
+pub fn TaskSync::new(SqliteTaskStore, @rp.RhopCrypto?, String) -> Self
+pub fn TaskSync::peer(Self) -> String
+pub fn TaskSync::pending_count(Self) -> Result[Int32, String]
+pub fn TaskSync::pending_tasks(Self, Int32) -> Result[Array[TaskRecord], String]
+pub fn TaskSync::export_pending(Self, Int32, String) -> Result[Json, String]
+pub fn TaskSync::import_pack(Self, Json) -> Result[Json, String]
+pub fn TaskSync::mark_synced(Self, Array[String], String) -> Result[Int32, String]
+pub fn TaskSync::export_and_mark(Self, Int32, String) -> Result[(Json, Int32), String]   // 增量
+```
+
+**P2 已知缺口与偏差（务必与「已对齐」区分）**
+
+| 类 | 项 | 说明 |
+|---|---|---|
+| ⛔ 未实现 | Postgres 后端 | 仅 SQLite；`TaskStoreSpec::for_kind` 只接受 sqlite 形态 |
+| ⛔ 未实现 | `queue.file_channel` 大载荷落文件 | 配置项保留，实际内联存储 |
+| ⚠️ 预留 | `tasks_executions` 表 | 已建表但不写入执行明细 |
+| ⚠️ 未接线 | `write_retries` / `retry_backoff` | 遇 `database is locked` 直接 `Err`，无自动退避重试 |
+| ⚠️ 未应用 | exec 的 `workdir` / `env` / `shell:true` | 仅按语言白名单 spawn；显式不支持 shell（安全取舍） |
+| ⚠️ 简化 | 同步冲突 | 仅 `version` 新者胜，无 field merge / 墓碑 |
+| ⛔ 未复刻 | `task/cli.py` / `task/daemon.py` / `task/local_runner.py` | 命令行、task 守护、本机执行快捷路径 |
+| **B1 偏差** | **心跳文件格式不同** | vools 纯文本（`<ISO> [worker]`/closed_token）↔ 本项目 JSON ⇒ **双向不可互读**；混部时 Python 写的心跳会被 MoonBit 判 dead，必须先统一格式 |
+| **B2 偏差** | **未来时间戳判定相反** | vools 超 `max_future_skew` fail-closed；本项目 `age < 0` 判 alive（fail-open） |
+| B5 偏差 | 结果截断 | 用自定义 `__truncated__` 结构，vools 用尾部截断+省略号 |
+
+**复用而非重造**：载荷加密用 Batch B 的 `@rp.RhopCrypto`；摘要用 Batch A 的 `@rp.sha256_hex_of_utf8`；
+心跳/同步落盘用 Batch B 的 `@rp.SharedPath` 原子写；配置与密文解析复用 P2a 的 `TaskConfig` / `SecretResolver`；
+`TaskState` 与 `@rp.TaskStatus` 通过 `to_status` / `from_status` 显式桥接（任务队列与信封状态机同源）。
+
+### 跨实现对齐要点（实现时务必遵守）
+
+1. **checksum 只覆盖 envelope 自身字段**（含 `v:1`，不含 `checksum`）；未知字段参与校验。
+2. **两套 JSON 口径**：envelope → `canonical_json`（非 ASCII 原样）；signer preimage → `canonical_json_ascii`。
+3. **整数不要写成浮点**：构造 `Json` 用 `Json::number(1.0)`（输出 `1`）；解析外部字节用 `preserve_number_repr=true`。
+4. **时间**：`@env.now()`（epoch ms）+ 民用历换算，ISO 形如 `2026-10-28T01:23:45Z`。
+5. **错误**：一律 `Result[_, String]`，文本保留可诊断短语；不要 panic。
+6. **目标可用性**：平台强依赖项集中在 `#cfg(target="js")`；非 js 分支必须有同签名的可诊断降级实现。
+

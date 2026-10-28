@@ -55,7 +55,7 @@
 | **契约范围小计** | **192** | **178** | **4** | **1** | **0** | **9** | — |
 | `actions/jump.py` | 14 | 1 | 0 | 0 | 0 | 13 | 仅 `jump.probe` 内建（`actions_test.mbt` 覆盖） |
 | `secret.py` | 1 | 0 | 0 | 0 | 0 | 1 | CLI 工具，不迁 |
-| `task/` 子包（含 `task/store/`） | 230 | 0 | 0 | 0 | 0 | 230 | P2（`rhop_task` 已落地骨架 + 57 例，见 §5.9） |
+| `task/` 子包（含 `task/store/`） | 230 | 0 | 21 | 0 | 0 | 209 | P2 已落地 P2a+P2b（8 文件 / 46·90·46 例，见 §5.9；仅模块级映射，未逐符号） |
 | **vools 全量** | **437** | **179** | **4** | **1** | **0** | **253** | — |
 
 ## 2. Batch A（协议/摘要层，已验收 · owner impl-core）
@@ -393,12 +393,82 @@
 > 交换文件 `{"text","updated_at","writer"}` 原子写（tmp+rename）；`text_len` 用码点计数对齐 Python `len`。
 > 测试覆盖：push/pull 全状态机、无后端空转不写坏文件、写失败可诊断、坏 JSON、1MB 文本、中文/emoji 码点、端到端 p0→share→p1、run_forever 首轮 + dispose。
 
-### 5.8 `secret.py`（1 ⛔）与 P2 `task/` 子包（230 · `rhop_task`）
+### 5.8 `secret.py`（1 ⛔）
 
 | vools 符号 | 说明 | 状态 |
 |---|---|---|
 | `secret.py: main` | 命令行「生成/查看密钥」工具 | ⛔ 不迁 CLI（密钥读取走 `rhop/key.mbt` 的 `load_key`） |
-| `task/` 子包 230 个公开符号（cli/config/daemon/errors/exec/heartbeat/local_runner/models/queue/secrets/sync + `task/store/`） | 通用任务队列（A 提交加密 JSON → B 解密执行；SQLite 管依赖/状态；可换后端） | **P2**：`rhop_task/` 包已落地骨架，`test-suit/rhop_task` 现有 **57 例（js 全绿）**；与 vools 的逐符号对照与 native 目标支持属终轮（P2b） |
+
+### 5.9 P2：`task/` 子包（230）→ `rhop_task/`（**P2a + P2b 已落地**）
+
+> vools `task/` 是独立的通用任务队列（A 提交加密 JSON → B 解密执行；SQLite 管依赖/状态；存储可换后端）。
+> 契约 §3 把它列为 P2（「不列入本轮验收硬门槛」）。本项目已分两批落地：
+> **P2a**（数据/配置/密文）+ **P2b**（存储/队列/心跳/执行/同步），共 8 个文件；
+> 测试 `test-suit/rhop_task`：**wasm/native 46 例、js 90 例，全绿**（7 个测试文件 js-only）。
+
+| vools 模块 | MoonBit 文件 | 关键符号 | 状态 | 测试 |
+|---|---|---|---|---|
+| `task/models.py` | `rhop_task/task_models.mbt` | `TaskState`（+`can_transition`/`to_status`/`from_status`）、`TaskRecord`（`new`/`with_*` 15 个 wither/`validate`/`to_dict`/`from_dict`）、ISO 时间工具（`utcnow_iso`/`parse_iso`/`to_iso`/`iso_add_seconds`） | ✅ P2a | `task_models_test.mbt`（20 例，三目标） |
+| `task/config.py` | `rhop_task/task_config.mbt` | `TaskRole`、`normalize_role`、`TaskConfig`（`from_dict`/`from_json_text`/`from_file`/`to_dict(mask)`/`describe`/`build_crypto`/`worker_id`/`plaintext_findings`）、`load_task_config`、`default_queue`/`default_exec` | ✅ P2a | `task_config_test.mbt`（13 例三目标）+ `task_config_js_test.mbt`（7 例 js） |
+| `task/secrets.py` | `rhop_task/task_secrets.mbt` | `SecretResolver`（`resolve`/`flag_plaintext`/`findings`）、`SecretFinding`、`SecretField`、`find_secret_fields`、`is_sensitive_leaf`、`mask_value(_default)`、`command_hint`、`plaintext_message` | ✅ P2a | `task_secrets_test.mbt`（13 例三目标）+ `task_secrets_js_test.mbt`（4 例 js） |
+| `task/store/`（base + sqlite） | `rhop_task/task_store.mbt` | `TaskStoreSpec::for_kind`、`schema_sql`、`SqliteTaskStore`（`open`/`init_schema`/`insert_tasks`/`claim_next`/`set_state`/`update_fields`/`clean_stale_locks`/`requeue`/`set_cancel_requested`/`get_task`/`list_tasks`/`count_by_state`/`active_tasks`/`is_all_done`/`summary`/`apply_task`/`describe`/`close`） | ✅ P2b | `task_store_test.mbt`（8 例 js，`node:sqlite`） |
+| `task/queue.py` | `rhop_task/task_queue.mbt` | `TaskQueue`（`new`/`from_config`/`submit`/`claim`/`mark_running`/`mark_done`/`mark_failed`/`cancel`/`retry_failed`/`requeue`/`list_tasks`/`status_counts`/`decrypt_payload`/`verify_payload_sha`/`crypto_enabled`/`close`） | ✅ P2b | `task_queue_test.mbt`（7 例 js） |
+| `task/heartbeat.py` | `rhop_task/task_heartbeat.mbt` | `Heartbeat`（`new`/`from_config`/`beat`/`mark_closed`/`read`/`is_alive`/`check`/`clear`/`filename`/`stale_after_sec`）、`HeartbeatSnapshot`、`HeartbeatPump`（`start`/`stop`/`shutdown`/`is_running`/`last_ok`） | ✅ P2b | `task_heartbeat_test.mbt`（5 例 js） |
+| `task/exec.py` | `rhop_task/task_exec.mbt` | `ExecPolicy`（`new`/`default`/`from_config`/`allows`）、`ExecResult`、`register_handler`/`get_handler`/`list_handlers`/`clear_handlers`、`detect_language`、`run_payload` | ✅ P2b | `task_exec_test.mbt`（8 例 js） |
+| `task/sync.py` | `rhop_task/task_sync.mbt` | `TaskSync`（`new`/`peer`/`pending_count`/`pending_tasks`/`export_pending`/`import_pack`/`mark_synced`/`export_and_mark`） | ✅ P2b | `task_sync_test.mbt`（5 例 js） |
+| `task/cli.py` / `task/__main__.py` | — | — | ⛔ CLI 不迁 | — |
+| `task/daemon.py`（`TaskDaemon`/`build_queue`） | — | — | ⛔ 未移植（中继守护的 task 版；`rhop/daemon.mbt` 已覆盖镜像 daemon） | — |
+| `task/local_runner.py`（`run_local_task`/`should_run_local`/`mark_local_result`） | — | — | ⛔ 未移植（本机执行器快捷路径） | — |
+| `task/errors.py`（`RhopTaskError`/`DagValidationError`/`TaskNotFound`/… 10 个异常类型） | 以 `Result[_, String]` + 文本前缀表达（如 `stale_version:`） | — | 🟡 语义等价（错误类型 → Result） | — |
+| `task/store/pg_store.py`（Postgres 后端） | — | — | ⛔ 未移植（仅 SQLite 后端） | — |
+
+**P2 映射现状（诚实口径）**：8 个文件对应 vools `task/` 的 models/config/secrets/store/queue/heartbeat/exec/sync；
+vools `task/` 共 230 个公开符号，本项目**按模块级对位 21 个关键符号**（见上表「关键符号」列），
+其余为 CLI / daemon / local_runner / Postgres 后端等明确未移植项 —— **逐符号映射留待后续（P2b-2）**，
+故 P2 不参与 §8 的契约覆盖率分母。
+
+#### P2 · A. 明确未实现 / 未接线（如实记账）
+
+| # | 缺口 | 影响 | 状态 |
+|---|---|---|---|
+| A1 | **Postgres 后端未实现**：仅 SQLite（`node:sqlite`） | `task/store/pg_store.py` 无对应；`TaskStoreSpec::for_kind` 只接受 sqlite 形态 | ⛔ |
+| A2 | **`queue.file_channel` 大载荷落文件未实现**：vools 把超阈值载荷写文件再引用，本实现配置项保留但走内联 | 超大 payload 会直接进 SQLite 行 | ⛔ |
+| A3 | **`tasks_executions` 表已建但未写入** | 执行历史表为预留，`SqliteTaskStore` 不落执行明细 | ⚠️ 预留 |
+| A4 | **`write_retries` / `retry_backoff` 字段定义但退避重试未接线**：遇 `database is locked` 直接返回 `Err` | 高并发写库时无自动重试（调用方可自行重试） | ⚠️ |
+| A5 | **exec 的 `workdir` / `env` / `shell:true` 未携带未应用** | 仅按语言白名单 spawn，不注入环境与工作目录 | ⚠️（与 B7 相关） |
+| A6 | **同步冲突仅「version 新者胜」**：无 field-level merge、无墓碑（删除标记） | 并发双向同步可能丢字段更新 | ⚠️ |
+| A7 | **`local_runner` / `daemon`（task 版）/ `cli` 未复刻** | 本机执行快捷路径、task 守护进程、命令行入口均不提供 | ⛔ |
+
+#### P2 · B. 已知偏差（重点 B1 / B2）
+
+| # | 偏差 | 处置 / 影响 |
+|---|---|---|
+| **B1** | **心跳文件格式不同**：vools 是纯文本（`<ISO 时间> [worker]` 或 closed_token），本项目是 JSON（`HeartbeatSnapshot`，含 ts/epoch/worker/closed 等字段）⇒ **双向不可互读**。混部场景下，Python 端写的心跳 MoonBit 会解析失败并判 dead；反之 Python 也读不懂我们的 JSON | 混部（Python + MoonBit 同队列）前必须统一心跳格式；单栈部署无影响。已在 README「安全/互操作」提示 |
+| **B2** | **未来时间戳的判定方向相反**：vools 对超过 `max_future_skew` 的未来时间戳 fail-closed（判 unknown/dead），本项目 `age < 0` 直接判 alive（fail-open） | 时钟回拨/跨机时钟漂移时，本项目更宽松；安全敏感场景请自行校验时间戳 |
+| B5 | **结果截断用自定义 `__truncated__` 结构**（vools 用尾部截断 + 省略号） | 读取方需识别该键；仅影响超长 stdout/stderr |
+| B7 | **显式不支持 `shell: true`**（安全取舍：不经过 shell，避免注入） | 需要 shell 语义的动作请自行封装脚本并走白名单 |
+| B8 | **action 注册表仅进程内**（`register_action` 无持久化） | 进程重启后自定义动作需重新注册；内置动作不受影响 |
+
+#### P2 · C. 有意增量（P2b 新增，vools 无对应物）
+
+`ExecResult` 结构化结果（exit/stdout/stderr/duration/truncated 一次返回）、`detect_language`（按 payload 推断语言）、
+`verify_payload_sha`（载荷完整性校验）、`export_and_mark`（导出+标记一步完成）、`HeartbeatPump` 的 timer `unref` +
+注册表计数断言（便于测试与进程退出）、SQLite 句柄注册表（关闭后访问返回可诊断 `Err` 而非崩溃）、
+表名白名单（防注入）、`describe` + `summary`（库自检视图）、心跳 `ts` + `epoch` 双写（同时给 ISO 与秒）、
+全链路中文可诊断错误。
+
+#### P2 · D. 复用而非重造（与 Batch A/B/P2a 的关系）
+
+| 复用点 | 来源 | 用途 |
+|---|---|---|
+| `@rp.RhopCrypto` | Batch B | 载荷加密/解密（`TaskQueue::decrypt_payload`、`TaskSync` 导出包） |
+| `@rp.sha256_hex_of_utf8` | Batch A | `payload_sha` 载荷摘要 |
+| `@rp.SharedPath`（原子写） | Batch B | 心跳/同步文件落盘（tmp+rename，杜绝半写） |
+| `TaskConfig` / `SecretResolver` | P2a | P2b 的 store/queue/heartbeat 全部读同一配置与密文解析 |
+| `TaskState` ↔ `@rp.TaskStatus` 显式桥接 | Batch A | `TaskState::to_status` / `from_status`，任务队列与信封状态机同源 |
+
+**这些是「尽量复刻」的真实账**：P2 的 8 个文件是**可用**的（46·90·46 例全绿），但 A1–A7 与 B1–B8 必须与
+「已对齐」区分开看；混部前务必确认心跳格式（B1）与时间戳判定方向（B2）。
 
 ## 6. 有意增量（契约外新增 API，不代表 vools 有对应物）
 
@@ -451,14 +521,16 @@
 | 13 | **在线通道能力**：vools 有真实 paramiko / git 实现；本项目 `available()` 真探测、`send/receive` 在无凭据时返回可诊断 `Err` | `GitChannel` / `SftpChannel` | 契约 §3 允许「无外部依赖时以 Err/不可用实现」；测试覆盖探测与降级 |
 | 14 | **sync_folder 无独立 Source 抽象**：vools `LocalDirSource`（list_files / open_bytes / describe）；本项目由 `SyncFolder` 内部承担 + 公开 `sync_glob_match` | 同步实现 | 语义等价（源目录即本地目录）；无独立 describe |
 | 15 | **HTTP / 端点 / 子进程能力仅 js**：`HttpEndpoint`、clipboard 后端、`RelayServer` 子进程 | 相关类型 | 非 js 返回可诊断 `Err` 或 `available()=false`；三目标均可编译 |
-| 16 | **CLI 与 P2 task 队列**：vools 有 CLI 入口与完整 `task/` 队列（230 符号）；本项目不迁 CLI，`rhop_task` 为 P2 骨架（57 例 js 绿） | P2 | 见 §5.8 与 §11 |
+| 16 | **CLI 与 P2 task 队列**：vools 有 CLI 入口与完整 `task/` 队列（230 符号）；本项目不迁 CLI，`rhop_task` 覆盖数据/配置/密文（P2a）+ 存储/队列/心跳/执行/同步（P2b）共 8 文件，尚未移植 `task/cli.py`、`task/daemon.py`、`task/local_runner.py`、Postgres 后端 | P2 | 见 §5.9 与 §11 |
+| 17 | **P2 心跳文件格式不互通（B1）**：vools 纯文本 `<ISO> [worker]`/closed_token，本项目 JSON 快照 | 混部（Python + MoonBit 同队列） | **双向不可互读**：Python 写的心跳 MoonBit 判 dead、反之亦然。单栈部署无影响；混部前必须统一格式（见 §5.9 B1） |
+| 18 | **P2 未来时间戳判定方向相反（B2）**：vools 超 `max_future_skew` fail-closed，本项目 `age<0` 判 alive（fail-open） | 时钟回拨/跨机漂移 | 安全敏感场景请自行校验；差异与其余 P2 缺口见 §5.9 A/B 节 |
 
 ## 8. 统计与覆盖率
 
 **分母说明**
 
 - `已落地范围（A+B）` = 契约 §3 Batch A + Batch B 的 124 个符号。
-- `契约范围（A–D + clipboard）` = **192** 个符号 = 契约 §3 列出的全部模块（core/envelope/signer/integrity/crypto/watch/transport×7/session/interact/config/mirror/daemon/requester/executor/actions(2)/sync_folder/clipboard(8)）；不含 `secret.py` CLI（1）、`actions/jump.py` 动作族（14）、P2 `task/` 子包（230）。
+- `契约范围（A–D + clipboard）` = **192** 个符号 = 契约 §3 列出的全部模块（core/envelope/signer/integrity/crypto/watch/transport×7/session/interact/config/mirror/daemon/requester/executor/actions(2)/sync_folder/clipboard(8)）；不含 `secret.py` CLI（1）、`actions/jump.py` 动作族（14）、P2 `task/` 子包（230，单列于 §5.9）。
 - `vools 全量` = **437** 个符号（193 主模块 + 14 jump + 230 task）。
 
 | 口径 | 符号数 | ✅ | 🟡 | ⚠️ | ⏳ | ⛔ | 覆盖率 |
@@ -472,7 +544,7 @@
 1. **契约范围内 192 个符号中 178 个已完全对齐（92.7%），加上语义等价（🟡 4）与部分（⚠️ 1，watch 的无公开 `DEFAULT_EXTENSIONS` 常量）达 95.3%**；余下 9 个 ⛔ 全是明确不做项（SFTP 远端文件操作 8 + CLI 入口 1）。
 2. Batch A/B（124）保持 91.1%，跨实现字节级对齐有 qa fixture 硬证据（envelope checksum/字节、canonical JSON 7 例、digest 13 例、signer 3 例）。
 3. Batch C/D **全部落地且测试全绿**：session 7 / interact 2 / config 11 / mirror 12 / daemon 3+1CLI / requester 6 / executor 7 / sync_folder 9 / actions 2（`actions_test.mbt` 10 例）/ clipboard 6✅+2🟡（25 例）。
-4. P2（`rhop_task`）不计入契约覆盖率：骨架已落地、57 例 js 全绿，逐符号对照留待终轮（P2b）。
+4. P2（`rhop_task`）不计入契约覆盖率：P2a + P2b **已全部落地**（8 文件，测试 wasm/native 46、js 90 全绿），按模块级映射 21/230 符号可对位（models/config/secrets/store/queue/heartbeat/exec/sync），剩余 209 为 CLI/daemon/local_runner/Postgres 后端等未移植项——**逐符号映射仍待后续**（见 §5.9）。
 
 ## 9. 复核方式（可重复执行）
 
@@ -502,7 +574,7 @@ moon test -p test-suit/rhop_business --target js
 moon test -p test-suit/rhop_task --target js
 ```
 
-**复核时刻实测状态（2026-10-28 10:0x，Windows / moon 0.1.20261016 / node v25.2.1）**
+**复核时刻实测状态（2026-10-28 10:1x 终版，Windows / moon 0.1.20261016 / node v25.2.1；WSL 侧由 lead 用 `scripts/test_all.sh` 独立复核同数字）**
 
 | 命令 | 结果 |
 |---|---|
@@ -514,11 +586,13 @@ moon test -p test-suit/rhop_task --target js
 | `moon test -p test-suit/rhop_js --target js` | `Total tests: 52, passed: 52, failed: 0.` |
 | `moon test -p test-suit/rhop_clipboard --target js` | `Total tests: 25, passed: 25, failed: 0.` |
 | `moon test -p test-suit/rhop_interact --target js` | `Total tests: 13, passed: 13, failed: 0.` |
-| `moon test -p test-suit/rhop_business --target js` | `Total tests: 38, passed: 38, failed: 0.` |
-| `moon test -p test-suit/rhop_task --target js` | `Total tests: 57, passed: 57, failed: 0.`（P2）|
+| `moon test test-suit/rhop_business`（wasm/native） | `Total tests: 10, passed: 10, failed: 0.` |
+| `moon test test-suit/rhop_business --target js` | `Total tests: 41, passed: 41, failed: 0.` |
+| `moon test test-suit/rhop_task`（wasm/native） | `Total tests: 46, passed: 46, failed: 0.`（P2a 纯逻辑部分）|
+| `moon test test-suit/rhop_task --target js` | `Total tests: 90, passed: 90, failed: 0.`（P2a+P2b）|
 | 项目级 `moon test`（wasm） | `Total tests: 587, passed: 587, failed: 0.` |
 | 项目级 `moon test --target native` | `Total tests: 587, passed: 587, failed: 0.` |
-| 项目级 `moon test --target js` | `Total tests: 756, passed: 756, failed: 0.` |
+| 项目级 `moon test --target js` | `Total tests: 756, passed: 756, failed: 0.`（P2b 落地后的终版计数）|
 
 > 判绿纪律：只认 `moon test` 汇总行（`Total tests: N, passed: N, failed: 0`），不认 exit code。
 > 本表所有数字均在表格标注时刻实际运行得到；P2 / Batch D 在途项恢复后应重跑并把 `rhop_business` 一行改为 38/38。
@@ -551,10 +625,15 @@ moon test -p test-suit/rhop_task --target js
 | `test-suit/rhop_business/daemon_test.mbt` | 6 | `daemon.py` | js |
 | `test-suit/rhop_business/sync_folder_test.mbt` + `sync_glob_test.mbt` | 5 + 5 | `sync_folder.py` | js |
 | `test-suit/rhop_business/nonjs_test.mbt` + helpers | 5（+ 0 例 helper 模块） | 非 js 降级路径 | wasm/native |
-| **`test-suit/rhop_business` 小计** | **38** | — | js |
-| `test-suit/rhop_task/*`（5 文件） | 57 | P2 `task/` 子包（models/queue/secrets/config） | js |
+| **`test-suit/rhop_business` 小计** | **10（wasm/native）/ 41（js）** | — | — |
+| `test-suit/rhop_task/*`（10 文件） | **46（wasm/native）/ 90（js）** | P2a（models/config/secrets）+ P2b（store/queue/heartbeat/exec/sync） | wasm/js/native（7 个文件 js-only） |
 
-**rhop 相关合计：320 例（js 口径）= 135 + 52 + 25 + 13 + 38 + 57**；其中属于 vools 契约范围的是 263 例（含 clipboard 25、interact 13、business 38、rhop 135、rhop_js 52），P2 另 57 例。wasm / native 口径为 131 例（不含 js-only 包与 rhop_task）。
+**rhop 相关合计**
+
+- **js 口径**：135(rhop) + 52(rhop_js) + 25(clipboard) + 13(interact) + 41(business) + 90(task) = **356 例**
+- **wasm / native 口径**：131(rhop) + 10(business) + 46(task) = **187 例**（不含 js-only 包）
+- **全模块（项目级）**：wasm **587** / js **756** / native **587**，三目标全绿
+- 其中 vools 契约范围（A–D + clipboard）占 263 例（js），P2 占 90 例（js）
 
 ## 11. 本轮完成情况与「待终轮更新」清单
 
@@ -571,6 +650,6 @@ moon test -p test-suit/rhop_task --target js
 - `actions_test.mbt` 已交付（10 例，包级全绿）→ §5.5 三行改 ✅。
 
 **待终轮更新（P2 收尾后需要再刷一遍）**
-1. （已关闭）项目级三目标汇总行均已补齐：wasm 587/587、native 587/587、js 756/756，全绿。
+1. （已关闭）项目级三目标汇总行均已补齐：wasm 587/587、native 587/587、js 756/756，全绿（P2b 落地后实测）。
 2. P2b：`rhop_task` 与 vools `task/`（230 符号）逐符号对照表 + native 目标结论。
 3. 覆盖率：当前契约范围 **92.7%**（178/192），已无在途 ⏳ 项；仅剩 ⚠️ 1（watch 常量）与 ⛔ 9（明确不做）。

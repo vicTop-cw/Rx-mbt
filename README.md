@@ -65,12 +65,12 @@ moon test       # 运行全部测试
 
 | 项目 | 值 |
 |---|---|
-| MoonBit 工具链 | `moon 0.1.20260724 (5f1406a 2026-07-24)`（`moon version` 输出） |
+| MoonBit 工具链 | `moon 0.1.20261016 (1af328f 2026-10-16)`（`moon version` 输出） |
 | 操作系统 | Windows 11（PowerShell 7 / Windows PowerShell 5.1 均可运行脚本） |
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端；监控 / rhop 相关测试在 `js` 与 `native` 目标 |
-| 库版本 | `vicTop-cw/RX-MBT@0.3.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | js 411 / native 407（基本 + 高压 + Haskell API 回归 + 触发机制 + rhop，全部通过，见 `TEST_REPORT.md`） |
+| 库版本 | `vicTop-cw/RX-MBT@0.3.1`（`moon.mod` 的 `version` 字段） |
+| 测试数量 | rhop 相关 253 例（js）/ 121 例（wasm、native，不含 js-only 包）+ P2 57 例；rx 核心套件见 `TEST_REPORT.md`（2026-10-28 实测，明细见下方 rhop 章节与矩阵） |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。
@@ -237,6 +237,128 @@ let _ = subject.subscribe_on_next(fn(v) { println("收到: \{v}") })
 subject.on_next(42)
 subject.on_completed()
 ```
+
+## rhop（vools-rhop 协议复刻）
+
+`rhop/` 是 [vools-rhop 0.9.0](https://github.com/) 的 MoonBit 复刻：双方对等镜像任务中继协议
+（需求端 submit → 共享介质/在线通道 → 执行端 execute → 结果回传），带加密信封、签名、完整性校验、
+镜像 SQLite、守护进程与剪贴板共享。**纯 MoonBit + 零第三方 moonbit 依赖**，跨 wasm / js / native 三目标编译。
+
+### 能力总览
+
+| 层 | 文件 | 能力 |
+|---|---|---|
+| 协议 | `core.mbt` / `envelope.mbt` | `Side`（requester/executor）、`TaskStatus` 六态状态机、`Envelope` + checksum（`sha256:` + 规范化 JSON） |
+| 摘要 | `digest.mbt` / `json_canonical.mbt` | 纯 MoonBit sha256 / md5 / hmac-sha256 / pbkdf2-hmac-sha256；两套 JSON 规范口径（见下） |
+| 签名 | `signer.mbt` / `integrity.mbt` | `AbstractSigner`（FileHashSigner / NPUSigner）、信封完整性校验 |
+| 密码学 | `key.mbt` / `crypto.mbt` | `VerifyResult` 三态 reason、Fernet 信封加解密、`RHOP-ENC:` 秘密串（js 目标） |
+| 传输 | `transport_base.mbt` / `transport_local.mbt` / `transport_endpoint.mbt` / `transport_selector.mbt` / `online.mbt` / `relay.mbt` | `SharedPath` / `OnlineChannel` 抽象、本地原子写、`file://`+`http(s)://` 端点、在线优先选择、Git/SFTP 探测、自建中转服务 |
+| 会话 | `session.mbt` / `config.mbt` / `interact.mbt` | 通道链（relay > online > shared）、配置构建与脱敏、execute/request/roundtrip 三模式 |
+| 业务 | `mirror.mbt` / `requester.mbt` / `executor.mbt` / `daemon.mbt` / `actions.mbt` / `sync_folder.mbt` | 镜像 SQLite（乐观锁）、需求端/执行端 API、中继守护、动作注册表、目录同步 |
+| 剪贴板 | `clipboard.mbt` | 本机剪贴板读写（Windows PowerShell / Linux wl-paste|xclip / macOS pbpaste 探测）+ 共享盘 push/pull 交换协议 |
+| P2 | `rhop_task/` | 通用任务队列（A 提交加密 JSON → B 解密执行，SQLite 管依赖/状态）：**P2a+P2b 已落地 8 文件**；未实现 Postgres 后端 / 大载荷落文件 / 任务执行明细表，未复刻 CLI·task-daemon·local_runner；**心跳文件格式与 vools 不互通（混部需统一）** —— 详见矩阵 §5.9 A/B 节 |
+| 既有 | `packet.mbt` / `cipher.mbt` | 本仓库早期的简版 `RhopPacket` / `RhopEnvelope` / `RhopCipher`（不是 vools 对照面） |
+
+### 跨平台可用性
+
+| 能力 | wasm | js | native | 说明 |
+|---|:--:|:--:|:--:|---|
+| 协议 / 摘要 / JSON / 签名 / 完整性 / 配置 / 会话 / 动作 / 剪辑板状态机 | ✅ | ✅ | ✅ | 纯逻辑，无平台依赖 |
+| 信封加解密（Fernet）、`RHOP-ENC:` 秘密串 | — | ✅ | — | 走 `node:crypto`；非 js 返回可诊断 `Err`（`BAD_TOKEN`/`""`） |
+| 本地介质 / 端点 / 目录同步 / 镜像 SQLite / 业务 API / 剪贴板真实读写 | — | ✅ | — | 走 `node:fs` / `node:sqlite` / 子进程；非 js 返回可诊断 `Err` 或 `available()=false` |
+| 文件监控 `RhopWatcher` | — | ✅ | ✅ | wasm 无 monitor 后端，`start()` 返回可诊断 `Err`；可用 `process_file()` 手动处理 |
+| `ClipboardFileSync::run_forever` 周期轮询 | 首轮 | ✅ | 首轮 | 非 js 无定时器，订阅后只推首轮 |
+
+### 关键 API（速查）
+
+```moonbit
+// 1) 信封 + checksum（三目标）
+let env = @rhop.Envelope::new(
+  "job-001", @rhop.TaskStatus::Pending,
+  @json.parse("{\"cmd\":\"echo hi\"}") catch { _ => @json.Json::null() },
+  @rhop.Side::Requester,
+)
+let raw = env.to_rhop_bytes()                       // 规范 JSON 字节（含 sha256: 前缀 checksum）
+let (ok, reason) = @rhop.IntegrityChecker::verify_bytes(raw)
+
+// 2) 签名（FileHashSigner：preimage 用 ensure_ascii=True 口径）
+let signer = @rhop.FileHashSigner::new()
+let sig = signer.signature("job-001", @json.parse("{\"ok\":true}") catch { _ => @json.Json::null() })
+
+// 3) 加密信封（仅 js）
+let crypto = @rhop.RhopCrypto::from_key("my-secret")
+let token = crypto.encrypt_json(@json.parse("{\"a\":1}") catch { _ => @json.Json::null() })
+let vr = crypto.decrypt_verify(token)               // reason: OK / BAD_TOKEN / MALFORMED / NOT_JSON
+
+// 4) 剪贴板 push/pull（状态机 + 交换文件）
+let sync = @rhop.ClipboardFileSync::new("//share/rhop", role="push")
+  .unwrap_or_else(fn() { abort("role 非法") })
+let out = sync.sync_once()                          // {"changed": true, "text_len": 42} / {"changed": false, "reason": "…"}
+let rounds = sync.sync_rounds(3)                    // {"rounds": 3, "changes": 1}
+
+// 5) 需求端 / 执行端（仅 js；需配置与 data_dir）
+let req = @rhop.Requester::from_config_dir(cfg, "./rhop-data").unwrap_or_else(fn() { abort("open") })
+let task_id = req.submit("job-002", payload).unwrap_or_else(fn() { abort("submit") })
+let result = req.get_result(task_id)
+```
+
+> 完整签名与逐参数语义见 [DOC.md](DOC.md) 的「rhop」章节；与 vools 的逐符号对照见
+> `fist-mbt/docs/2026-10-27-rhop-vools-parity-matrix.md`。
+
+### 与 vools-rhop 0.9.0 的对照与差异摘要
+
+对外统计（2026-10-28 10:1x 终版复核，详见矩阵）：契约范围 **192** 个 vools 公开符号中 **178 个完全对齐（92.7%）**，
+加上语义等价与部分实现达 **95.3%**；vools 全量 437 符号（含 P2 `task/` 230）覆盖率 41.0%。
+
+主要差异（都不改变可观察协议语义）：
+
+| # | 差异 | 说明 |
+|---|---|---|
+| 1 | **两套 JSON 口径**：envelope checksum 用 `ensure_ascii=False`，signer preimage 用 `ensure_ascii=True` | 复刻 vools 事实，分别由 `canonical_json` / `canonical_json_ascii` 承担；含中文 result 的签名只在前者口径下才与 vools 一致 |
+| 2 | **浮点限制**：Python `repr(1.0)="1.0"`，本实现 `"1"`；指数形态也不同形 | checksum/签名语料只用 int/字符串/布尔/null/嵌套；解析侧用 `preserve_number_repr=true` |
+| 3 | **错误表达**：vools 抛异常，本项目一律 `Result[_, String]` | 错误文本保留可诊断短语（`checksum mismatch` / `缺少必填字段` / `解析失败`） |
+| 4 | **`clipboard.get_clipboard_backend` 形态**：vools 返回 `(read_fn, write_fn, name)` 三元组 | 本项目返回 `&ClipboardBackend?` + `get_clipboard_backend_name()` |
+| 5 | **`run_forever` 形态**：vools 阻塞线程 + `stop_event` | 本项目 `@rx.Observable`（订阅即首轮、`dispose()` 停止），阻塞等价物 `sync_rounds(n)` |
+| 6 | **平台强依赖项**：Fernet、文件系统、SQLite、子进程、剪贴板真实读写 | 仅 js 目标有真实实现；wasm/native API 齐备但显式返回「不可用」 |
+| 7 | **不做项**：`secret.py` CLI、SFTP 远端文件操作（`put/get/listdir/...`）、`daemon.main` CLI | 属 P1/P2 或 CLI 范畴，已在矩阵中标 ⛔ 并说明原因 |
+
+### 测试
+
+```bash
+moon check                         # 主包类型检查（rhop 包三目标 0 error）
+moon test                          # 默认 wasm 后端（rhop 相关 131 例，全绿）
+moon test --target js              # js 后端（rhop 相关 135 + 52 + 25 + 13 + 38 = 263 例 + P2 57 例）
+moon test --target native          # native 后端（rhop 相关 131 例，全绿）
+moon test -p test-suit/rhop_clipboard --target js   # 剪贴板 25 例
+moon test test-suit/rhop_business --target js       # 业务层 41 例（wasm/native 10 例）
+moon test test-suit/rhop_task --target js           # P2 任务队列 90 例（wasm/native 46 例）
+moon run demo/rhop_demo --target js -- send <共享目录>   # 端到端 demo（发 5 条加密包）
+bash scripts/test_all.sh           # 跨平台总入口（自动修 PATH，抓三目标汇总行）
+```
+
+**最新实测计数（2026-10-28 10:1x 终版，Windows 11 / moon 0.1.20261016 / node v25.2.1；WSL 侧独立复核同数字）**
+
+| 测试包 | 用例数 | 结果 |
+|---|---:|---|
+| `test-suit/rhop`（wasm / js / native） | 131 / 135 / 131 | 全绿 |
+| `test-suit/rhop_js`（js） | 52 | 全绿 |
+| `test-suit/rhop_clipboard`（js） | 25 | 全绿 |
+| `test-suit/rhop_interact`（js） | 13 | 全绿 |
+| `test-suit/rhop_business`（wasm / js / native） | 10 / 41 / 10 | 全绿 |
+| `test-suit/rhop_task`（wasm / js / native，P2a+P2b） | 46 / 90 / 46 | 全绿 |
+| **全模块（项目级）** | **wasm 587 / js 756 / native 587** | 全绿 |
+
+跨实现一致性由 `test-suit/rhop_js/fixtures/vools_vectors.json`（真实 vools-rhop 生成的 envelope 字节 /
+checksum / canonical JSON / digest / signer 向量）锁定，`scripts/verify_interop.py` 可反向复核。
+
+### 安全说明
+
+- **envelope checksum 不是签名**：它只防传输损坏/篡改，不证明来源；需要来源证明时用 `AbstractSigner`。
+- **Fernet 密钥**来自 `RHOP_KEY` 环境变量、文件或配置字符串（`key.rb` 的 `load_key` 优先级 `source > path > env`）；
+  密钥不进信封，配置 `to_dict()` 会把 `sftp.password` / `sftp.key_path` 脱敏为 `"***"`。
+- **`RHOP-ENC:` 秘密串**只是「避免明文落盘」的便利封装，不是密钥托管方案。
+- **`NPUSigner` 不做硬件调用**：序列号由注入的 `serial_provider` 提供，缺失时 `sign()` 返回 `None`（不伪造签名）。
+- 明文信道（`RhopCipherNone`）仅用于测试；生产请用 `RhopCrypto`。
 
 ## 与 Rx-Rust 的差异
 
