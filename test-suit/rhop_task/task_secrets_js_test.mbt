@@ -31,9 +31,8 @@ test "secrets-js · 兄弟键密文解密（明文为空时才用密文）" {
     Err(e) => fail("密文解密失败: \{e}")
   }
   match resolved {
-    { "sftp": { "password": String(p), .. }, .. } => {
+    { "sftp": { "password": String(p), .. }, .. } =>
       assert_eq(p, "p@ss-from-cipher")
-    }
     _ => fail("兄弟键密文未收敛: " + Json::stringify(resolved))
   }
   // findings 里应有一条 cipher 记录
@@ -69,7 +68,8 @@ test "secrets-js · 秘密节点 cipher + env 解锁（外层密钥来自环境�
     Err(e) => fail("秘密节点解密失败: \{e}")
   }
   match resolved {
-    { "relay": { "token": String(t), .. }, .. } => assert_eq(t, "real-inner-key")
+    { "relay": { "token": String(t), .. }, .. } =>
+      assert_eq(t, "real-inner-key")
     _ => fail("秘密节点未收敛: " + Json::stringify(resolved))
   }
   @env.unset_env_var("RHOP_TASK_UNLOCK_JS")
@@ -80,7 +80,9 @@ test "secrets-js · 单值敏感叶密文自动解密" {
   let crypto = @rp.RhopCrypto::from_key("task-secret-key-2")
   let cipher = crypto.encrypt_secret("leaf-secret")
   let cfg = @json.parse(
-    "{\"online\":[{\"kind\":\"sftp\",\"host\":\"h\",\"password\":\"" + cipher + "\"}]}",
+    "{\"online\":[{\"kind\":\"sftp\",\"host\":\"h\",\"password\":\"" +
+    cipher +
+    "\"}]}",
   ) catch {
     _ => fail("x")
   }

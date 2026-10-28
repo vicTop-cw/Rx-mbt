@@ -1,0 +1,137 @@
+{
+  "counts": {
+    "fail": 0,
+    "pass": 20,
+    "skip": 0,
+    "total": 20
+  },
+  "fixtures": "E:\\IDEProjects\\AI\\rx-mbt\\test-suit\\rhop_js\\fixtures\\vools_vectors.json",
+  "items": [
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "empty_object",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "empty_array",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "nested_unicode",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "escapes",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "scalars",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "key_order",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "canonical_json 期望值可复算",
+      "name": "deep_nest",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "checksum 自洽 sha256:248e08c31f172d693",
+      "name": "minimal_pending",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "checksum 自洽 sha256:ce9a0b78795987da9",
+      "name": "full_done",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "vools 如预期拒绝：checksum mismatch: envelope may be corrupted",
+      "name": "tampered_checksum",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "fixture 密文可被 vools 解回",
+      "name": "crypto/simple_obj",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "fixture 密文可被 vools 解回",
+      "name": "crypto/unicode_nested",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "fixture 密文可被 vools 解回",
+      "name": "crypto/plain_string_payload",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "签名可复算",
+      "name": "signer/ascii_result",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "签名可复算",
+      "name": "signer/unicode_result",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "签名可复算",
+      "name": "signer/nested_result",
+      "section": "fixture-self",
+      "status": "PASS"
+    },
+    {
+      "detail": "使用产物自带 key='rx-mbt-rhop-test-key-v1' 做真实解密复核",
+      "name": "key",
+      "section": "flat",
+      "status": "PASS"
+    },
+    {
+      "detail": "vools 成功解密 MoonBit 密文并解析出 payload",
+      "name": "envelope_json",
+      "section": "flat",
+      "status": "PASS"
+    },
+    {
+      "detail": "vools 解密得到非 JSON 明文，reason=NOT_JSON（符合断言）",
+      "name": "envelope_nonjson",
+      "section": "flat",
+      "status": "PASS"
+    },
+    {
+      "detail": "vools 解密 RHOP-ENC 成功，明文与 secret_plain 一致",
+      "name": "secret",
+      "section": "flat",
+      "status": "PASS"
+    }
+  ],
+  "moonbit_output": "E:\\IDEProjects\\AI\\rx-mbt\\test-suit\\rhop_js\\fixtures\\moonbit_vectors.json",
+  "result": "PASS",
+  "schema": "rhop-interop-report",
+  "schema_version": 1,
+  "strict": true,
+  "vools_root": "E:\\IDEProjects\\AI\\vools\\rhop"
+}

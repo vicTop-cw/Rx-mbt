@@ -28,10 +28,7 @@ test "secrets · mask_value 四种形态" {
   assert_eq(@rt.mask_value_default("my-secret-token"), "my***en")
   // 密文：保留 RHOP-ENC: 前缀 + *** + 尾 2 位（长度足够时）
   let cipher = "RHOP-ENC:Z0FBQUFBQnE0SkpCYlFKQWt4WExvZ3RBam9HNWdvUlBmUVEzbDhYMllRUlNpNUdRSVBJQTR1V0"
-  assert_eq(
-    @rt.mask_value_default(cipher),
-    "RHOP-ENC:Z0***V0",
-  )
+  assert_eq(@rt.mask_value_default(cipher), "RHOP-ENC:Z0***V0")
   // 密文短值（len <= keep*2）整体标 CIPHER：keep=6 时 2*6=12 >= len("RHOP-ENC:ab")=11
   assert_eq(@rt.mask_value("RHOP-ENC:ab", 6), "***CIPHER***")
   // 默认 keep=2 时 4 < 11，与 vools 一致走「前缀 + *** + 尾2位」
@@ -68,7 +65,11 @@ test "secrets · is_sensitive_leaf 正反例（最后一段下划线语义）" {
 ///|
 test "secrets · command_hint 三形态（兄弟键 / 秘密节点 / 无键）" {
   // 兄弟键：由 *_plain 推导 *_cipher，并指向明文键要求清空
-  let h1 = @rt.command_hint("sftp.password", Some("sftp.password_plain"), Some("sftp.password_cipher"))
+  let h1 = @rt.command_hint(
+    "sftp.password",
+    Some("sftp.password_plain"),
+    Some("sftp.password_cipher"),
+  )
   assert_true(h1.contains("生成密文"))
   assert_true(h1.contains("sftp.password_cipher"))
   assert_true(h1.contains("sftp.password_plain"))
@@ -93,14 +94,17 @@ test "secrets · command_hint 三形态（兄弟键 / 秘密节点 / 无键）" 
 fn resolve_text(
   text : String,
   strict : Bool,
-) -> (Json, Array[@rt.SecretFinding], Int) raise {
+) -> (Json, Array[@rt.SecretFinding], Int32) raise {
   let cfg = @json.parse(text) catch {
     _ => fail("测试配置 JSON 非法: " + text)
   }
-  let warnings : @ref.Ref[Int] = @ref.Ref::new(0)
-  let resolver = @rt.SecretResolver::new(None, strict, true, @rt.default_skip_paths()).with_warner(
-    fn(_m) { warnings.val = warnings.val + 1 },
-  )
+  let warnings : @ref.Ref[Int32] = @ref.Ref::new(0)
+  let resolver = @rt.SecretResolver::new(
+    None,
+    strict,
+    true,
+    @rt.default_skip_paths(),
+  ).with_warner(fn(_m) { warnings.val = warnings.val + 1 })
   let resolved = match resolver.resolve(cfg) {
     Ok(v) => v
     Err(e) => fail("解析失败: \{e}")
@@ -120,7 +124,8 @@ test "secrets · 兄弟键 *_plain 优先收敛 + 明文告警" {
       assert_eq(p, "p@ss")
       assert_eq(h, "h")
     }
-    _ => fail("兄弟键未收敛到 sftp.password: " + Json::stringify(resolved))
+    _ =>
+      fail("兄弟键未收敛到 sftp.password: " + Json::stringify(resolved))
   }
   // 明文告警 1 条 + finding 记录
   assert_eq(warns, 1)
@@ -220,12 +225,15 @@ test "secrets · 嵌套敏感叶：online[*].password_plain 收敛 + 告警" {
 
 ///|
 test "secrets · strict=true 时明文直接 Err（CI 卡口）" {
-  let cfg = @json.parse(
-    "{\"sftp\":{\"password_plain\":\"p\"}}",
-  ) catch {
+  let cfg = @json.parse("{\"sftp\":{\"password_plain\":\"p\"}}") catch {
     _ => fail("x")
   }
-  let resolver = @rt.SecretResolver::new(None, true, false, @rt.default_skip_paths())
+  let resolver = @rt.SecretResolver::new(
+    None,
+    true,
+    false,
+    @rt.default_skip_paths(),
+  )
   match resolver.resolve(cfg) {
     Err(e) => {
       assert_true(e.contains("使用了明文"))
@@ -237,13 +245,16 @@ test "secrets · strict=true 时明文直接 Err（CI 卡口）" {
 
 ///|
 test "secrets · 无密钥但配置含密文 → 可诊断 Err" {
-  let cfg = @json.parse(
-    "{\"sftp\":{\"password\":\"RHOP-ENC:Zm9v\"}}",
-  ) catch {
+  let cfg = @json.parse("{\"sftp\":{\"password\":\"RHOP-ENC:Zm9v\"}}") catch {
     _ => fail("x")
   }
   // crypto=None ⇒ 必须点明"没有解密密钥"，而不是静默留空
-  let resolver = @rt.SecretResolver::new(None, false, false, @rt.default_skip_paths())
+  let resolver = @rt.SecretResolver::new(
+    None,
+    false,
+    false,
+    @rt.default_skip_paths(),
+  )
   match resolver.resolve(cfg) {
     Err(e) => {
       assert_true(e.contains("没有解密密钥"))
@@ -255,7 +266,12 @@ test "secrets · 无密钥但配置含密文 → 可诊断 Err" {
 
 ///|
 test "secrets · 非对象配置 / 空配置" {
-  let resolver = @rt.SecretResolver::new(None, false, false, @rt.default_skip_paths())
+  let resolver = @rt.SecretResolver::new(
+    None,
+    false,
+    false,
+    @rt.default_skip_paths(),
+  )
   match resolver.resolve(Json::string("nope")) {
     Err(e) => assert_true(e.contains("必须是 JSON 对象"))
     Ok(_) => fail("非对象应当 Err")
@@ -274,7 +290,14 @@ test "secrets · resolve_config_secrets 便捷入口返回 findings" {
   ) catch {
     _ => fail("x")
   }
-  match @rt.resolve_config_secrets(cfg, None, false, false, @rt.default_skip_paths()) {
+  match
+    @rt.resolve_config_secrets(
+      cfg,
+      None,
+      false,
+      false,
+      @rt.default_skip_paths(),
+    ) {
     Err(e) => fail("解析失败: \{e}")
     Ok(pair) => {
       let findings = pair.1
@@ -321,9 +344,7 @@ test "secrets · find_secret_fields 三种 kind（leaf / pair / node）" {
 
 ///|
 test "secrets · find_secret_fields 对数组下标路径与空配置" {
-  let cfg = @json.parse(
-    "{\"online\":[{\"password\":\"p\"}]}",
-  ) catch {
+  let cfg = @json.parse("{\"online\":[{\"password\":\"p\"}]}") catch {
     _ => fail("x")
   }
   let fields = @rt.find_secret_fields(cfg)

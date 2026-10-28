@@ -233,7 +233,7 @@ extern "js" fn ffi_watch_count() -> Int32 =
 /// 因此它**不能**用来断言"句柄没关"——真正的判据是「测试进程能否自然退出」
 /// （若真有 5 个被 ref 的 fs.watch 句柄，node 永远不会退出）。
 /// 本函数只用于挂死时打印现场，不参与断言。
-extern "js" fn ffi_active_fs_watchers() -> Int =
+extern "js" fn ffi_active_fs_watchers() -> Int32 =
   #| () => { try { const f = process.getActiveResourcesInfo; if (!f) { return -1; } const list = f.call(process); let n = 0; for (const x of list) { const s = String(x); if (s.indexOf("FSEvent") >= 0 || s.indexOf("FSWatcher") >= 0) { n++; } } return n; } catch (_e) { return -1; } }
 
 ///|
@@ -265,6 +265,8 @@ test "watch · stop() 真正关闭 fs.watch 句柄（dispose 回归）" {
   w.stop()
   assert_eq(ffi_watch_count(), base)
   // 现场快照（挂死时便于定位；不做断言）
-  println("[watch] live fs handles snapshot = " + ffi_active_fs_watchers().to_string())
+  println(
+    "[watch] live fs handles snapshot = " + ffi_active_fs_watchers().to_string(),
+  )
   ffi_w_rmrf(dir)
 }

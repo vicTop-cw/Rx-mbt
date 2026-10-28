@@ -47,8 +47,8 @@ pub fn default_skip_paths() -> Array[String] {
 /// 敏感叶名集合（与 vools 的 `SENSITIVE_LEAF_RE` 等价：取**最后一段**下划线分段）。
 fn sensitive_words() -> Array[String] {
   [
-    "password", "passwd", "pwd", "token", "secret", "apikey", "accesskey",
-    "privatekey", "key",
+    "password", "passwd", "pwd", "token", "secret", "apikey", "accesskey", "privatekey",
+    "key",
   ]
 }
 
@@ -74,7 +74,7 @@ pub fn is_sensitive_leaf(key : String) -> Bool {
 
 ///|
 /// 取字符串的前 n 个字符（按码点；越界则返回全部）。
-fn take_prefix(s : String, n : Int) -> String {
+fn take_prefix(s : String, n : Int32) -> String {
   if n >= s.length() {
     return s
   }
@@ -86,7 +86,7 @@ fn take_prefix(s : String, n : Int) -> String {
 
 ///|
 /// 取字符串去掉前 n 个字符后的剩余部分（按码点）。
-fn drop_prefix(s : String, n : Int) -> String {
+fn drop_prefix(s : String, n : Int32) -> String {
   if n >= s.length() {
     return ""
   }
@@ -101,7 +101,7 @@ fn drop_prefix(s : String, n : Int) -> String {
 ///
 /// 与 vools 一致：密文（`RHOP-ENC:` 前缀）打码成 `***CIPHER***` 或
 /// 保留 `RHOP-ENC:` 前缀 + `***` + 尾 2 位；短值整体 `***`。
-pub fn mask_value(value : String, keep : Int) -> String {
+pub fn mask_value(value : String, keep : Int32) -> String {
   if value == "" {
     return ""
   }
@@ -399,7 +399,11 @@ fn SecretResolver::resolve_layers(
   match plain {
     Some(p) =>
       if json_scalar_text(p) != "" {
-        match self.flag_plaintext(path, plaintext_message(path, plain_key, cipher_key)) {
+        match
+          self.flag_plaintext(
+            path,
+            plaintext_message(path, plain_key, cipher_key),
+          ) {
           Err(e) => return Err(e)
           Ok(_) => ()
         }
@@ -508,19 +512,20 @@ fn SecretResolver::walk(
   }
   // 秘密节点 → 收敛成标量
   if is_secret_node(obj) {
-    let resolved = match self.resolve_layers(
-      obj.get("plain"),
-      obj.get("cipher"),
-      json_str_opt(obj.get("path")),
-      json_str_opt(obj.get("env")),
-      if rel == "" {
-        "(root)"
-      } else {
-        rel
-      },
-      None,
-      None,
-    ) {
+    let resolved = match
+      self.resolve_layers(
+        obj.get("plain"),
+        obj.get("cipher"),
+        json_str_opt(obj.get("path")),
+        json_str_opt(obj.get("env")),
+        if rel == "" {
+          "(root)"
+        } else {
+          rel
+        },
+        None,
+        None,
+      ) {
       Ok(v) => v
       Err(e) => return Err(e)
     }
@@ -580,15 +585,16 @@ fn SecretResolver::walk(
     let base_path = child_path(path, base)
     let plain_full = child_path(path, plain_key_name)
     let cipher_full = child_path(path, cipher_key_name)
-    let v = match self.resolve_layers(
-      plain,
-      cipher,
-      None,
-      None,
-      base_path,
-      Some(plain_full),
-      Some(cipher_full),
-    ) {
+    let v = match
+      self.resolve_layers(
+        plain,
+        cipher,
+        None,
+        None,
+        base_path,
+        Some(plain_full),
+        Some(cipher_full),
+      ) {
       Ok(v) => v
       Err(e) => return Err(e)
     }
@@ -628,10 +634,11 @@ fn SecretResolver::walk(
       out[key] = Json::string(v)
       self.record(field_path, "cipher", "")
     } else {
-      match self.flag_plaintext(
-        field_path,
-        plaintext_message(field_path, None, None),
-      ) {
+      match
+        self.flag_plaintext(
+          field_path,
+          plaintext_message(field_path, None, None),
+        ) {
         Err(e) => return Err(e)
         Ok(_) => ()
       }
@@ -739,7 +746,11 @@ fn find_secret_fields_into(
   match cfg {
     Array(items) =>
       for i in 0..<items.length() {
-        find_secret_fields_into(items[i], prefix + "[" + i.to_string() + "]", out)
+        find_secret_fields_into(
+          items[i],
+          prefix + "[" + i.to_string() + "]",
+          out,
+        )
       }
     Object(obj) => {
       let bases : Array[String] = []
@@ -766,9 +777,7 @@ fn find_secret_fields_into(
           Object(m) =>
             if is_secret_node(m) {
               out.push(
-                SecretField::new(
-                  path, "node", Some("plain"), Some("cipher"),
-                ),
+                SecretField::new(path, "node", Some("plain"), Some("cipher")),
               )
             } else {
               find_secret_fields_into(value, path, out)
@@ -837,5 +846,7 @@ fn read_text_file(path : String) -> Result[String, String] {
 /// 非 js：无文件系统 API，返回可诊断 Err。
 #cfg(not(target="js"))
 fn read_text_file(path : String) -> Result[String, String] {
-  Err("rhop_task: 读密钥文件仅 js 目标可用（wasm/native 无文件系统 API）")
+  Err(
+    "rhop_task: 读密钥文件仅 js 目标可用（wasm/native 无文件系统 API）",
+  )
 }

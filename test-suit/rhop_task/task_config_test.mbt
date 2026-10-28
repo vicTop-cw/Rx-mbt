@@ -16,10 +16,7 @@
 
 ///|
 /// 解析一段配置 JSON 文本（warner 计数）。
-fn parse_cfg(
-  text : String,
-  strict : Bool,
-) -> Result[@rt.TaskConfig, String] {
+fn parse_cfg(text : String, strict : Bool) -> Result[@rt.TaskConfig, String] {
   @rt.TaskConfig::from_json_text(text, None, strict, false, None)
 }
 
@@ -59,11 +56,20 @@ test "config · 最小配置的默认值全项" {
 ///|
 test "config · role 别名全表（大小写/连字符/空白容忍）" {
   let cases : Array[(String, String, String)] = [
-    ("A", "A", "SEND"), ("a", "A", "SEND"), ("send", "A", "SEND"),
-    ("REQUESTER", "A", "SEND"), ("submit", "A", "SEND"),
-    ("B", "B", "RECV"), ("recv", "B", "RECV"), ("RECEIVE", "B", "RECV"),
-    ("EXECUTOR", "B", "RECV"), ("server", "B", "RECV"), ("worker", "B", "RECV"),
-    ("C", "C", "RELAY"), ("relay", "C", "RELAY"), ("RELAY-SERVER", "C", "RELAY"),
+    ("A", "A", "SEND"),
+    ("a", "A", "SEND"),
+    ("send", "A", "SEND"),
+    ("REQUESTER", "A", "SEND"),
+    ("submit", "A", "SEND"),
+    ("B", "B", "RECV"),
+    ("recv", "B", "RECV"),
+    ("RECEIVE", "B", "RECV"),
+    ("EXECUTOR", "B", "RECV"),
+    ("server", "B", "RECV"),
+    ("worker", "B", "RECV"),
+    ("C", "C", "RELAY"),
+    ("relay", "C", "RELAY"),
+    ("RELAY-SERVER", "C", "RELAY"),
     ("relay server", "C", "RELAY"),
   ]
   for case in cases {
@@ -105,23 +111,25 @@ test "config · role 缺省 / 未知 → 可诊断 Err" {
 
 ///|
 test "config · shared：字符串简写 = 写读同址；对象可分离读写" {
-  let c1 = match parse_cfg("{\"role\":\"A\",\"shared\":\"E:/share/rhop\"}", false) {
+  let c1 = match
+    parse_cfg("{\"role\":\"A\",\"shared\":\"E:/share/rhop\"}", false) {
     Ok(c) => c
     Err(e) => fail("shared 字符串失败: \{e}")
   }
   assert_eq(c1.shared_write, Some("E:/share/rhop"))
   assert_eq(c1.shared_read, Some("E:/share/rhop"))
-  let c2 = match parse_cfg(
-    "{\"role\":\"A\",\"shared\":{\"write\":\"E:/a\",\"read\":\"//nas/b\"}}",
-    false,
-  ) {
+  let c2 = match
+    parse_cfg(
+      "{\"role\":\"A\",\"shared\":{\"write\":\"E:/a\",\"read\":\"//nas/b\"}}", false,
+    ) {
     Ok(c) => c
     Err(e) => fail("shared 对象失败: \{e}")
   }
   assert_eq(c2.shared_write, Some("E:/a"))
   assert_eq(c2.shared_read, Some("//nas/b"))
   // 只给 read：写端跟随读端
-  let c3 = match parse_cfg("{\"role\":\"A\",\"shared\":{\"read\":\"//nas/b\"}}", false) {
+  let c3 = match
+    parse_cfg("{\"role\":\"A\",\"shared\":{\"read\":\"//nas/b\"}}", false) {
     Ok(c) => c
     Err(e) => fail("shared 只给 read 失败: \{e}")
   }
@@ -130,10 +138,11 @@ test "config · shared：字符串简写 = 写读同址；对象可分离读写"
 
 ///|
 test "config · queue 深合并：自定义覆盖默认、未提及的键保留默认" {
-  let c = match parse_cfg(
-    "{\"role\":\"B\",\"name\":\"n1\",\"queue\":{\"max_retries\":9,\"heartbeat\":{\"file\":\"hb.txt\"},\"file_channel\":{\"enabled\":true}}}",
-    false,
-  ) {
+  let c = match
+    parse_cfg(
+      "{\"role\":\"B\",\"name\":\"n1\",\"queue\":{\"max_retries\":9,\"heartbeat\":{\"file\":\"hb.txt\"},\"file_channel\":{\"enabled\":true}}}",
+      false,
+    ) {
     Ok(c) => c
     Err(e) => fail("深合并失败: \{e}")
   }
@@ -159,10 +168,11 @@ test "config · queue 深合并：自定义覆盖默认、未提及的键保留�
 
 ///|
 test "config · heartbeat 判死阈值校验（stale < interval+1 → Err）" {
-  match parse_cfg(
-    "{\"role\":\"B\",\"queue\":{\"heartbeat\":{\"interval_sec\":10,\"stale_after_sec\":10}}}",
-    false,
-  ) {
+  match
+    parse_cfg(
+      "{\"role\":\"B\",\"queue\":{\"heartbeat\":{\"interval_sec\":10,\"stale_after_sec\":10}}}",
+      false,
+    ) {
     Err(e) => {
       assert_true(e.contains("心跳判死阈值过小"))
       assert_true(e.contains("BUG-282"))
@@ -170,16 +180,18 @@ test "config · heartbeat 判死阈值校验（stale < interval+1 → Err）" {
     Ok(_) => fail("stale == interval 应当 Err")
   }
   // 刚好 interval+1 合法（边界）
-  let ok = match parse_cfg(
-    "{\"role\":\"B\",\"queue\":{\"heartbeat\":{\"interval_sec\":10,\"stale_after_sec\":11}}}",
-    false,
-  ) {
+  let ok = match
+    parse_cfg(
+      "{\"role\":\"B\",\"queue\":{\"heartbeat\":{\"interval_sec\":10,\"stale_after_sec\":11}}}",
+      false,
+    ) {
     Ok(c) => c
     Err(e) => fail("stale = interval+1 应当合法: \{e}")
   }
   assert_eq(ok.heartbeat_stale_after_sec, 11.0)
   // heartbeat 字符串简写 = 文件名
-  let c2 = match parse_cfg("{\"role\":\"B\",\"queue\":{\"heartbeat\":\"my.hb\"}}", false) {
+  let c2 = match
+    parse_cfg("{\"role\":\"B\",\"queue\":{\"heartbeat\":\"my.hb\"}}", false) {
     Ok(c) => c
     Err(e) => fail("heartbeat 字符串简写失败: \{e}")
   }
@@ -188,25 +200,35 @@ test "config · heartbeat 判死阈值校验（stale < interval+1 → Err）" {
 
 ///|
 test "config · store kind 三态（默认 / sqlite-local / 非法 Err）" {
-  let c1 = match parse_cfg("{\"role\":\"A\",\"queue\":{\"store\":{\"kind\":\"sqlite-local\"}}}", false) {
+  let c1 = match
+    parse_cfg(
+      "{\"role\":\"A\",\"queue\":{\"store\":{\"kind\":\"sqlite-local\"}}}", false,
+    ) {
     Ok(c) => c
     Err(e) => fail("sqlite-local 失败: \{e}")
   }
   assert_eq(c1.store_kind, "sqlite-local")
   // store 字符串简写
-  let c2 = match parse_cfg("{\"role\":\"A\",\"queue\":{\"store\":\"sqlite-shared\"}}", false) {
+  let c2 = match
+    parse_cfg("{\"role\":\"A\",\"queue\":{\"store\":\"sqlite-shared\"}}", false) {
     Ok(c) => c
     Err(e) => fail("store 字符串简写失败: \{e}")
   }
   assert_eq(c2.store_kind, "sqlite-shared")
   // store_kind 兼容写法
-  let c3 = match parse_cfg("{\"role\":\"A\",\"queue\":{\"store_kind\":\"sqlite-local\"}}", false) {
+  let c3 = match
+    parse_cfg(
+      "{\"role\":\"A\",\"queue\":{\"store_kind\":\"sqlite-local\"}}", false,
+    ) {
     Ok(c) => c
     Err(e) => fail("store_kind 兼容写法失败: \{e}")
   }
   assert_eq(c3.store_kind, "sqlite-local")
   // 非法
-  match parse_cfg("{\"role\":\"A\",\"queue\":{\"store\":{\"kind\":\"postgres\"}}}", false) {
+  match
+    parse_cfg(
+      "{\"role\":\"A\",\"queue\":{\"store\":{\"kind\":\"postgres\"}}}", false,
+    ) {
     Err(e) => {
       assert_true(e.contains("未知存储后端"))
       if !e.contains("postgres") {
@@ -219,10 +241,10 @@ test "config · store kind 三态（默认 / sqlite-local / 非法 Err）" {
 
 ///|
 test "config · 明文主密钥：告警 + findings + to_dict 脱敏" {
-  let c = match parse_cfg(
-    "{\"role\":\"A\",\"name\":\"sec\",\"key\":\"master-key-plain\"}",
-    false,
-  ) {
+  let c = match
+    parse_cfg(
+      "{\"role\":\"A\",\"name\":\"sec\",\"key\":\"master-key-plain\"}", false,
+    ) {
     Ok(c) => c
     Err(e) => fail("明文 key 配置失败: \{e}")
   }
@@ -244,10 +266,11 @@ test "config · 明文主密钥：告警 + findings + to_dict 脱敏" {
 
 ///|
 test "config · to_dict 脱敏覆盖 sftp/relay/online/heartbeat 的敏感键" {
-  let c = match parse_cfg(
-    "{\"role\":\"A\",\"sftp\":{\"host\":\"h\",\"password\":\"p@ss\"},\"relay\":{\"host\":\"r\",\"token\":\"tok\"},\"online\":[{\"kind\":\"sftp\",\"password\":\"p2\"}]}",
-    false,
-  ) {
+  let c = match
+    parse_cfg(
+      "{\"role\":\"A\",\"sftp\":{\"host\":\"h\",\"password\":\"p@ss\"},\"relay\":{\"host\":\"r\",\"token\":\"tok\"},\"online\":[{\"kind\":\"sftp\",\"password\":\"p2\"}]}",
+      false,
+    ) {
     Ok(c) => c
     Err(e) => fail("配置解析失败: \{e}")
   }
@@ -264,10 +287,11 @@ test "config · to_dict 脱敏覆盖 sftp/relay/online/heartbeat 的敏感键" {
 
 ///|
 test "config · describe() 结构与 plaintext_fields" {
-  let c = match parse_cfg(
-    "{\"role\":\"B\",\"name\":\"doc\",\"key\":\"k\",\"shared\":{\"write\":\"E:/w\",\"read\":\"E:/r\"},\"exec\":{\"allow\":[\"action:x\"],\"allow_any\":true,\"timeout_sec\":30}}",
-    false,
-  ) {
+  let c = match
+    parse_cfg(
+      "{\"role\":\"B\",\"name\":\"doc\",\"key\":\"k\",\"shared\":{\"write\":\"E:/w\",\"read\":\"E:/r\"},\"exec\":{\"allow\":[\"action:x\"],\"allow_any\":true,\"timeout_sec\":30}}",
+      false,
+    ) {
     Ok(c) => c
     Err(e) => fail("配置解析失败: \{e}")
   }
@@ -304,7 +328,10 @@ test "config · describe() 结构与 plaintext_fields" {
 
 ///|
 test "config · 缺 key 但配置含密文 → 可诊断 Err" {
-  match parse_cfg("{\"role\":\"A\",\"sftp\":{\"password\":\"RHOP-ENC:Zm9v\"}}", false) {
+  match
+    parse_cfg(
+      "{\"role\":\"A\",\"sftp\":{\"password\":\"RHOP-ENC:Zm9v\"}}", false,
+    ) {
     Err(e) => {
       assert_true(e.contains("没有解密密钥"))
       assert_true(e.contains("RHOP_KEY"))

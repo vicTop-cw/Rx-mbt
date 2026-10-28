@@ -40,7 +40,8 @@ test "models · TaskState::parse 大小写不敏感 + 非法值可诊断 Err" {
       assert_true(e.contains("未知任务状态"))
       assert_true(e.contains("PENDING"))
     }
-    Ok(_) => fail("DONE 不是队列层状态（是协议层字面量），应当 Err")
+    Ok(_) =>
+      fail("DONE 不是队列层状态（是协议层字面量），应当 Err")
   }
   match @rt.TaskState::parse("") {
     Err(e) => assert_true(e.contains("未知任务状态"))
@@ -86,7 +87,9 @@ test "models · TaskState 流转矩阵：合法边逐条对齐 vools _TRANSITION
   // RUNNING → {COMPLETED, FAILED, RETRY_PENDING, CANCELLED}
   assert_true(@rt.TaskState::Running.can_transition(@rt.TaskState::Completed))
   assert_true(@rt.TaskState::Running.can_transition(@rt.TaskState::Failed))
-  assert_true(@rt.TaskState::Running.can_transition(@rt.TaskState::RetryPending))
+  assert_true(
+    @rt.TaskState::Running.can_transition(@rt.TaskState::RetryPending),
+  )
   assert_true(@rt.TaskState::Running.can_transition(@rt.TaskState::Cancelled))
   // RETRY_PENDING → {LOCKED, CANCELLED}
   assert_true(@rt.TaskState::RetryPending.can_transition(@rt.TaskState::Locked))
@@ -100,10 +103,16 @@ test "models · TaskState 流转矩阵：其余 41 条边全部非法（全组�
   let all = @rt.task_state_all()
   // 合法边集合（与上面逐条断言的集合一致）
   let legal : Array[(String, String)] = [
-    ("PENDING", "LOCKED"), ("PENDING", "CANCELLED"), ("LOCKED", "RUNNING"),
-    ("LOCKED", "PENDING"), ("LOCKED", "CANCELLED"), ("RUNNING", "COMPLETED"),
-    ("RUNNING", "FAILED"), ("RUNNING", "RETRY_PENDING"),
-    ("RUNNING", "CANCELLED"), ("RETRY_PENDING", "LOCKED"),
+    ("PENDING", "LOCKED"),
+    ("PENDING", "CANCELLED"),
+    ("LOCKED", "RUNNING"),
+    ("LOCKED", "PENDING"),
+    ("LOCKED", "CANCELLED"),
+    ("RUNNING", "COMPLETED"),
+    ("RUNNING", "FAILED"),
+    ("RUNNING", "RETRY_PENDING"),
+    ("RUNNING", "CANCELLED"),
+    ("RETRY_PENDING", "LOCKED"),
     ("RETRY_PENDING", "CANCELLED"),
   ]
   let mut legal_count = 0
@@ -113,7 +122,9 @@ test "models · TaskState 流转矩阵：其余 41 条边全部非法（全组�
       let expected = legal.contains(key)
       let actual = from_s.can_transition(to_s)
       if expected != actual {
-        fail("流转 \{key.0} -> \{key.1} 期望 \{expected}，实得 \{actual}")
+        fail(
+          "流转 \{key.0} -> \{key.1} 期望 \{expected}，实得 \{actual}",
+        )
       }
       if actual {
         legal_count = legal_count + 1
@@ -122,7 +133,12 @@ test "models · TaskState 流转矩阵：其余 41 条边全部非法（全组�
   }
   assert_eq(legal_count, 11)
   // 终态不可流转（含自环）
-  for t in [@rt.TaskState::Completed, @rt.TaskState::Failed, @rt.TaskState::Cancelled] {
+  for
+    t in [
+      @rt.TaskState::Completed,
+      @rt.TaskState::Failed,
+      @rt.TaskState::Cancelled,
+    ] {
     for to_s in all {
       assert_false(t.can_transition(to_s))
     }
@@ -135,10 +151,7 @@ test "models · TaskState 流转矩阵：其余 41 条边全部非法（全组�
 
 ///|
 test "models · 桥接 rhop.TaskStatus：7 态映射与协议字面量" {
-  assert_eq(
-    @rt.TaskState::Pending.to_status().to_string(),
-    "pending",
-  )
+  assert_eq(@rt.TaskState::Pending.to_status().to_string(), "pending")
   assert_eq(@rt.TaskState::Locked.to_status().to_string(), "claimed")
   assert_eq(@rt.TaskState::Running.to_status().to_string(), "running")
   assert_eq(@rt.TaskState::Completed.to_status().to_string(), "done")
@@ -207,7 +220,10 @@ test "models · parse_iso 五种写法 + 坏 ISO 返回 None" {
   assert_eq(@rt.parse_iso("2023-11-14T25:00:00Z"), None)
   assert_eq(@rt.parse_iso("2023-11"), None)
   // 归一
-  assert_eq(@rt.to_iso("2023-11-14T22:13:20.500Z"), Some("2023-11-14T22:13:20Z"))
+  assert_eq(
+    @rt.to_iso("2023-11-14T22:13:20.500Z"),
+    Some("2023-11-14T22:13:20Z"),
+  )
   assert_eq(@rt.to_iso("bogus"), None)
 }
 
@@ -240,12 +256,11 @@ test "models · utcnow_iso 形状与单调性" {
   let parsed = @rt.parse_iso(t1)
   assert_true(parsed is Some(_))
   match parsed {
-    Some(secs) =>
-      // 与 now 的差值应在 5 秒内（避免时钟/实现偏差导致的假红）
-      {
-        let d = @rt.utcnow_seconds() - secs
-        assert_true(d >= -5L && d <= 5L)
-      }
+    // 与 now 的差值应在 5 秒内（避免时钟/实现偏差导致的假红）
+    Some(secs) => {
+      let d = @rt.utcnow_seconds() - secs
+      assert_true(d >= -5L && d <= 5L)
+    }
     None => fail("utcnow_iso 解析失败")
   }
 }
@@ -272,7 +287,15 @@ test "models · TaskRecord 默认值与 withers" {
   assert_eq(r.tags.length(), 0)
   assert_eq(r.queue, "")
   // withers
-  let r2 = r.with_type("SHELL").with_priority(7).with_max_retries(5).with_timeout_min(30.0).with_deps(["a", "b"]).with_tags(["t1"]).with_queue("q1").with_owner("alice")
+  let r2 = r
+    .with_type("SHELL")
+    .with_priority(7)
+    .with_max_retries(5)
+    .with_timeout_min(30.0)
+    .with_deps(["a", "b"])
+    .with_tags(["t1"])
+    .with_queue("q1")
+    .with_owner("alice")
   assert_eq(r2.task_type, "SHELL")
   assert_eq(r2.priority, 7)
   assert_eq(r2.max_retries, 5)
@@ -309,7 +332,7 @@ test "models · TaskRecord::validate 边界（空 name / 负值 / retry 越界 /
     Ok(_) => fail("timeout_min=0 应当 Err")
   }
   // retry_count > max_retries（直接构造越界记录）
-  let bad = { ..@rt.TaskRecord::new("a"), retry_count: 5, max_retries: 3 }
+  let bad = { ..@rt.TaskRecord::new("a"), retry_count: 5, max_retries: 3, }
   match bad.validate() {
     Err(e) => assert_true(e.contains("不能超过 max_retries"))
     Ok(_) => fail("retry_count 越界应当 Err")
@@ -323,7 +346,15 @@ test "models · TaskRecord::validate 边界（空 name / 负值 / retry 越界 /
 
 ///|
 test "models · TaskRecord to_dict / from_dict 往返" {
-  let r = @rt.TaskRecord::new("task-42").with_type("HTTP").with_priority(9).with_deps(["a", "b"]).with_tags(["x", "y"]).with_state(@rt.TaskState::Running).with_queue("q").with_owner("bob").with_scheduled_at(Some("2023-11-14T22:13:20Z"))
+  let r = @rt.TaskRecord::new("task-42")
+    .with_type("HTTP")
+    .with_priority(9)
+    .with_deps(["a", "b"])
+    .with_tags(["x", "y"])
+    .with_state(@rt.TaskState::Running)
+    .with_queue("q")
+    .with_owner("bob")
+    .with_scheduled_at(Some("2023-11-14T22:13:20Z"))
   let d = r.to_dict()
   let back = match @rt.TaskRecord::from_dict(d) {
     Ok(v) => v
@@ -365,9 +396,7 @@ test "models · from_dict 容错（deps 为 JSON 文本 / 数字写成字符串 
   assert_eq(r.state, @rt.TaskState::Locked)
   assert_true(r.cancel_requested)
   // 缺省字段取默认
-  let j2 = @json.parse("{\"task_name\":\"t2\"}") catch {
-    _ => fail("x")
-  }
+  let j2 = @json.parse("{\"task_name\":\"t2\"}") catch { _ => fail("x") }
   let r2 = match @rt.TaskRecord::from_dict(j2) {
     Ok(v) => v
     Err(e) => fail("缺省解析失败: \{e}")
@@ -411,11 +440,7 @@ fn rec(name : String, deps : Array[String]) -> @rt.TaskRecord {
 
 ///|
 test "models · DAG 正常链：依赖在前的确定性拓扑序" {
-  let rs = [
-    rec("c", ["b"]),
-    rec("b", ["a"]),
-    rec("a", []),
-  ]
+  let rs = [rec("c", ["b"]), rec("b", ["a"]), rec("a", [])]
   assert_eq(@rt.validate_dag(rs), Ok(()))
   match @rt.topo_order(rs) {
     Ok(order) => assert_eq(order, ["a", "b", "c"])

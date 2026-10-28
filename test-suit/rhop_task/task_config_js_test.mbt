@@ -41,8 +41,7 @@ test "config-js · from_file 读文件 + base_dir 归到文件所在目录" {
   let path = ffi_cfg_join(dir, "rhop-task.json")
   assert_true(
     ffi_cfg_write(
-      path,
-      "{\"role\":\"B\",\"name\":\"from-file\",\"shared\":\"share\"}",
+      path, "{\"role\":\"B\",\"name\":\"from-file\",\"shared\":\"share\"}",
     ),
   )
   let cfg = match @rt.TaskConfig::from_file(path, false, false, None) {
@@ -103,7 +102,8 @@ test "config-js · key.path：读密钥文件作为明文密钥" {
   let text = "{\"role\":\"A\",\"key\":{\"plain\":\"\",\"cipher\":\"\",\"path\":\"" +
     @rp.normalize_path(keyfile) +
     "\"}}"
-  let cfg = match @rt.TaskConfig::from_json_text(text, None, false, false, None) {
+  let cfg = match
+    @rt.TaskConfig::from_json_text(text, None, false, false, None) {
     Ok(c) => c
     Err(e) => fail("key.path 失败: \{e}")
   }
@@ -122,7 +122,8 @@ test "config-js · key.cipher + key.env：环境变量 unlocks 主密钥" {
   let text = "{\"role\":\"A\",\"key\":{\"plain\":\"\",\"cipher\":\"" +
     cipher +
     "\",\"env\":\"RHOP_TASK_UNLOCK_CFG\"}}"
-  let cfg = match @rt.TaskConfig::from_json_text(text, None, false, false, None) {
+  let cfg = match
+    @rt.TaskConfig::from_json_text(text, None, false, false, None) {
     Ok(c) => c
     Err(e) => fail("key.cipher 解锁失败: \{e}")
   }
@@ -157,16 +158,16 @@ test "config-js · 全链路：主密钥解锁后能解配置里的业务密文"
     "\",\"env\":\"RHOP_TASK_CHAIN_UNLOCK\"},\"sftp\":{\"host\":\"h\",\"password\":\"" +
     biz_cipher +
     "\"}}"
-  let cfg = match @rt.TaskConfig::from_json_text(text, None, false, false, None) {
+  let cfg = match
+    @rt.TaskConfig::from_json_text(text, None, false, false, None) {
     Ok(c) => c
     Err(e) => fail("全链路解密失败: \{e}")
   }
   assert_eq(cfg.key, "chain-inner-key")
   // 业务密文已被解析成明文
   match cfg.resolved {
-    { "sftp": { "password": String(p), .. }, .. } => {
+    { "sftp": { "password": String(p), .. }, .. } =>
       assert_eq(p, "sftp-real-password")
-    }
     _ => fail("业务密文未解密: " + Json::stringify(cfg.resolved))
   }
   // 但 to_dict(mask=true) 不得泄漏

@@ -217,7 +217,7 @@ extern "js" fn ffi_r_rmrf(p : String) -> Unit =
 
 ///|
 /// 当前仍注册着的中转子进程数。
-extern "js" fn ffi_r_relay_live_count() -> Int =
+extern "js" fn ffi_r_relay_live_count() -> Int32 =
   #| () => { const G = globalThis; if (!G.__rxmbt_relay) { return 0; } let n = 0; for (const _k of G.__rxmbt_relay.keys()) { n++; } return n; }
 
 ///|
@@ -243,4 +243,3 @@ test "relay · 收尾：无遗留中转子进程（js 挂死兜底 + 回归断�
   // 句柄快照打印出来，便于下次真的挂死时一眼定位（FSWatcher/Server/Socket/Timer…）
   println("[relay] active resources = " + ffi_r_active_resources())
 }
-

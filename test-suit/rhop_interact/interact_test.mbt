@@ -156,7 +156,11 @@ test "interact · _key_from_cfg 分支 3：{\"cipher\"} 用外层密钥解出主
   let cipher = @rp.RhopCrypto::from_key(outer_key).encrypt_secret(inner_key)
   assert_true(cipher.has_prefix("RHOP-ENC:"))
   // 3a) 外层密钥由 source 直接给
-  let cfg_text = "{\"key\": {\"cipher\": \"" + cipher + "\", \"source\": \"" + outer_key + "\"}}"
+  let cfg_text = "{\"key\": {\"cipher\": \"" +
+    cipher +
+    "\", \"source\": \"" +
+    outer_key +
+    "\"}}"
   let c = it_cfg(itj(cfg_text))
   assert_eq(c.build_crypto().key_material(), inner_key)
   // 3b) 外层密钥由密钥文件给（path 分支）
@@ -191,7 +195,9 @@ test "interact · _key_from_cfg 分支 3：{\"cipher\"} 用外层密钥解出主
 test "interact · session 闭环：A 写加密包（磁盘无明文）→ B 解密还原载荷" {
   let dir = it_dir("rhop-it-session")
   let key = "session-shared-key"
-  let payload = itj("{\"task\": \"demo\", \"n\": 7, \"msg\": \"你好 会话\"}")
+  let payload = itj(
+    "{\"task\": \"demo\", \"n\": 7, \"msg\": \"你好 会话\"}",
+  )
   // A 端（SEND）
   let a = match
     it_cfg(it_cfg_json(dir, key)).build_session(role=@rp.Role::Send) {
@@ -374,7 +380,8 @@ test "interact · execute：本端直接执行 jump.probe（离线实现，不�
       assert_eq(it_str(j, "transport"), "none")
       assert_true(it_str(j, "detail").contains("缺少 sftp.host"))
     }
-    Err(e) => abort("缺 sftp.host 时 execute 应当成功（离线探测）: " + e)
+    Err(e) =>
+      abort("缺 sftp.host 时 execute 应当成功（离线探测）: " + e)
   }
 }
 
@@ -414,7 +421,14 @@ test "interact · request：加密动作包投递到介质（磁盘上是密文�
     Err(e) => abort("request 应当成功: " + e)
   }
   // 自定义请求包名
-  match @rp.interact(cfg, "jump.probe", None, "request", request_filename="custom-req.rhop") {
+  match
+    @rp.interact(
+      cfg,
+      "jump.probe",
+      None,
+      "request",
+      request_filename="custom-req.rhop",
+    ) {
     Ok(j) => {
       assert_eq(it_str(j, "filename"), "custom-req.rhop")
       assert_true(ffi_exists(dir + "/custom-req.rhop"))
@@ -422,7 +436,8 @@ test "interact · request：加密动作包投递到介质（磁盘上是密文�
     Err(e) => abort("自定义文件名 request 应当成功: " + e)
   }
   // 边界：空白 request_filename 回退缺省名
-  match @rp.interact(cfg, "jump.probe", None, "request", request_filename="   ") {
+  match
+    @rp.interact(cfg, "jump.probe", None, "request", request_filename="   ") {
     Ok(j) => assert_eq(it_str(j, "filename"), "req_jump_probe.rhop")
     Err(e) => abort("空白文件名应当回退缺省: " + e)
   }
@@ -488,10 +503,12 @@ test "interact · 未知 mode / 未知动作在 roundtrip 下的可诊断行为"
       // 回传的 result 是内层 error 状态，action_result 带 omega_gate
       assert_eq(it_str(j, "result"), "error")
       match it_field(j, "action_result") {
-        Some(ar) => match it_field(ar, "omega_gate") {
-          Some(gate) => assert_true(it_str(gate, "error").contains("未知动作"))
-          None => abort("未知动作的 action_result 应带 omega_gate")
-        }
+        Some(ar) =>
+          match it_field(ar, "omega_gate") {
+            Some(gate) =>
+              assert_true(it_str(gate, "error").contains("未知动作"))
+            None => abort("未知动作的 action_result 应带 omega_gate")
+          }
         None => abort("roundtrip 缺 action_result")
       }
     }
@@ -537,7 +554,8 @@ test "interact · handle_request：坏包 / 缺文件 / 空文件名 / 缺 actio
     Ok(s) => s
     Err(e) => abort("写端会话: " + e)
   }
-  match writer.send_package("no-action.rhop", itj("{\"payload\": {\"x\": 1}}")) {
+  match
+    writer.send_package("no-action.rhop", itj("{\"payload\": {\"x\": 1}}")) {
     Ok(_) => ()
     Err(e) => abort("写无 action 请求包: " + e)
   }
@@ -553,7 +571,8 @@ test "interact · handle_request：坏包 / 缺文件 / 空文件名 / 缺 actio
     Ok(s) => s
     Err(e) => abort("读端会话: " + e)
   }
-  match writer.send_package("ok-req.rhop", itj("{\"action\": \"jump.probe\"}")) {
+  match
+    writer.send_package("ok-req.rhop", itj("{\"action\": \"jump.probe\"}")) {
     Ok(_) => ()
     Err(e) => abort("写请求包: " + e)
   }
@@ -635,7 +654,10 @@ test "interact · omega_unwrap：ok / partial 判成功，error 与结构破损�
   let ok_env = Json::object({
     "status": Json::string("ok"),
     "action": Json::string("a"),
-    "data": Json::object({ "status": Json::string("ok"), "v": Json::number(1.0) }),
+    "data": Json::object({
+      "status": Json::string("ok"),
+      "v": Json::number(1.0),
+    }),
   })
   assert_eq(it_str(@rp.omega_unwrap(ok_env), "status"), "ok")
   // 2) partial 也算成功（契约 C2.2）
@@ -667,10 +689,7 @@ test "interact · omega_unwrap：ok / partial 判成功，error 与结构破损�
   }
   // 5) 结构破损：内层 data 缺失 / 非对象
   let no_data = @rp.omega_unwrap(
-    Json::object({
-      "status": Json::string("ok"),
-      "action": Json::string("x"),
-    }),
+    Json::object({ "status": Json::string("ok"), "action": Json::string("x") }),
   )
   assert_eq(it_str(no_data, "status"), "error")
   let scalar = @rp.omega_unwrap(Json::string("nope"))

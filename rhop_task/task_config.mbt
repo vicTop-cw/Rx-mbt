@@ -68,12 +68,16 @@ pub fn TaskRole::short(self : TaskRole) -> String {
 ///
 /// A → SEND；B → RECV；C → RELAY，另接受 REQUESTER/SUBMIT/EXECUTOR/SERVER/WORKER 等写法。
 pub fn normalize_role(value : String) -> Result[TaskRole, String] {
-  let text = value.trim().to_owned().to_upper().replace_all(
-    old="-",
-    new="_",
-  ).replace_all(old=" ", new="_")
+  let text = value
+    .trim()
+    .to_owned()
+    .to_upper()
+    .replace_all(old="-", new="_")
+    .replace_all(old=" ", new="_")
   if text == "" {
-    return Err("配置缺少 role/direction（A=提交方 / B=执行方 / C=中转）")
+    return Err(
+      "配置缺少 role/direction（A=提交方 / B=执行方 / C=中转）",
+    )
   }
   match text {
     "A" | "SEND" | "REQUESTER" | "SUBMIT" => Ok(Send)
@@ -81,7 +85,9 @@ pub fn normalize_role(value : String) -> Result[TaskRole, String] {
     "C" | "RELAY" | "RELAY_SERVER" => Ok(Relay)
     _ =>
       Err(
-        "未知方向 role=\"" + value + "\"（可用 A / B / C，也接受 SEND / RECV / RELAY）",
+        "未知方向 role=\"" +
+        value +
+        "\"（可用 A / B / C，也接受 SEND / RECV / RELAY）",
       )
   }
 }
@@ -113,23 +119,20 @@ fn jstr(v : Json?) -> String? {
 fn jdouble(v : Json?) -> Double? {
   match v {
     Some(Number(n, ..)) => Some(n)
-    Some(String(s)) =>
-      {
-        let parsed = @json.parse(s) catch {
-          _ => return None
-        }
-        match parsed {
-          Number(n, ..) => Some(n)
-          _ => None
-        }
+    Some(String(s)) => {
+      let parsed = @json.parse(s) catch { _ => return None }
+      match parsed {
+        Number(n, ..) => Some(n)
+        _ => None
       }
+    }
     _ => None
   }
 }
 
 ///|
 /// JSON 值 → Int。
-fn jint(v : Json?) -> Int? {
+fn jint(v : Json?) -> Int32? {
   match jdouble(v) {
     Some(n) => Some(n.to_int())
     None => None
@@ -165,10 +168,7 @@ fn jstr_array(v : Json?) -> Array[String] {
           _ => ()
         }
       }
-    Some(String(s)) =>
-      if s.trim().to_owned() != "" {
-        out.push(s)
-      }
+    Some(String(s)) => if s.trim().to_owned() != "" { out.push(s) }
     _ => ()
   }
   out
@@ -302,7 +302,7 @@ pub(all) struct TaskConfig {
   /// 轮询间隔（秒）
   poll_interval_sec : Double
   /// 默认最大重试次数
-  max_retries : Int
+  max_retries : Int32
   /// 默认重试间隔（分钟）
   retry_delay_min : Double
   /// 默认执行超时（分钟）
@@ -310,7 +310,7 @@ pub(all) struct TaskConfig {
   /// 结果是否加密回传
   encrypt_result : Bool
   /// 结果最大字节数
-  result_max_bytes : Int
+  result_max_bytes : Int32
   /// 锁 TTL（秒）
   lock_ttl_sec : Double
   /// 执行白名单
@@ -375,7 +375,9 @@ pub fn TaskConfig::worker_id(self : TaskConfig) -> String {
 
 ///|
 /// 只挑出「用了明文」的发现（CI 卡口 / CLI 汇总用）。
-pub fn TaskConfig::plaintext_findings(self : TaskConfig) -> Array[SecretFinding] {
+pub fn TaskConfig::plaintext_findings(
+  self : TaskConfig,
+) -> Array[SecretFinding] {
   let out : Array[SecretFinding] = []
   for f in self.findings {
     if f.action == "plaintext" {
@@ -394,29 +396,24 @@ fn resolve_master_key(
   resolver : SecretResolver,
 ) -> Result[(String, String), String] {
   match key_cfg {
-    None => {
+    None =>
       // 无 key 字段：退到环境变量；仍没有则空串（允许"只跑本地命令"的配置）
       match @env.get_env_var(@rp.ENV_RHOP_KEY) {
-        Some(v) =>
-          if v != "" {
-            Ok((v, "env"))
-          } else {
-            Ok(("", "none"))
-          }
+        Some(v) => if v != "" { Ok((v, "env")) } else { Ok(("", "none")) }
         None => Ok(("", "none"))
       }
-    }
     Some(Json::Null) => Ok(("", "none"))
     Some(String(s)) =>
       if s == "" {
         Ok(("", "none"))
       } else {
         // 字符串写法 = 明文主密钥（必须告警）
-        match resolver.flag_plaintext(
-          "key",
-          "⚠ 配置字段 'key' 使用了明文主密钥。\n      " +
-          command_hint("key", None, None),
-        ) {
+        match
+          resolver.flag_plaintext(
+            "key",
+            "⚠ 配置字段 'key' 使用了明文主密钥。\n      " +
+            command_hint("key", None, None),
+          ) {
           Err(e) => Err(e)
           Ok(_) => Ok((s, "plain"))
         }
@@ -430,11 +427,12 @@ fn resolve_master_key(
         Some(p) =>
           if p != "" {
             // 明文主密钥：告警后采用
-            match resolver.flag_plaintext(
-              "key.plain",
-              "⚠ 配置字段 'key.plain' 使用了明文主密钥。\n      " +
-              command_hint("key", None, Some("key.cipher")),
-            ) {
+            match
+              resolver.flag_plaintext(
+                "key.plain",
+                "⚠ 配置字段 'key.plain' 使用了明文主密钥。\n      " +
+                command_hint("key", None, Some("key.cipher")),
+              ) {
               Err(e) => return Err(e)
               Ok(_) => return Ok((p, "plain"))
             }
@@ -470,17 +468,15 @@ fn resolve_master_key(
         None => @rp.ENV_RHOP_KEY
       }
       match @rp.load_key(None, path, env_eff) {
-        Ok(k) =>
-          if path is Some(_) {
-            Ok((k, "path"))
-          } else {
-            Ok((k, "env"))
-          }
-        Err(e) => Err("配置 key 无法解析（path/env 均不可用）：\{e}")
+        Ok(k) => if path is Some(_) { Ok((k, "path")) } else { Ok((k, "env")) }
+        Err(e) =>
+          Err("配置 key 无法解析（path/env 均不可用）：\{e}")
       }
     }
     Some(other) =>
-      Err("配置 key 必须是字符串或对象，实际 \{Json::stringify(other)}")
+      Err(
+        "配置 key 必须是字符串或对象，实际 \{Json::stringify(other)}",
+      )
   }
 }
 
@@ -504,8 +500,7 @@ pub fn TaskConfig::from_dict(
   }
   // 1) 方向：role > direction > rhop_role
   let role_text = match jstr(jget(data, "role")) {
-    Some(v) =>
-      v
+    Some(v) => v
     None =>
       match jstr(jget(data, "direction")) {
         Some(v) => v
@@ -522,12 +517,7 @@ pub fn TaskConfig::from_dict(
   }
   // 2) base_dir：参数 > data.base_dir > 当前工作目录 > "."
   let base = match base_dir {
-    Some(b) =>
-      if b != "" {
-        b
-      } else {
-        ""
-      }
+    Some(b) => if b != "" { b } else { "" }
     None => ""
   }
   let base = if base != "" {
@@ -556,7 +546,8 @@ pub fn TaskConfig::from_dict(
     Some(w) => master = master.with_warner(w)
     None => ()
   }
-  let (key_text, key_source) = match resolve_master_key(jget(data, "key"), master) {
+  let (key_text, key_source) = match
+    resolve_master_key(jget(data, "key"), master) {
     Ok(v) => v
     Err(e) => return Err(e)
   }
@@ -566,13 +557,14 @@ pub fn TaskConfig::from_dict(
     Some(@rp.RhopCrypto::from_key(key_text))
   }
   // 4) 整棵配置的敏感信息解析（key 整棵跳过，由上面专门处理）
-  let resolved_pair = match resolve_config_secrets(
-    data,
-    crypto,
-    strict_secrets,
-    warn_plaintext,
-    default_skip_paths(),
-  ) {
+  let resolved_pair = match
+    resolve_config_secrets(
+      data,
+      crypto,
+      strict_secrets,
+      warn_plaintext,
+      default_skip_paths(),
+    ) {
     Ok(v) => v
     Err(e) => return Err(e)
   }
@@ -599,12 +591,7 @@ pub fn TaskConfig::from_dict(
   }
   // 6) shared：字符串简写（写读同址）或 {write, read}
   let (shared_write, shared_read) = match jget(resolved, "shared") {
-    Some(String(s)) =>
-      if s == "" {
-        (None, None)
-      } else {
-        (Some(s), Some(s))
-      }
+    Some(String(s)) => if s == "" { (None, None) } else { (Some(s), Some(s)) }
     Some(Object(m)) => {
       let w = jstr(m.get("write"))
       let r = jstr(m.get("read"))
@@ -650,7 +637,9 @@ pub fn TaskConfig::from_dict(
   }
   if store_kind != "sqlite-shared" && store_kind != "sqlite-local" {
     return Err(
-      "未知存储后端 queue.store.kind=\"" + store_kind + "\"（可用: sqlite-shared / sqlite-local）",
+      "未知存储后端 queue.store.kind=\"" +
+      store_kind +
+      "\"（可用: sqlite-shared / sqlite-local）",
     )
   }
   // heartbeat
@@ -676,12 +665,7 @@ pub fn TaskConfig::from_dict(
   })
   let hb = deep_merge(default_hb, hb_raw)
   let hb_file = match jstr(jget(hb, "file")) {
-    Some(f) =>
-      if f == "" {
-        name + ".heartbeat"
-      } else {
-        f
-      }
+    Some(f) => if f == "" { name + ".heartbeat" } else { f }
     None => name + ".heartbeat"
   }
   let hb_interval = jdouble(jget(hb, "interval_sec")).unwrap_or(5.0)
@@ -701,7 +685,9 @@ pub fn TaskConfig::from_dict(
   let exec_allow_any = jbool(jget(exec, "allow_any")).unwrap_or(false)
   let exec_timeout_sec = jdouble(jget(exec, "timeout_sec")).unwrap_or(3600.0)
   // 9) 其余标量
-  let poll_interval_sec = jdouble(jget(queue, "poll_interval_sec")).unwrap_or(2.0)
+  let poll_interval_sec = jdouble(jget(queue, "poll_interval_sec")).unwrap_or(
+    2.0,
+  )
   let max_retries = jint(jget(queue, "max_retries")).unwrap_or(3)
   let retry_delay_min = jdouble(jget(queue, "retry_delay_min")).unwrap_or(5.0)
   let timeout_min = jdouble(jget(queue, "timeout_min")).unwrap_or(60.0)
@@ -772,7 +758,8 @@ fn mask_keys(node : Json, keys : Array[String]) -> Json {
           match v {
             String(s) => out[k] = Json::string(mask_value_default(s))
             Null => out[k] = v
-            other => out[k] = Json::string(mask_value_default(Json::stringify(other)))
+            other =>
+              out[k] = Json::string(mask_value_default(Json::stringify(other)))
           }
         } else {
           out[k] = mask_keys(v, keys)
@@ -819,10 +806,9 @@ pub fn TaskConfig::to_dict(self : TaskConfig, mask : Bool) -> Json {
   }
   // 打码：key / sftp|relay 的 password,token,key_path / online[*] 的 password,token /
   // queue.heartbeat.token
-  let masked_all = mask_keys(
-    with_derived,
-    ["password", "token", "key_path", "password_cipher", "token_cipher"],
-  )
+  let masked_all = mask_keys(with_derived, [
+    "password", "token", "key_path", "password_cipher", "token_cipher",
+  ])
   match masked_all {
     Object(m) => {
       let out : Map[String, Json] = Map::new()
@@ -894,7 +880,13 @@ pub fn TaskConfig::from_file(
     Err(e) => return Err("读取配置文件失败: \{path}: \{e}")
   }
   let dir = parent_dir(path)
-  TaskConfig::from_json_text(text, Some(dir), strict_secrets, warn_plaintext, warner)
+  TaskConfig::from_json_text(
+    text,
+    Some(dir),
+    strict_secrets,
+    warn_plaintext,
+    warner,
+  )
 }
 
 ///|
@@ -918,12 +910,7 @@ pub fn load_task_config(
 fn parent_dir(path : String) -> String {
   let p = path.replace_all(old="\\", new="/")
   match p.rev_split_once("/") {
-    Some(pair) =>
-      if pair.0 == "" {
-        "/"
-      } else {
-        pair.0.to_owned()
-      }
+    Some(pair) => if pair.0 == "" { "/" } else { pair.0.to_owned() }
     None => "."
   }
 }
@@ -957,5 +944,7 @@ fn read_config_file(path : String) -> Result[String, String] {
 /// 非 js：无文件系统 API，返回可诊断 Err。
 #cfg(not(target="js"))
 fn read_config_file(path : String) -> Result[String, String] {
-  Err("rhop_task: 读配置文件仅 js 目标可用（wasm/native 无文件系统 API）")
+  Err(
+    "rhop_task: 读配置文件仅 js 目标可用（wasm/native 无文件系统 API）",
+  )
 }

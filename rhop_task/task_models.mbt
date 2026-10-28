@@ -258,7 +258,7 @@ pub fn format_epoch_seconds(secs : Int64) -> String {
   }
   let (y, m, d) = civil_from_days(days)
   let hh = rem / 3600L
-  let mm = (rem % 3600L) / 60L
+  let mm = rem % 3600L / 60L
   let ss = rem % 60L
   "\{pad4(y)}-\{pad2(m)}-\{pad2(d)}T\{pad2(hh)}:\{pad2(mm)}:\{pad2(ss)}Z"
 }
@@ -361,9 +361,7 @@ pub fn parse_iso(value : String) -> Int64? {
   }
   // epoch 秒（形如 1700000000 / 1700000000.5 / -100）
   if is_epoch_number(text) {
-    let parsed = @json.parse(text) catch {
-      _ => return None
-    }
+    let parsed = @json.parse(text) catch { _ => return None }
     match parsed {
       Number(v, ..) => return Some(v.to_int64())
       _ => ()
@@ -519,12 +517,11 @@ pub fn iso_add_seconds(base_iso : String, seconds : Double) -> String {
 /// 任务表列名（store 层与 TaskRecord 共用，保证 INSERT/SELECT 顺序一致）。
 pub fn task_columns() -> Array[String] {
   [
-    "task_id", "task_name", "task_type", "value", "deps", "state", "priority",
-    "timeout_min", "retry_delay_min", "retry_count", "max_retries", "scheduled_at",
-    "worker_id", "lock_time", "expire_time", "start_time", "end_time",
-    "cancel_requested", "version", "payload_enc", "payload_sha", "back_info",
-    "last_err", "tags", "queue", "owner", "team", "group_name", "extra_desc",
-    "created_at", "updated_at",
+    "task_id", "task_name", "task_type", "value", "deps", "state", "priority", "timeout_min",
+    "retry_delay_min", "retry_count", "max_retries", "scheduled_at", "worker_id",
+    "lock_time", "expire_time", "start_time", "end_time", "cancel_requested", "version",
+    "payload_enc", "payload_sha", "back_info", "last_err", "tags", "queue", "owner",
+    "team", "group_name", "extra_desc", "created_at", "updated_at",
   ]
 }
 
@@ -547,15 +544,15 @@ pub(all) struct TaskRecord {
   /// 任务状态
   state : TaskState
   /// 优先级（大者先）
-  priority : Int
+  priority : Int32
   /// 执行超时（分钟，默认 60）
   timeout_min : Double
   /// 重试间隔（分钟，默认 5）
   retry_delay_min : Double
   /// 已重试次数
-  retry_count : Int
+  retry_count : Int32
   /// 最大重试次数（默认 3）
-  max_retries : Int
+  max_retries : Int32
   /// 计划执行时间（ISO）
   scheduled_at : String?
   /// 持有锁的 worker
@@ -571,7 +568,7 @@ pub(all) struct TaskRecord {
   /// 是否已请求取消
   cancel_requested : Bool
   /// 乐观锁版本
-  version : Int
+  version : Int32
   /// 加密后的 JSON 载荷（"A 给 B 传的加密 JSON"）
   payload_enc : String?
   /// 明文载荷的 sha256（解密后校验完整性/幂等）
@@ -638,41 +635,53 @@ pub fn TaskRecord::new(task_name : String) -> TaskRecord {
 
 ///|
 /// 设置任务类型。
-pub fn TaskRecord::with_type(self : TaskRecord, task_type : String) -> TaskRecord {
-  { ..self, task_type: task_type, }
+pub fn TaskRecord::with_type(
+  self : TaskRecord,
+  task_type : String,
+) -> TaskRecord {
+  { ..self, task_type, }
 }
 
 ///|
 /// 设置原始参数。
 pub fn TaskRecord::with_value(self : TaskRecord, value : Json) -> TaskRecord {
-  { ..self, value: value, }
+  { ..self, value, }
 }
 
 ///|
 /// 设置依赖列表（拷贝入结构，避免调用方后续改动影响记录）。
-pub fn TaskRecord::with_deps(self : TaskRecord, deps : Array[String]) -> TaskRecord {
+pub fn TaskRecord::with_deps(
+  self : TaskRecord,
+  deps : Array[String],
+) -> TaskRecord {
   { ..self, deps: deps.copy(), }
 }
 
 ///|
 /// 设置优先级。
-pub fn TaskRecord::with_priority(self : TaskRecord, priority : Int) -> TaskRecord {
-  { ..self, priority: priority, }
+pub fn TaskRecord::with_priority(
+  self : TaskRecord,
+  priority : Int32,
+) -> TaskRecord {
+  { ..self, priority, }
 }
 
 ///|
 /// 设置状态。
-pub fn TaskRecord::with_state(self : TaskRecord, state : TaskState) -> TaskRecord {
-  { ..self, state: state, }
+pub fn TaskRecord::with_state(
+  self : TaskRecord,
+  state : TaskState,
+) -> TaskRecord {
+  { ..self, state, }
 }
 
 ///|
 /// 设置最大重试次数。
 pub fn TaskRecord::with_max_retries(
   self : TaskRecord,
-  max_retries : Int,
+  max_retries : Int32,
 ) -> TaskRecord {
-  { ..self, max_retries: max_retries, }
+  { ..self, max_retries, }
 }
 
 ///|
@@ -681,7 +690,7 @@ pub fn TaskRecord::with_timeout_min(
   self : TaskRecord,
   timeout_min : Double,
 ) -> TaskRecord {
-  { ..self, timeout_min: timeout_min, }
+  { ..self, timeout_min, }
 }
 
 ///|
@@ -690,7 +699,7 @@ pub fn TaskRecord::with_retry_delay_min(
   self : TaskRecord,
   retry_delay_min : Double,
 ) -> TaskRecord {
-  { ..self, retry_delay_min: retry_delay_min, }
+  { ..self, retry_delay_min, }
 }
 
 ///|
@@ -705,20 +714,23 @@ pub fn TaskRecord::with_payload(
 
 ///|
 /// 设置标签。
-pub fn TaskRecord::with_tags(self : TaskRecord, tags : Array[String]) -> TaskRecord {
+pub fn TaskRecord::with_tags(
+  self : TaskRecord,
+  tags : Array[String],
+) -> TaskRecord {
   { ..self, tags: tags.copy(), }
 }
 
 ///|
 /// 设置队列名。
 pub fn TaskRecord::with_queue(self : TaskRecord, queue : String) -> TaskRecord {
-  { ..self, queue: queue, }
+  { ..self, queue, }
 }
 
 ///|
 /// 设置归属人。
 pub fn TaskRecord::with_owner(self : TaskRecord, owner : String) -> TaskRecord {
-  { ..self, owner: owner, }
+  { ..self, owner, }
 }
 
 ///|
@@ -727,7 +739,7 @@ pub fn TaskRecord::with_scheduled_at(
   self : TaskRecord,
   scheduled_at : String?,
 ) -> TaskRecord {
-  { ..self, scheduled_at: scheduled_at, }
+  { ..self, scheduled_at, }
 }
 
 ///|
@@ -736,7 +748,7 @@ pub fn TaskRecord::with_created_at(
   self : TaskRecord,
   created_at : String?,
 ) -> TaskRecord {
-  { ..self, created_at: created_at, }
+  { ..self, created_at, }
 }
 
 ///|
@@ -752,10 +764,14 @@ pub fn TaskRecord::is_terminal(self : TaskRecord) -> Bool {
 /// 更上层校验；这里把可诊断的校验集中到 `validate()`，调用方按需在写入前调用。
 pub fn TaskRecord::validate(self : TaskRecord) -> Result[Unit, String] {
   if self.task_name == "" {
-    return Err("TaskRecord: task_name 不能为空（它是任务身份与依赖引用键）")
+    return Err(
+      "TaskRecord: task_name 不能为空（它是任务身份与依赖引用键）",
+    )
   }
   if self.task_type == "" {
-    return Err("TaskRecord: task_type 不能为空（task_name=\{self.task_name}）")
+    return Err(
+      "TaskRecord: task_type 不能为空（task_name=\{self.task_name}）",
+    )
   }
   if self.timeout_min <= 0.0 {
     return Err(
@@ -768,10 +784,14 @@ pub fn TaskRecord::validate(self : TaskRecord) -> Result[Unit, String] {
     )
   }
   if self.max_retries < 0 {
-    return Err("TaskRecord: max_retries 不能为负（\{self.max_retries.to_string()}）")
+    return Err(
+      "TaskRecord: max_retries 不能为负（\{self.max_retries.to_string()}）",
+    )
   }
   if self.retry_count < 0 {
-    return Err("TaskRecord: retry_count 不能为负（\{self.retry_count.to_string()}）")
+    return Err(
+      "TaskRecord: retry_count 不能为负（\{self.retry_count.to_string()}）",
+    )
   }
   if self.retry_count > self.max_retries {
     return Err(
@@ -779,11 +799,15 @@ pub fn TaskRecord::validate(self : TaskRecord) -> Result[Unit, String] {
     )
   }
   if self.version <= 0 {
-    return Err("TaskRecord: version 必须为正（\{self.version.to_string()}）")
+    return Err(
+      "TaskRecord: version 必须为正（\{self.version.to_string()}）",
+    )
   }
   for d in self.deps {
     if d.trim().to_owned() == "" {
-      return Err("TaskRecord: deps 里含空依赖名（task_name=\{self.task_name}）")
+      return Err(
+        "TaskRecord: deps 里含空依赖名（task_name=\{self.task_name}）",
+      )
     }
   }
   Ok(())
@@ -850,14 +874,20 @@ pub fn TaskRecord::to_dict(self : TaskRecord) -> Json {
 
 ///|
 /// 取 JSON 对象里的字符串字段（缺失/null → None；类型不符 → Err）。
-fn field_opt_str(obj : Map[String, Json], key : String) -> Result[String?, String] {
+fn field_opt_str(
+  obj : Map[String, Json],
+  key : String,
+) -> Result[String?, String] {
   match obj.get(key) {
     None => Ok(None)
     Some(v) =>
       match v {
         Null => Ok(None)
         String(s) => Ok(Some(s))
-        _ => Err("TaskRecord: 字段 \{key} 应为字符串，实际 \{Json::stringify(v)}")
+        _ =>
+          Err(
+            "TaskRecord: 字段 \{key} 应为字符串，实际 \{Json::stringify(v)}",
+          )
       }
   }
 }
@@ -867,8 +897,8 @@ fn field_opt_str(obj : Map[String, Json], key : String) -> Result[String?, Strin
 fn field_int(
   obj : Map[String, Json],
   key : String,
-  default : Int,
-) -> Result[Int, String] {
+  default : Int32,
+) -> Result[Int32, String] {
   match obj.get(key) {
     None => Ok(default)
     Some(v) =>
@@ -878,14 +908,20 @@ fn field_int(
         String(s) => {
           // 容忍数字被写成字符串（落库 TEXT 列读回的常见形态）
           let parsed = @json.parse(s) catch {
-            _ => return Err("TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"")
+            _ =>
+              return Err(
+                "TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"",
+              )
           }
           match parsed {
             Number(n, ..) => Ok(n.to_int())
             _ => Err("TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"")
           }
         }
-        _ => Err("TaskRecord: 字段 \{key} 应为数字，实际 \{Json::stringify(v)}")
+        _ =>
+          Err(
+            "TaskRecord: 字段 \{key} 应为数字，实际 \{Json::stringify(v)}",
+          )
       }
   }
 }
@@ -903,18 +939,23 @@ fn field_double(
       match v {
         Null => Ok(default)
         Number(n, ..) => Ok(n)
-        String(s) =>
-          // 容忍数字被写成字符串（落库 TEXT 列读回的常见形态）
-          {
-            let parsed = @json.parse(s) catch {
-              _ => return Err("TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"")
-            }
-            match parsed {
-              Number(n, ..) => Ok(n)
-              _ => Err("TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"")
-            }
+        // 容忍数字被写成字符串（落库 TEXT 列读回的常见形态）
+        String(s) => {
+          let parsed = @json.parse(s) catch {
+            _ =>
+              return Err(
+                "TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"",
+              )
           }
-        _ => Err("TaskRecord: 字段 \{key} 应为数字，实际 \{Json::stringify(v)}")
+          match parsed {
+            Number(n, ..) => Ok(n)
+            _ => Err("TaskRecord: 字段 \{key} 应为数字，实际 \"\{s}\"")
+          }
+        }
+        _ =>
+          Err(
+            "TaskRecord: 字段 \{key} 应为数字，实际 \{Json::stringify(v)}",
+          )
       }
   }
 }
@@ -940,7 +981,10 @@ fn field_bool(
             "false" | "0" | "no" | "" => Ok(false)
             _ => Err("TaskRecord: 字段 \{key} 应为布尔，实际 \"\{s}\"")
           }
-        _ => Err("TaskRecord: 字段 \{key} 应为布尔，实际 \{Json::stringify(v)}")
+        _ =>
+          Err(
+            "TaskRecord: 字段 \{key} 应为布尔，实际 \{Json::stringify(v)}",
+          )
       }
   }
 }
@@ -961,7 +1005,8 @@ fn field_str_array(
           for it in items {
             match it {
               String(s) => out.push(s)
-              _ => return Err("TaskRecord: 字段 \{key} 的元素应为字符串")
+              _ =>
+                return Err("TaskRecord: 字段 \{key} 的元素应为字符串")
             }
           }
           Ok(out)
@@ -973,14 +1018,20 @@ fn field_str_array(
             return Ok(out)
           }
           let parsed = @json.parse(t) catch {
-            _ => return Err("TaskRecord: 字段 \{key} 应为字符串数组，实际 \"\{t}\"")
+            _ =>
+              return Err(
+                "TaskRecord: 字段 \{key} 应为字符串数组，实际 \"\{t}\"",
+              )
           }
           match parsed {
             Array(items) => {
               for it in items {
                 match it {
                   String(x) => out.push(x)
-                  _ => return Err("TaskRecord: 字段 \{key} 的元素应为字符串")
+                  _ =>
+                    return Err(
+                      "TaskRecord: 字段 \{key} 的元素应为字符串",
+                    )
                 }
               }
               Ok(out)
@@ -1001,7 +1052,10 @@ fn field_str_array(
 pub fn TaskRecord::from_dict(data : Json) -> Result[TaskRecord, String] {
   let obj = match data {
     Object(m) => m
-    _ => return Err("TaskRecord: 需要 JSON 对象，实际 \{Json::stringify(data)}")
+    _ =>
+      return Err(
+        "TaskRecord: 需要 JSON 对象，实际 \{Json::stringify(data)}",
+      )
   }
   let task_name = match field_opt_str(obj, "task_name") {
     Ok(Some(s)) => s.trim().to_owned()
@@ -1066,12 +1120,12 @@ pub fn TaskRecord::from_dict(data : Json) -> Result[TaskRecord, String] {
   }
   let mut r = TaskRecord::new(task_name)
   r = r.with_type(task_type)
-  r = { ..r, state: state, deps: deps, tags: tags, priority: priority, retry_count: retry_count, max_retries: max_retries, version: version, }
+  r = { ..r, state, deps, tags, priority, retry_count, max_retries, version, }
   r = {
     ..r,
-    timeout_min: timeout_min,
-    retry_delay_min: retry_delay_min,
-    cancel_requested: cancel_requested,
+    timeout_min,
+    retry_delay_min,
+    cancel_requested,
     task_id: match task_id {
       Some(v) =>
         match v {
@@ -1080,14 +1134,15 @@ pub fn TaskRecord::from_dict(data : Json) -> Result[TaskRecord, String] {
         }
       None => None
     },
-    value: value,
+    value,
   }
   // 可选字符串字段
-  for key in [
-    "scheduled_at", "worker_id", "lock_time", "expire_time", "start_time",
-    "end_time", "payload_enc", "payload_sha", "back_info", "last_err",
-    "extra_desc", "created_at", "updated_at",
-  ] {
+  for
+    key in [
+      "scheduled_at", "worker_id", "lock_time", "expire_time", "start_time", "end_time",
+      "payload_enc", "payload_sha", "back_info", "last_err", "extra_desc", "created_at",
+      "updated_at",
+    ] {
     let v = match field_opt_str(obj, key) {
       Ok(v) => v
       Err(e) => return Err(e)
@@ -1166,7 +1221,9 @@ pub fn validate_dag(records : Array[TaskRecord]) -> Result[Unit, String] {
         return Err("DAG: 任务 \{r.task_name} 依赖了自己")
       }
       if !index.contains(d) {
-        return Err("DAG: 任务 \{r.task_name} 依赖的 \{d} 不在本批次中（缺依赖）")
+        return Err(
+          "DAG: 任务 \{r.task_name} 依赖的 \{d} 不在本批次中（缺依赖）",
+        )
       }
     }
   }
@@ -1187,7 +1244,7 @@ pub fn topo_order(records : Array[TaskRecord]) -> Result[Array[String], String] 
     index[r.task_name] = r
   }
   // 入度 = 未满足的依赖数（只统计本批次内的依赖）
-  let indeg : Map[String, Int] = Map::new()
+  let indeg : Map[String, Int32] = Map::new()
   for r in records {
     let mut n = 0
     for d in r.deps {
@@ -1203,7 +1260,8 @@ pub fn topo_order(records : Array[TaskRecord]) -> Result[Array[String], String] 
     // 取本层所有入度 0 且未出队的，按名字排序
     let ready : Array[String] = []
     for r in records {
-      if !done.contains(r.task_name) && indeg.get_or_default(r.task_name, 0) == 0 {
+      if !done.contains(r.task_name) &&
+        indeg.get_or_default(r.task_name, 0) == 0 {
         ready.push(r.task_name)
       }
     }
