@@ -103,10 +103,10 @@ pub fn[T : RhopCipher] from_filesystem_with(
           if ev.path.has_suffix(".rhop.tmp") {
             return
           }
-          if seen.val.contains(ev.path) {
+          if seen.val.contains(seen_key(ev.path)) {
             return
           }
-          seen.val.add(ev.path)
+          seen.val.add(seen_key(ev.path))
           let text = ffi_read_file(ev.path)
           if text == "" {
             return
@@ -147,6 +147,19 @@ fn join_path(root : String, fname : String) -> String {
   }
 }
 
+///|
+/// 归一化 `seen` 集合的路径键（统一 "/" 分隔）。
+///
+/// `seen` 由两个来源填充，口径必须一致：
+///   - 订阅时种子：`ffi_list_files` 用 node `path.resolve`（Windows 下产出反斜杠绝对路径）；
+///   - 运行期事件：`@monitor` 走 `join_path`（产出正斜杠）。
+/// 不在同一口径上直接比，`skip_existing=true` 会把订阅前已存在的 `.rhop`
+/// 当成「未见过」而重放。复用 transport_local 的 `normalize_path`（本包既有工具），
+/// 在 `seen` 边界统一归一化，无论 `shared_path` 本身是 "/" 还是 "\\" 形态都成立。
+fn seen_key(path : String) -> String {
+  normalize_path(path)
+}
+
 // ---------------------------------------------------------------------------
 // FFI（node fs / crypto；失败通过返回 "" + globalThis.__rxmbt_io_err /
 // __rxmbt_crypto_err 上报）
@@ -172,7 +185,7 @@ fn seed_seen_from_listing(
   if j is Array(arr) {
     for f in arr {
       if f is String(s) {
-        seen.val.add(s)
+        seen.val.add(seen_key(s))
       }
     }
   }
