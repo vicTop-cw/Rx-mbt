@@ -1,5 +1,6 @@
 import {
   "vicTop-cw/RX-MBT/rx",
+  "moonbitlang/core/debug",
 }
 
 options(

@@ -23,6 +23,9 @@ pub fn RhopCipherNone::new() -> RhopCipherNone {
 }
 
 ///|
+pub extend RhopCipherNone with RhopCipher::{alg_name, encrypt, decrypt}
+
+///|
 pub impl RhopCipher for RhopCipherNone with fn alg_name(self) {
   "none"
 }

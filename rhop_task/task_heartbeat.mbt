@@ -211,7 +211,7 @@ fn with_micros(raw : String) -> String {
 /// 用进程时钟生成带 6 位微秒的 ISO（MoonBit 只有毫秒精度 ⇒ `ms*1000` 补 3 个 0，
 /// 形如 `2026-10-28T03:00:11.123000Z`，与 vools `%f` 同形）。
 fn now_micros_text() -> String {
-  let ms = @env.now().to_int64()
+  let ms = @env.now().reinterpret_as_int64()
   let secs = ms / 1000L
   let mmm = ms % 1000L
   insert_micros(format_epoch_seconds(secs), pad3(mmm) + "000")

@@ -35,7 +35,7 @@ fn collector() -> (
   @ref.Ref[Array[String]],
   @rx.Observer[(String, @rp.VerifyResult), String],
 ) {
-  let got : @ref.Ref[Array[String]] = @ref.Ref::new([])
+  let got : @ref.Ref[Array[String]] = @ref.Ref([])
   let obs = @rx.Observer::new(
     fn(item : (String, @rp.VerifyResult)) {
       got.val = got.val.copy() + ["\{item.0}|\{item.1.reason}"]

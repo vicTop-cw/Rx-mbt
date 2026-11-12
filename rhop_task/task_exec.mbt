@@ -95,7 +95,7 @@ pub type Handler = (Json) -> Result[Json, String]
 
 ///|
 /// 全局处理器注册表（进程内）。
-let handlers : @ref.Ref[Map[String, Handler]] = @ref.Ref::new(Map::new())
+let handlers : @ref.Ref[Map[String, Handler]] = @ref.Ref(Map([], capacity=0))
 
 ///|
 /// 注册（或覆盖）一个处理器。
@@ -125,7 +125,7 @@ pub fn list_handlers() -> Array[String] {
 ///|
 /// 清空注册表（测试隔离用）。
 pub fn clear_handlers() -> Unit {
-  handlers.val = Map::new()
+  handlers.val = Map([], capacity=0)
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ fn payload_argv(m : Map[String, Json]) -> Array[String] {
 pub fn run_payload(policy : ExecPolicy, payload : Json) -> ExecResult {
   let started = @env.now()
   let finish = fn(r : ExecResult) -> ExecResult {
-    { ..r, duration_ms: @env.now().to_int64() - started.to_int64(), }
+    { ..r, duration_ms: @env.now().reinterpret_as_int64() - started.reinterpret_as_int64(), }
   }
   let lang = detect_language(payload)
   let obj = match payload {
@@ -324,7 +324,7 @@ pub fn run_payload(policy : ExecPolicy, payload : Json) -> ExecResult {
                 status.to_string() +
                 (if stderr == "" { "" } else { "；stderr: " + stderr }),
               ),
-              duration_ms: @env.now().to_int64() - started.to_int64(),
+              duration_ms: @env.now().reinterpret_as_int64() - started.reinterpret_as_int64(),
             })
           }
         }

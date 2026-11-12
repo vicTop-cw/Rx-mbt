@@ -77,7 +77,7 @@ test "integrity: verify 截断字节（传输中断语义）" {
   let raw = env.to_rhop_bytes()
   // 去掉末尾 10 字节：JSON 不完整 → 解析失败（不是 checksum 失败，但同为 false）
   let text = @rp.utf8_text(raw)
-  let truncated = @rp.bytes_of_utf8(text[0:text.length() - 10].to_string())
+  let truncated = @rp.bytes_of_utf8(text[0:text.length() - 10].to_owned())
   let (ok, reason) = @rp.IntegrityChecker::verify(env, truncated)
   assert_false(ok)
   assert_true(reason.contains("解析失败"))

@@ -249,7 +249,7 @@ test "canonical: fixture deep_nest（深层嵌套对象/数组）" {
 ///|
 /// 单个反斜杠（用 Char 构造，避免源码里的转义序列被编辑器/工具二次解释）。
 fn bs() -> String {
-  Char::from_int(92).to_string()
+  Int::unsafe_to_char(92).to_string()
 }
 
 ///|

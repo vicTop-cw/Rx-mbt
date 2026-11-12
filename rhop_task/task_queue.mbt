@@ -151,10 +151,10 @@ pub fn TaskQueue::submit(
     // 只在调用方没显式给 payload_enc 时自动封包
     if rec.payload_enc is None && !(r.value is Null) {
       let plain = Json::stringify(r.value)
-      let (sealed, _encrypted) = self.seal(plain)
+      let (sealed_, _encrypted) = self.seal(plain)
       rec = {
         ..rec,
-        payload_enc: Some(sealed),
+        payload_enc: Some(sealed_),
         payload_sha: Some(@rp.sha256_hex_of_utf8(plain)),
       }
     } else if rec.payload_sha is None && rec.payload_enc is Some(enc) {
@@ -211,8 +211,8 @@ pub fn TaskQueue::mark_running(
 fn TaskQueue::encode_result(self : TaskQueue, result : Json) -> String {
   let plain = Json::stringify(result)
   let payload = if self.encrypt_result {
-    let (sealed, _ok) = self.seal(plain)
-    sealed
+    let (sealed_, _ok) = self.seal(plain)
+    sealed_
   } else {
     plain
   }

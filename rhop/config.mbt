@@ -495,7 +495,7 @@ const CFG_PATH_MAX_LEN : Int32 = 4096
 ///
 /// 换行/回车/制表符统一换成空格（防日志注入），再从头部截 `max` 个字符，末尾加 `…`。
 fn cfg_snippet(raw : String, max : Int32) -> String {
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   let limit = if raw.length() < max { raw.length() } else { max }
   for i in 0..<limit {
     match raw.get_char(i) {

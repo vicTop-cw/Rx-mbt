@@ -27,7 +27,7 @@ test "mirror: 建库 → upsert → get_task 往返（含 checksum 校验）" {
   // 读回的信封应自证完整性（envelope 列 → from_rhop_bytes 已校验 checksum）
   assert_eq(got.checksum, got.compute_checksum())
   // 不存在的任务 → None（不是 Err）
-  assert_true(db.get_task("job-missing").is_none())
+  assert_true(db.get_task("job-missing") is None)
   db.close()
 }
 
@@ -366,7 +366,7 @@ test "mirror: 关闭后继续操作 → 可诊断 Err；重复 close 幂等" {
     Err(e) => assert_true(e.contains("已关闭"))
   }
   // 读路径：None / 空数组（不 panic）
-  assert_true(db.get_task("job-x").is_none())
+  assert_true(db.get_task("job-x") is None)
   assert_eq(db.list_tasks().length(), 0)
   assert_eq(db.pending_count(), 0)
   assert_eq(db.sync_log_count(), 0)
@@ -423,6 +423,6 @@ test "mirror: 行损坏（envelope 列被篡改）→ try_get_task 可诊断 Err
     Err(e) => assert_true(e.length() > 0)
   }
   // get_task 的便捷形态不 panic，退化为 None
-  assert_true(db.get_task("job-bad").is_none())
+  assert_true(db.get_task("job-bad") is None)
   db.close()
 }

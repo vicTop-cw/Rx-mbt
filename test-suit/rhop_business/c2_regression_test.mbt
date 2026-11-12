@@ -15,7 +15,7 @@
 
 ///|
 /// 测试用计数器（动作被执行的次数）。
-let c2_counter : Ref[Int32] = Ref::new(0)
+let c2_counter : Ref[Int32] = Ref(0)
 
 ///|
 /// 注册一个「每执行一次 +1」的动作，返回其名字（用真实 run_action 链路）。

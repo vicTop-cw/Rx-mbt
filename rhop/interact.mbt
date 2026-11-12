@@ -323,7 +323,7 @@ pub fn handle_request(
 /// 这里把白名单外的字符统一换成 `_`，再兜底保证结果能过 `safe_filename`。
 fn interact_default_filename(action : String) -> String {
   let dashed = action.replace(old=".", new="_")
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for c in dashed {
     let code = c.to_int()
     let ok = (code >= 48 && code <= 57) ||

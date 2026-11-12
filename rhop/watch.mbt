@@ -53,8 +53,8 @@ pub fn RhopWatcher::new(path : String, crypto : RhopCrypto) -> RhopWatcher {
     exts: [".rhop"],
     skip_existing_files: false,
     subject: @rx.PublishSubject::new(),
-    seen: @ref.Ref::new(@hashset.HashSet::new()),
-    bad: @ref.Ref::new(0),
+    seen: @ref.Ref(@hashset.HashSet([], capacity=0)),
+    bad: @ref.Ref(0),
     started: false,
     sub: None,
   }
@@ -155,7 +155,7 @@ pub fn RhopWatcher::stop(self : RhopWatcher) -> Unit {
   }
   self.sub = None
   self.started = false
-  self.seen.val = @hashset.HashSet::new()
+  self.seen.val = @hashset.HashSet([], capacity=0)
 }
 
 ///|

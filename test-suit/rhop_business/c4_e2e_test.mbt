@@ -406,17 +406,17 @@ test "c4-3a: 多进程 sqlite claim 竞争 —— 恰好一方成功、无丢更
     )
   }
   // 库里状态必须 claimed 且 version 只 +1（无丢更新/双写）
-  let final = match db.get_task("c4-race") {
+  let db_final = match db.get_task("c4-race") {
     Some(t) => t
     None => abort("任务不应消失")
   }
-  println(final.status.to_string() + " version=" + final.version.to_string())
-  if final.status != @rp.TaskStatus::Claimed {
-    abort("最终状态应 claimed，实际 \{final.status.to_string()}")
+  println(db_final.status.to_string() + " version=" + db_final.version.to_string())
+  if db_final.status != @rp.TaskStatus::Claimed {
+    abort("最终状态应 claimed，实际 \{db_final.status.to_string()}")
   }
-  if final.version != 2 {
+  if db_final.version != 2 {
     abort(
-      "version 应恰好 +1（=2），实际 \{final.version}（疑似双写/丢更新）",
+      "version 应恰好 +1（=2），实际 \{db_final.version}（疑似双写/丢更新）",
     )
   }
   db.close()
@@ -491,8 +491,8 @@ test "c4-3b: sqlite-local + shared 间接拓扑 —— 两侧各持本地库、�
     None => abort("A 侧应能读到 done 结果")
   }
   // 两侧库各自独立：B 库有、A 库也有（各自本地真相）
-  if a.mirror().get_task("c4-topo").is_none() ||
-    b.mirror().get_task("c4-topo").is_none() {
+  if (a.mirror().get_task("c4-topo") is None) ||
+    (b.mirror().get_task("c4-topo") is None) {
     abort("两侧本地库都应持有该任务")
   }
   req.close()

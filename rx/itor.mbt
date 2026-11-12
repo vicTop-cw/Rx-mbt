@@ -124,12 +124,13 @@ pub fn[T] Node::to_itor(self : Node[T]) -> Itor[T] {
 /// - `Iterring`: 正在迭代中
 /// - `Paused`: 已暂停（暂停期间 `next` 不产出）
 /// - `Stopped`: 已终止
+#derive(Eq, Debug)
 pub enum ItorState {
   Pending
   Iterring
   Paused
   Stopped
-} derive(Eq, Debug)
+}
 
 ///|
 /// 将派生的 Eq/Debug 方法显式提升为普通方法，消除 implicit_impl_as_method 警告

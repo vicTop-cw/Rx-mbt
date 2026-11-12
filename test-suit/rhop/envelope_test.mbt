@@ -25,7 +25,7 @@ test "envelope: checksum 前缀与格式（sha256: + 64 位小写 hex）" {
   assert_true(env.checksum.has_prefix("sha256:"))
   assert_eq(env.checksum.length(), 7 + 64)
   // 去掉前缀后是 64 个小写十六进制字符
-  let hex = env.checksum[7:].to_string()
+  let hex = env.checksum[7:].to_owned()
   assert_eq(hex.length(), 64)
   assert_eq(hex, hex.to_lower())
 }
@@ -103,8 +103,8 @@ test "envelope: to_rhop_bytes → from_rhop_bytes 往返（字段全等）" {
       _ => fail("payload")
     },
     @rp.Side::Executor,
-    result?=Some(@json.parse("{\"r\":null}") catch { _ => fail("result") }),
-    error?=Some("none"),
+    result=@json.parse("{\"r\":null}") catch { _ => fail("result") },
+    error="none",
     version=3,
     created_at="t0",
     updated_at="t1",
@@ -290,7 +290,7 @@ test "envelope: wither 返回新对象并重算 checksum" {
   assert_eq(with_result.checksum, with_result.compute_checksum())
   match @rp.Envelope::from_rhop_bytes(with_result.to_rhop_bytes()) {
     Err(e) => fail("with_result 后往返失败: \{e}")
-    Ok(restored) => assert_true(restored.result.is_some())
+    Ok(restored) => assert_true(restored.result is Some(_))
   }
   // with_updated_at
   let with_updated = base.with_updated_at("2026-10-21T11:00:00Z")
@@ -326,12 +326,12 @@ test "envelope: to_dict / from_dict 往返（to_dict 不含 v 键）" {
       _ => fail("payload")
     },
     @rp.Side::Executor,
-    result?=Some(
+    result=
       @json.parse("{\"stdout\":\"ok\"}") catch {
         _ => fail("result")
       },
-    ),
-    error?=Some("none"),
+
+    error="none",
   )
   let dict = env.to_dict()
   match dict {
@@ -533,7 +533,7 @@ fn raw_with_checksum(body : String) -> String {
   "{\"checksum\": \"sha256:" +
   @rp.sha256_hex_of_utf8(body) +
   "\", " +
-  body[1:].to_string()
+  body[1:].to_owned()
 }
 
 ///|
@@ -705,12 +705,12 @@ test "envelope: hops_seen 防御性复制（外部 push 不影响已封信封）
     @rp.Side::Requester,
     hops_seen=arr,
   )
-  let sealed = env.checksum
+  let sealed_ = env.checksum
   arr.push("executor")
   // 信封内的数组是副本：仍是 1 条，且 checksum 与内容自洽
   assert_eq(env.hops_seen.length(), 1)
   assert_eq(env.hops_seen, ["requester"])
-  assert_eq(env.checksum, sealed)
+  assert_eq(env.checksum, sealed_)
   assert_eq(env.checksum, env.compute_checksum())
   // with_hops_seen 同样复制
   let arr2 : Array[String] = ["a"]

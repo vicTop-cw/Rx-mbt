@@ -35,6 +35,7 @@
 ///    └──────────────────┘                 └─retry 超限──▶ FAILED
 /// PENDING / LOCKED / RUNNING ──cancel──▶ CANCELLED
 /// ```
+#derive(Eq, Debug)
 pub(all) enum TaskState {
   /// 待领取
   Pending
@@ -50,7 +51,12 @@ pub(all) enum TaskState {
   RetryPending
   /// 已取消（终态）
   Cancelled
-} derive(Eq, Debug)
+}
+
+///|
+pub extend TaskState with Eq::{not_equal, equal}
+///|
+pub extend TaskState with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 序列化为 vools 字面量（大写，落库即此形态）。
@@ -266,7 +272,7 @@ pub fn format_epoch_seconds(secs : Int64) -> String {
 ///|
 /// 当前 UTC 时间（epoch 秒）。
 pub fn utcnow_seconds() -> Int64 {
-  @env.now().to_int64() / 1000L
+  @env.now().reinterpret_as_int64() / 1000L
 }
 
 ///|
@@ -467,7 +473,7 @@ pub fn parse_iso(value : String) -> Int64? {
 /// 按分隔符切成若干段（保留空段，便于探测非法输入）。
 fn split_n(text : StringView, sep : Char) -> Array[String] {
   let out : Array[String] = []
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   let n = text.length()
   let mut i = 0
   while i < n {
@@ -1205,7 +1211,7 @@ pub fn task_record_to_json_text(record : TaskRecord) -> String {
 ///
 /// 依赖语义与 vools 一致：`deps` 里写的是 **task_name**（不是自增 id）。
 pub fn validate_dag(records : Array[TaskRecord]) -> Result[Unit, String] {
-  let index : Map[String, TaskRecord] = Map::new()
+  let index : Map[String, TaskRecord] = Map([], capacity=0)
   for r in records {
     if r.task_name == "" {
       return Err("DAG: 存在 task_name 为空的记录")
@@ -1239,12 +1245,12 @@ pub fn validate_dag(records : Array[TaskRecord]) -> Result[Unit, String] {
 ///
 /// 同层按 task_name 字典序出队，保证结果确定（可复现的测试基线）。
 pub fn topo_order(records : Array[TaskRecord]) -> Result[Array[String], String] {
-  let index : Map[String, TaskRecord] = Map::new()
+  let index : Map[String, TaskRecord] = Map([], capacity=0)
   for r in records {
     index[r.task_name] = r
   }
   // 入度 = 未满足的依赖数（只统计本批次内的依赖）
-  let indeg : Map[String, Int32] = Map::new()
+  let indeg : Map[String, Int32] = Map([], capacity=0)
   for r in records {
     let mut n = 0
     for d in r.deps {
@@ -1255,7 +1261,7 @@ pub fn topo_order(records : Array[TaskRecord]) -> Result[Array[String], String] 
     indeg[r.task_name] = n
   }
   let out : Array[String] = []
-  let done : Map[String, Bool] = Map::new()
+  let done : Map[String, Bool] = Map([], capacity=0)
   while out.length() < records.length() {
     // 取本层所有入度 0 且未出队的，按名字排序
     let ready : Array[String] = []

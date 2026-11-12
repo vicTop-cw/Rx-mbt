@@ -135,10 +135,10 @@ pub fn RelayDaemon::start(
   max_rounds : Int32,
 ) -> Result[Json, String] {
   self.running = true
-  let pulled_total = Ref::new(0)
-  let processed_total = Ref::new(0)
-  let failed_total = Ref::new(0)
-  let pushed_total = Ref::new(0)
+  let pulled_total = Ref(0)
+  let processed_total = Ref(0)
+  let failed_total = Ref(0)
+  let pushed_total = Ref(0)
   let errors : Array[String] = []
   while self.running {
     let one = match self.run_once() {
@@ -184,10 +184,10 @@ pub fn RelayDaemon::stop(self : RelayDaemon) -> Unit {
 ///   "pushed", "errors": [...]}`；单步失败不抛，收进 `errors` 并把 status 降为 partial。
 pub fn RelayDaemon::run_once(self : RelayDaemon) -> Result[Json, String] {
   let errors : Array[String] = []
-  let pulled_ref = Ref::new(0)
-  let processed_ref = Ref::new(0)
-  let failed_ref = Ref::new(0)
-  let pushed_ref = Ref::new(0)
+  let pulled_ref = Ref(0)
+  let processed_ref = Ref(0)
+  let failed_ref = Ref(0)
+  let pushed_ref = Ref(0)
   // 1. 收包
   match self.pull_remote() {
     Ok(v) => pulled_ref.val = pulled_ref.val + json_int(v, "pulled")
@@ -369,7 +369,7 @@ pub fn RelayDaemon::process_inbox(self : RelayDaemon) -> Result[Json, String] {
     // 写镜像库：只在「比本地新」时合并（同版本/更旧 = 已同步过，静默跳过，不算错误）
     let mirror = self.executor.mirror()
     let local_version = match mirror.get_task(env.task_id) {
-      Some(local) => local.version
+      Some(local_) => local_.version
       None => 0
     }
     if env.version > local_version {
@@ -391,7 +391,7 @@ pub fn RelayDaemon::process_inbox(self : RelayDaemon) -> Result[Json, String] {
     // Claimed（别的执行体领着）/ Running（上个进程执行中）/ Done（已经做完）。
     // 重放这些会重复触发动作副作用（写库、跑命令），因此一律跳过并留档。
     let local_is_pending = match mirror.get_task(env.task_id) {
-      Some(local) => local.status == TaskStatus::Pending
+      Some(local_) => local_.status == TaskStatus::Pending
       None => false
     }
     if self.side == Side::Executor && env.status == TaskStatus::Pending {

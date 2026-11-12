@@ -19,6 +19,9 @@ pub fn Aes256GcmCipher::new(password : String) -> Aes256GcmCipher {
 }
 
 ///|
+pub extend Aes256GcmCipher with RhopCipher::{alg_name, encrypt, decrypt}
+
+///|
 pub impl RhopCipher for Aes256GcmCipher with fn alg_name(self) {
   "aes-256-gcm"
 }
@@ -79,8 +82,8 @@ pub fn[T : RhopCipher] from_filesystem_with(
   cipher : T,
   skip_existing : Bool,
 ) -> @rx.Observable[RhopPacket, String] {
-  let seen : @ref.Ref[@hashset.HashSet[String]] = @ref.Ref::new(
-    @hashset.HashSet::new(),
+  let seen : @ref.Ref[@hashset.HashSet[String]] = @ref.Ref(
+    @hashset.HashSet([], capacity=0),
   )
   @rx.Observable::new(fn(
     observer : @rx.Observer[RhopPacket, String],
@@ -140,7 +143,7 @@ pub fn[T : RhopCipher] from_filesystem_with(
 
 ///|
 fn join_path(root : String, fname : String) -> String {
-  if root.ends_with("/") || root.ends_with("\\") {
+  if root.has_suffix("/") || root.has_suffix("\\") {
     root + fname
   } else {
     root + "/" + fname

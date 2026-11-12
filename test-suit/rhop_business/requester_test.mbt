@@ -23,9 +23,9 @@ test "requester: submit → 在途 get_result=None → cancel → 终态 cancell
     Err(e) => abort("submit 失败: \{e}")
   }
   // 在途（pending）→ None（不是 Err，也不是半成品 dict）
-  assert_true(req.get_result("job-r1").is_none())
+  assert_true(req.get_result("job-r1") is None)
   // 未知任务 → None
-  assert_true(req.get_result("job-nope").is_none())
+  assert_true(req.get_result("job-nope") is None)
   // 取消（pending 可取消）
   match req.cancel("job-r1") {
     Ok(_) => ()
@@ -131,9 +131,9 @@ test "requester: list_tasks 状态过滤 + wait_result 超时返回 None" {
   assert_eq(req.list_tasks(status=@rp.TaskStatus::Pending).length(), 3)
   assert_eq(req.list_tasks(status=@rp.TaskStatus::Done).length(), 0)
   // 等待超时：pending 任务不可能在 150ms 内变终态 ⇒ None（不抛）
-  assert_true(req.wait_result("job-l1", 150, 50).is_none())
+  assert_true(req.wait_result("job-l1", 150, 50) is None)
   // timeout<=0 ⇒ 只查一次，同样 None
-  assert_true(req.wait_result("job-l1", 0, 10).is_none())
+  assert_true(req.wait_result("job-l1", 0, 10) is None)
   req.close()
 }
 
@@ -162,7 +162,7 @@ test "requester→executor 单机闭环（同一 mirror 库）" {
     Ok(_) => ()
     Err(e) => abort("submit 失败: \{e}")
   }
-  assert_true(req.get_result("job-loop").is_none())
+  assert_true(req.get_result("job-loop") is None)
   // 2. 任务端应看到 1 个 pending
   assert_eq(exec.list_pending().length(), 1)
   // 3. 领任务

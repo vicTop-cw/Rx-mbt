@@ -11,12 +11,18 @@
 /// 只有两方、无控制端：需求端提交任务等结果，执行端领任务、执行、回结果。
 /// `to_string` 输出与 vools 一致的**小写字面量**（`"requester"` / `"executor"`），
 /// 该字面量同时是信封 `side` 字段的落盘/传输表示。
+#derive(Eq, Debug)
 pub(all) enum Side {
   /// 需求端：提交任务，等结果
   Requester
   /// 执行端：领任务，执行，回结果
   Executor
-} derive(Eq, Debug)
+}
+
+///|
+pub extend Side with Eq::{not_equal, equal}
+///|
+pub extend Side with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 对端：`Requester` ↔ `Executor`（vools `Side.other`）。
@@ -64,6 +70,7 @@ pub fn Side::parse(text : String) -> Result[Side, String] {
 ///
 /// 除下列边的其余组合一律非法：`PENDING→{CLAIMED,CANCELLED}`、
 /// `CLAIMED→{RUNNING,CANCELLED}`、`RUNNING→{DONE,FAILED}`。
+#derive(Eq, Debug)
 pub(all) enum TaskStatus {
   /// 需求端已提交，任务端未领
   Pending
@@ -77,7 +84,12 @@ pub(all) enum TaskStatus {
   Failed
   /// 需求端取消
   Cancelled
-} derive(Eq, Debug)
+}
+
+///|
+pub extend TaskStatus with Eq::{not_equal, equal}
+///|
+pub extend TaskStatus with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 序列化为 vools 字面量：`"pending"` / `"claimed"` / `"running"` /

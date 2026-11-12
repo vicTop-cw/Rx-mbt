@@ -428,10 +428,10 @@ fn sha256_state_to_bytes(state : Array[UInt32]) -> Bytes {
   let out : FixedArray[Byte] = FixedArray::make(SHA256_DIGEST_SIZE, b'\x00')
   for i in 0..<8 {
     let word = state[i]
-    out[i * 4] = ((word >> 24).to_int() & 0xFF).to_byte()
-    out[i * 4 + 1] = ((word >> 16).to_int() & 0xFF).to_byte()
-    out[i * 4 + 2] = ((word >> 8).to_int() & 0xFF).to_byte()
-    out[i * 4 + 3] = (word.to_int() & 0xFF).to_byte()
+    out[i * 4] = ((word >> 24).reinterpret_as_int() & 0xFF).to_byte()
+    out[i * 4 + 1] = ((word >> 16).reinterpret_as_int() & 0xFF).to_byte()
+    out[i * 4 + 2] = ((word >> 8).reinterpret_as_int() & 0xFF).to_byte()
+    out[i * 4 + 3] = (word.reinterpret_as_int() & 0xFF).to_byte()
   }
   Bytes::from_array(out)
 }

@@ -152,7 +152,7 @@ test "store · 状态流转：合法推进 / 非法拒绝 / 强制放行 / 乐�
     @rt.SqliteTaskStore::insert_tasks(store, [@rt.TaskRecord::new("s1")]),
     Ok(1),
   )
-  let empty = Json::object(Map::new())
+  let empty = Json::object(Map([], capacity=0))
   // PENDING → LOCKED 合法
   assert_eq(
     @rt.SqliteTaskStore::set_state(
@@ -278,7 +278,7 @@ test "store · 并发领取唯一性 + 优先级 + 取消/依赖门控" {
     Err(e) => fail("claim 失败: \{e}")
   }
   // hi 完成 → dep 可领
-  let empty = Json::object(Map::new())
+  let empty = Json::object(Map([], capacity=0))
   assert_eq(
     @rt.SqliteTaskStore::set_state(
       store,

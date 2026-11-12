@@ -68,8 +68,8 @@ fn ep_collector() -> (
   @ref.Ref[Array[String]],
   @rx.Observer[@rp.RhopPacket, String],
 ) {
-  let got : @ref.Ref[Array[String]] = @ref.Ref::new([])
-  let errs : @ref.Ref[Array[String]] = @ref.Ref::new([])
+  let got : @ref.Ref[Array[String]] = @ref.Ref([])
+  let errs : @ref.Ref[Array[String]] = @ref.Ref([])
   let obs = @rx.Observer::new(
     fn(pkt : @rp.RhopPacket) {
       got.val = got.val.copy() + [pkt.id + "|" + pkt.kind]
@@ -210,7 +210,7 @@ test "rhop-entry · from_filesystem_with(skip_existing=true) 不重放已存在�
   if got.val.length() != 1 {
     fail(
       "skip_existing=true 仍投递了订阅前已存在的文件: " +
-      got.val.to_string() +
+      @debug.Debug::to_repr(got.val).to_string() +
       "（疑似 Windows 路径分隔符不一致：ffi_list_files 用 path.resolve 产出反斜杠绝对路径，" +
       "watch 事件路径用 monitor/join_path 产出正斜杠 ⇒ seen 集合键不匹配）",
     )

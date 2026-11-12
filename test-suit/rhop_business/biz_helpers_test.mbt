@@ -112,11 +112,11 @@ fn biz_action_payload(action : String) -> Json {
 
 ///|
 /// 本进程「上一个」workspace（新建前会被清掉，保证任意时刻存活 ≤1 个）。
-let biz_last_workspace : Ref[String] = Ref::new("")
+let biz_last_workspace : Ref[String] = Ref("")
 
 ///|
 /// 是否已经做过一次「陈旧残留清扫」（每进程只需一次）。
-let biz_stale_swept : Ref[Bool] = Ref::new(false)
+let biz_stale_swept : Ref[Bool] = Ref(false)
 
 ///|
 /// 扫掉 `%TEMP%/rhop-biz-*` 历史残留（上一次被 kill/超时打断留下的），返回清理个数。

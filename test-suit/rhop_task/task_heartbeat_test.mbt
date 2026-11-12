@@ -335,8 +335,8 @@ test "B1 · beat 写出的文本逐字节符合 vools 格式（默认仅时间�
   let raw2 = ffi_hb_read_raw(hb_path(dir))
   let parts = raw2.trim().split(" ").collect()
   assert_eq(parts.length(), 2)
-  assert_eq(parts[0].to_string(), "2026-10-28T03:00:11.000000Z")
-  assert_eq(parts[1].to_string(), "w-1")
+  assert_eq(parts[0].to_owned(), "2026-10-28T03:00:11.000000Z")
+  assert_eq(parts[1].to_owned(), "w-1")
   // ③ 传入带微秒的时间串：保留并规整到 6 位
   assert_eq(hb.beat(Some("2026-10-28T03:00:13.987Z")), Ok(()))
   assert_eq(ffi_hb_read_raw(hb_path(dir)).trim(), "2026-10-28T03:00:13.987000Z")

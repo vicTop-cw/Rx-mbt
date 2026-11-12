@@ -3,6 +3,7 @@ import {
   "vicTop-cw/RX-MBT/rx",
   "moonbitlang/core/json",
   "moonbitlang/core/ref",
+  "moonbitlang/core/debug",
 }
 
 options(

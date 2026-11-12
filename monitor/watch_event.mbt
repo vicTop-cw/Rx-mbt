@@ -12,6 +12,7 @@
 /// 文件系统监控事件类别（归一化）
 /// 注意：node fs.watch 的 `rename` 事件语义模糊（创建/删除/重命名进入或离开
 /// 均可能报 rename），js 后端通过事件后的 exists 探测区分 Created / Removed。
+#derive(Eq, Debug)
 pub(all) enum WatchKind {
   /// 文件或目录被创建（或重命名进入监控范围）
   Created
@@ -21,10 +22,16 @@ pub(all) enum WatchKind {
   Removed
   /// 无法归一化的其他事件
   Other
-} derive(Eq, Debug)
+}
+
+///|
+pub extend WatchKind with Eq::{not_equal, equal}
+///|
+pub extend WatchKind with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 一次文件系统变更事件
+#derive(Eq, Debug)
 pub struct WatchEvent {
   /// 触发事件的路径（js 后端为绝对路径；后端无法给出文件名时为监控根路径）
   path : String
@@ -34,10 +41,16 @@ pub struct WatchEvent {
   timestamp : Int64
   /// 后端透传的原始事件类型字符串（如 "rename" / "change"），便于排查
   raw : String
-} derive(Eq, Debug)
+}
+
+///|
+pub extend WatchEvent with Eq::{not_equal, equal}
+///|
+pub extend WatchEvent with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 监控错误
+#derive(Eq, Debug)
 pub(all) enum WatchError {
   /// 路径不存在或无法访问（附后端错误信息）
   NotFound(String)
@@ -45,7 +58,12 @@ pub(all) enum WatchError {
   Unsupported(String)
   /// 其他 IO 错误
   Io(String)
-} derive(Eq, Debug)
+}
+
+///|
+pub extend WatchError with Eq::{not_equal, equal}
+///|
+pub extend WatchError with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 pub fn WatchEvent::to_string(self : WatchEvent) -> String {

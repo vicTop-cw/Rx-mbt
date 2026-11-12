@@ -61,6 +61,9 @@ pub fn LocalEndpoint::path(self : LocalEndpoint) -> String {
 }
 
 ///|
+///|
+pub extend LocalEndpoint with EndpointView::{kind, name, available, exists, read_text, write_text, remove}
+
 pub impl EndpointView for LocalEndpoint with fn kind(self) {
   "local"
 }
@@ -103,6 +106,9 @@ pub impl EndpointView for LocalEndpoint with fn remove(self, filename) {
 }
 
 ///|
+///|
+pub extend LocalEndpoint with SharedPath::{root}
+
 pub impl SharedPath for LocalEndpoint with fn available(self) {
   SharedPath::available(self.sp)
 }
@@ -175,6 +181,9 @@ pub fn FileUrlEndpoint::url(self : FileUrlEndpoint) -> String {
 }
 
 ///|
+///|
+pub extend FileUrlEndpoint with EndpointView::{kind, name, available, exists, read_text, write_text, remove}
+
 pub impl EndpointView for FileUrlEndpoint with fn kind(self) {
   "file-url"
 }
@@ -217,6 +226,9 @@ pub impl EndpointView for FileUrlEndpoint with fn remove(self, filename) {
 }
 
 ///|
+///|
+pub extend FileUrlEndpoint with SharedPath::{root}
+
 pub impl SharedPath for FileUrlEndpoint with fn available(self) {
   SharedPath::available(self.sp)
 }
@@ -293,6 +305,9 @@ pub fn HttpEndpoint::base(self : HttpEndpoint) -> String {
 }
 
 ///|
+///|
+pub extend HttpEndpoint with EndpointView::{kind, name, available, exists, read_text, write_text, remove}
+
 pub impl EndpointView for HttpEndpoint with fn kind(self) {
   "http-url"
 }
@@ -503,7 +518,7 @@ pub struct HttpResp {
 ///|
 /// 发一个同步 HTTP 请求（js 目标经子进程 node:http；非 js 返回可诊断 Err）。
 pub fn http_request(
-  method : String,
+  method_name : String,
   url : String,
   token : String?,
   body : String,
@@ -523,7 +538,7 @@ pub fn http_request(
     None => ()
   }
   let req = Json::object({
-    "method": Json::string(method),
+    "method": Json::string(method_name),
     "url": Json::string(url),
     "headers": headers,
     "body": Json::string(body),

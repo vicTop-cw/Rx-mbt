@@ -698,7 +698,7 @@ test "config · F8 语义对齐：role 空串→SEND、shared {}→None、online
 ///|
 /// 生成 depth 层嵌套的对象文本 `{"a":{"a":…1…}}`（C2-01 复现语料）。
 fn deep_json_text(depth : Int32) -> String {
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for _ in 0..<depth {
     sb.write_string("{\"a\":")
   }
@@ -729,7 +729,7 @@ test "config · C2-01：非对象 JSON 文本不再被当成文件路径（数�
 ///|
 test "config · C2-01：超深/超长 JSON 文本绝不被当成文件路径，错误串有上界" {
   // 1) 以 `{` 开头但内容非法的超长文本：给「不是合法 JSON」+ 片段截断
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   sb.write_string("{\"key\": \"k\", \"junk\": ")
   for i in 0..<12000 {
     let _ = i
@@ -773,7 +773,7 @@ test "config · C2-01：长纯文本 / 多行文本拒绝，不当路径" {
     }
   }
   // 超长单行纯文本（> CFG_PATH_MAX_LEN）
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for i in 0..<4200 {
     let _ = i
     sb.write_char('a')
@@ -792,7 +792,7 @@ test "config · C2-01：长纯文本 / 多行文本拒绝，不当路径" {
 
 ///|
 test "config · C2-01：from_file 超长路径直接判错（不把超长串交给文件系统）" {
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for i in 0..<4200 {
     let _ = i
     sb.write_char('b')

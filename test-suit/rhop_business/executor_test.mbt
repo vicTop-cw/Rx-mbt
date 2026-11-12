@@ -90,7 +90,7 @@ test "executor: 合法动作 jump.probe 执行成功 → done + result 落库" {
     None => abort("job-e1 应存在")
   }
   assert_eq(env.status, @rp.TaskStatus::Done)
-  assert_true(env.result.is_some())
+  assert_true(env.result is Some(_))
   assert_eq(jnum(mirror.count_by_status(), "done"), 1.0)
   exec.close()
 }
@@ -172,7 +172,7 @@ test "executor: report_result / report_failure 跳步补齐（Claimed → Runnin
     None => abort("job-r1 应存在")
   }
   assert_eq(done.status, @rp.TaskStatus::Done)
-  assert_true(done.result.is_some())
+  assert_true(done.result is Some(_))
   // 另一个直接 report_failure（仍是 Pending）：应补 Claimed → Running → Failed
   match exec.report_failure("job-r2", "手工失败原因") {
     Ok(_) => ()

@@ -35,6 +35,7 @@
 /// `pub(all)` 是必须的：`pub enum` 只暴露类型本身（外部包无法构造构造器，
 /// 会报 "Cannot create values of the read-only type: Send"）；rhop 包外
 /// （test-suit/* 与 config/session 调用方）需要 `Role::Send` 这样的构造器值。
+#derive(Eq, Debug)
 pub(all) enum Role {
   /// 发送端 A
   Send
@@ -42,7 +43,12 @@ pub(all) enum Role {
   Recv
   /// 中转 C
   Relay
-} derive(Eq, Debug)
+}
+
+///|
+pub extend Role with Eq::{not_equal, equal}
+///|
+pub extend Role with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 角色 → vools 字面量（大写）。
@@ -116,7 +122,7 @@ pub fn safe_filename(name : String) -> Result[String, String] {
       code == 46 ||
       code == 95 ||
       code == 45
-    if not(ok) {
+    if !ok {
       return Err(
         "包文件名只允许 A-Za-z0-9._-，遇到非法字符（码点 \{code}）: " +
         name,

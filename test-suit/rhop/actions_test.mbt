@@ -90,7 +90,7 @@ test "actions: 注册表 —— register/get_handler/list/unregister 与内置�
     Json::object({ "status": Json::string("ok"), "who": Json::string("t1") })
   }
   // 未注册前
-  assert_true(@rp.get_handler("test.t1").is_none())
+  assert_true(@rp.get_handler("test.t1") is None)
   @rp.register_action("test.t1", handler)
   // 注册后可见（注册表 ∪ 内置）
   let known = @rp.list_actions()
@@ -100,7 +100,7 @@ test "actions: 注册表 —— register/get_handler/list/unregister 与内置�
   assert_true(known.contains("jump.pull"))
   assert_true(known.contains("jump.sync"))
   assert_true(known.contains("rhop.echo"))
-  assert_true(@rp.get_handler("test.t1").is_some())
+  assert_true(@rp.get_handler("test.t1") is Some(_))
   // 同名注册覆盖旧处理器
   @rp.register_action("test.t1", fn(cfg, payload) {
     let _ = (cfg, payload)
@@ -111,11 +111,11 @@ test "actions: 注册表 —— register/get_handler/list/unregister 与内置�
   // 注销（幂等：第二次 false）
   assert_true(@rp.unregister_action("test.t1"))
   assert_true(!@rp.unregister_action("test.t1"))
-  assert_true(@rp.get_handler("test.t1").is_none())
+  assert_true(@rp.get_handler("test.t1") is None)
   assert_true(!@rp.list_actions().contains("test.t1"))
   // 注销内置动作不会生效（内置不在注册表里）
   assert_true(!@rp.unregister_action("jump.probe"))
-  assert_true(@rp.get_handler("jump.probe").is_some())
+  assert_true(@rp.get_handler("jump.probe") is Some(_))
 }
 
 ///|
@@ -298,29 +298,29 @@ test "actions: jump.pull/sync —— 无 remote_files 时明说无法离线预�
 
 ///|
 test "actions: jump_compute_sync_plan —— 五分类（upload/download/conflict/skip/delete）" {
-  let local = ac_json(
+  let local_ = ac_json(
     "{\"a\":{\"sha256\":\"x\",\"size\":1},\"b\":{\"sha256\":\"y\",\"size\":2},\"same\":{\"sha256\":\"s\",\"size\":3}}",
   )
   let remote = ac_json(
     "{\"b\":{\"sha256\":\"y2\",\"size\":2},\"same\":{\"sha256\":\"s\",\"size\":3},\"c\":{\"sha256\":\"z\",\"size\":4}}",
   )
   // both：a 上传、c 下载、b 冲突、same 跳过
-  let both = @rp.jump_compute_sync_plan(local, remote, "both", false)
+  let both = @rp.jump_compute_sync_plan(local_, remote, "both", false)
   assert_eq(ac_array(both, "upload").length(), 1)
   assert_eq(ac_array(both, "download").length(), 1)
   assert_eq(ac_array(both, "conflict").length(), 1)
   assert_eq(ac_array(both, "skip").length(), 1)
   assert_eq(ac_array(both, "delete").length(), 0)
   // upload-only：远端独有的 c 进 skip（未开 delete）
-  let up = @rp.jump_compute_sync_plan(local, remote, "upload", false)
+  let up = @rp.jump_compute_sync_plan(local_, remote, "upload", false)
   assert_eq(ac_array(up, "upload").length(), 2)
   assert_eq(ac_array(up, "download").length(), 0)
   assert_eq(ac_array(up, "delete").length(), 0)
   // upload + delete：远端独有的 c 进 delete
-  let up_del = @rp.jump_compute_sync_plan(local, remote, "upload", true)
+  let up_del = @rp.jump_compute_sync_plan(local_, remote, "upload", true)
   assert_eq(ac_array(up_del, "delete").length(), 1)
   // download-only：本地独有的 a 进 skip，b 因内容不同进 download
-  let down = @rp.jump_compute_sync_plan(local, remote, "download", false)
+  let down = @rp.jump_compute_sync_plan(local_, remote, "download", false)
   assert_eq(ac_array(down, "download").length(), 2)
   assert_eq(ac_array(down, "upload").length(), 0)
   assert_eq(ac_array(down, "skip").length(), 2)

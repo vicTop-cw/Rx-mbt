@@ -140,7 +140,7 @@ test "C4-E2E · relay 多进程并发投递：包名互不串、无丢包" {
   }
   let base = "http://127.0.0.1:" + server.port().to_string()
   // 顺序投递 6 个不同包（独立进程各跑一次；并发由「同一进程内多次 spawn」近似）
-  let expected : Map[String, String] = Map::new()
+  let expected : Map[String, String] = Map([], capacity=0)
   for i in 0..<6 {
     let name = "pkg-" + i.to_string() + ".bin"
     let body = "payload-for-" + name

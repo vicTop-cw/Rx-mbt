@@ -29,9 +29,9 @@
 /// 十六进制数字字符（小写）：0..15 → '0'..'9' / 'a'..'f'。
 fn hex_digit_char(value : Int32) -> Char {
   if value < 10 {
-    Char::from_int(48 + value)
+    Int::unsafe_to_char(48 + value)
   } else {
-    Char::from_int(87 + value)
+    Int::unsafe_to_char(87 + value)
   }
 }
 
@@ -85,7 +85,7 @@ fn write_canonical_string(
       i = i + 1
     } else {
       if i > run_start {
-        buf.write_string(text.substring(start=run_start, end=i))
+        buf.write_string(text[run_start:i].to_owned())
       }
       write_canonical_escape_unit(buf, code)
       i = i + 1
@@ -93,7 +93,7 @@ fn write_canonical_string(
     }
   }
   if run_start < n {
-    buf.write_string(text.substring(start=run_start, end=n))
+    buf.write_string(text[run_start:n].to_owned())
   }
   buf.write_char('"')
 }
@@ -150,8 +150,8 @@ fn compare_codepoint_bytes(a : Bytes, b : Bytes) -> Int32 {
   let n = if na < nb { na } else { nb }
   let mut i = 0
   while i < n {
-    let x = a[i].to_uint().to_int()
-    let y = b[i].to_uint().to_int()
+    let x = a[i].to_uint().reinterpret_as_int()
+    let y = b[i].to_uint().reinterpret_as_int()
     if x != y {
       return x - y
     }

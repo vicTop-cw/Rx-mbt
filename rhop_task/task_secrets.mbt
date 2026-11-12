@@ -262,7 +262,7 @@ pub fn SecretResolver::new(
     strict,
     warn_plaintext,
     skip_paths: skip_paths.copy(),
-    findings: @ref.Ref::new([]),
+    findings: @ref.Ref([]),
     warner: None,
   }
 }
@@ -538,7 +538,7 @@ fn SecretResolver::walk(
     return Ok(Json::string(resolved))
   }
   // 兄弟键 * _plain / * _cipher
-  let bases : Map[String, Bool] = Map::new()
+  let bases : Map[String, Bool] = Map([], capacity=0)
   for key, _ in obj {
     if key.has_suffix(plain_suffix) || key.has_suffix(cipher_suffix) {
       let base = if key.has_suffix(plain_suffix) {
@@ -549,8 +549,8 @@ fn SecretResolver::walk(
       bases[base] = true
     }
   }
-  let out : Map[String, Json] = Map::new()
-  let node_resolved : Map[String, Bool] = Map::new()
+  let out : Map[String, Json] = Map([], capacity=0)
+  let node_resolved : Map[String, Bool] = Map([], capacity=0)
   for key, value in obj {
     if key.has_suffix(plain_suffix) || key.has_suffix(cipher_suffix) {
       continue
@@ -576,7 +576,7 @@ fn SecretResolver::walk(
     }
   }
   // 收敛兄弟键
-  let from_pairs : Map[String, Bool] = Map::new()
+  let from_pairs : Map[String, Bool] = Map([], capacity=0)
   for base, _ in bases {
     let plain_key_name = base + plain_suffix
     let cipher_key_name = base + cipher_suffix

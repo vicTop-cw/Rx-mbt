@@ -622,7 +622,7 @@ pub fn validate_task_id(task_id : String) -> Result[Unit, String] {
       code == 45 ||
       code == 46 ||
       code == 95
-    if not(ok) {
+    if !ok {
       return Err(
         "task_id 非法：仅允许 [A-Za-z0-9._-]，实际含 \{ch}（\{task_id}）",
       )
@@ -654,7 +654,7 @@ pub fn rhop_join_checked(a : String, b : String) -> Result[String, String] {
   let joined = rhop_join(a, b)
   let base = rhop_normalize_path(a)
   let full = rhop_normalize_path(joined)
-  if not(full == base || full.has_prefix(base + "/")) {
+  if !(full == base || full.has_prefix(base + "/")) {
     return Err(
       "路径拼接被拒绝：规范化后逃出基准目录（base=\{base} → result=\{full}）",
     )

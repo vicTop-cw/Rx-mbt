@@ -98,7 +98,7 @@ fn resolve_text(
   let cfg = @json.parse(text) catch {
     _ => fail("测试配置 JSON 非法: " + text)
   }
-  let warnings : @ref.Ref[Int32] = @ref.Ref::new(0)
+  let warnings : @ref.Ref[Int32] = @ref.Ref(0)
   let resolver = @rt.SecretResolver::new(
     None,
     strict,
@@ -187,8 +187,8 @@ test "secrets · skip_paths：根密钥 key 整棵跳过（不告警不改写）
       // 原样保留（未被收敛成标量、未被改写）
       assert_true(k.contains("plain"))
       assert_eq(
-        k.get("plain").unwrap_or(Json::null()).to_string(),
-        Json::string("master-secret").to_string(),
+        Json::stringify(k.get("plain").unwrap_or(Json::null())),
+        Json::stringify(Json::string("master-secret")),
       )
     }
     _ => fail("key 节点应保持对象形态: " + Json::stringify(resolved))
@@ -277,7 +277,7 @@ test "secrets · 非对象配置 / 空配置" {
     Ok(_) => fail("非对象应当 Err")
   }
   // 空对象：原样返回，无 finding
-  match resolver.resolve(Json::object(Map::new())) {
+  match resolver.resolve(Json::object(Map([], capacity=0))) {
     Ok(v) => assert_eq(Json::stringify(v), "{}")
     Err(e) => fail("空对象不应失败: \{e}")
   }
@@ -320,7 +320,7 @@ test "secrets · find_secret_fields 三种 kind（leaf / pair / node）" {
     _ => fail("x")
   }
   let fields = @rt.find_secret_fields(cfg)
-  let by_path : Map[String, @rt.SecretField] = Map::new()
+  let by_path : Map[String, @rt.SecretField] = Map([], capacity=0)
   for f in fields {
     by_path[f.path] = f
   }
@@ -352,5 +352,5 @@ test "secrets · find_secret_fields 对数组下标路径与空配置" {
   assert_eq(fields[0].path, "online[0].password")
   assert_eq(fields[0].kind, "leaf")
   assert_eq(@rt.find_secret_fields(Json::null()).length(), 0)
-  assert_eq(@rt.find_secret_fields(Json::object(Map::new())).length(), 0)
+  assert_eq(@rt.find_secret_fields(Json::object(Map([], capacity=0))).length(), 0)
 }

@@ -87,7 +87,7 @@ fn run_watch(shared : String, skip_existing : Bool) -> Unit {
       expect = n
     }
   }
-  let got : @ref.Ref[Int32] = @ref.Ref::new(0)
+  let got : @ref.Ref[Int32] = @ref.Ref(0)
   let source = if skip_existing {
     @rhop.from_filesystem_with(shared, cipher, true)
   } else {

@@ -244,11 +244,14 @@ fn rstrip_crlf(text : String) -> String {
   if end == text.length() {
     text
   } else {
-    text.substring(start=0, end~)
+    text[:].to_owned()
   }
 }
 
 ///|
+///|
+pub extend CommandClipboardBackend with ClipboardBackend::{name, read, write}
+
 pub impl ClipboardBackend for CommandClipboardBackend with fn name(self) {
   self.backend_name
 }
@@ -692,7 +695,7 @@ fn ClipboardFileSync::sync_push(self : ClipboardFileSync) -> Json {
     None => return changed_reason(false, "无可用剪贴板后端")
     Some(b) => b
   }
-  let local = read_clipboard(backend~)
+  let local_ = read_clipboard(backend~)
   let file_text = match self.read_file_doc() {
     None => ""
     Some(doc) =>
@@ -705,14 +708,14 @@ fn ClipboardFileSync::sync_push(self : ClipboardFileSync) -> Json {
         _ => ""
       }
   }
-  if local == file_text {
-    self.last_text = Some(local)
+  if local_ == file_text {
+    self.last_text = Some(local_)
     return changed_reason(false, "内容一致")
   }
-  match self.write_file(local) {
+  match self.write_file(local_) {
     Ok(_) => {
-      self.last_text = Some(local)
-      changed_with_len(true, local.char_length())
+      self.last_text = Some(local_)
+      changed_with_len(true, local_.char_length())
     }
     Err(e) => changed_reason(false, "文件写入失败: " + e)
   }
@@ -742,11 +745,11 @@ fn ClipboardFileSync::sync_pull(self : ClipboardFileSync) -> Json {
     return changed_reason(false, "内容未变化")
   }
   let resolved = self.resolve_backend()
-  let local = match resolved {
+  let local_ = match resolved {
     Some(b) => read_clipboard(backend=b)
     None => ""
   }
-  if text == local {
+  if text == local_ {
     self.last_text = Some(text)
     return changed_reason(false, "内容一致")
   }

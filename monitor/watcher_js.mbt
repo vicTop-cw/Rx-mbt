@@ -46,7 +46,7 @@ fn watch_path(path : String) -> @rx.Observable[WatchEvent, WatchError] {
 /// 拼接监控根路径与 fs.watch 回调给出的相对文件名。
 /// 统一使用 "/" 分隔：node fs 在 Windows 下同样接受 "/"，可跨平台。
 fn join_path(root : String, fname : String) -> String {
-  if root.ends_with("/") || root.ends_with("\\") {
+  if root.has_suffix("/") || root.has_suffix("\\") {
     root + fname
   } else {
     root + "/" + fname

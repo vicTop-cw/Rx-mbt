@@ -1,6 +1,7 @@
 import {
   "vicTop-cw/RX-MBT/rhop",
   "vicTop-cw/RX-MBT/rx",
+  "moonbitlang/core/string",
   "moonbitlang/core/json",
   "moonbitlang/core/ref",
 }

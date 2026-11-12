@@ -730,7 +730,7 @@ pub fn SqliteTaskStore::claim_next(
     }
     Ok(v) => v
   }
-  let done : Map[String, Bool] = Map::new()
+  let done : Map[String, Bool] = Map([], capacity=0)
   for row in done_rows {
     match row {
       { "task_name": String(n), .. } => done[n] = true
@@ -1042,7 +1042,7 @@ pub fn SqliteTaskStore::count_by_state(
     Err(e) => return Err(e)
     Ok(v) => v
   }
-  let out : Map[String, Int32] = Map::new()
+  let out : Map[String, Int32] = Map([], capacity=0)
   for row in rows {
     match row {
       { "state": String(s), "n": Number(n, ..), .. } => out[s] = n.to_int()
@@ -1116,7 +1116,7 @@ pub fn SqliteTaskStore::summary(self : SqliteTaskStore) -> Result[Json, String] 
     Err(e) => return Err(e)
     Ok(v) => v
   }
-  let obj : Map[String, Json] = Map::new()
+  let obj : Map[String, Json] = Map([], capacity=0)
   for s in task_state_all() {
     let key = s.to_string()
     obj[key] = Json::number(counts.get_or_default(key, 0).to_double())
@@ -1157,7 +1157,7 @@ pub fn SqliteTaskStore::apply_task(
       } else {
         // 新版本：按列覆盖（保持当前状态流转仍走校验，同步场景 force）
         let d = rec.to_dict()
-        let extra : Map[String, Json] = Map::new()
+        let extra : Map[String, Json] = Map([], capacity=0)
         for key in mutable_fields() {
           extra[key] = jget_or_null(d, key)
         }

@@ -34,6 +34,7 @@
 
 ///|
 /// 会话/队列方向（vools `session.Role`：SEND / RECV / RELAY）。
+#derive(Eq, Debug)
 pub(all) enum TaskRole {
   /// A 侧：提交方
   Send
@@ -41,7 +42,12 @@ pub(all) enum TaskRole {
   Recv
   /// C 侧：中转
   Relay
-} derive(Eq, Debug)
+}
+
+///|
+pub extend TaskRole with Eq::{not_equal, equal}
+///|
+pub extend TaskRole with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 序列化为 vools 字面量（大写）。
@@ -176,10 +182,10 @@ fn jstr_array(v : Json?) -> Array[String] {
 
 ///|
 /// 深度合并两个 JSON 对象（override 优先；嵌套对象递归合并，数组/标量直接覆盖）。
-fn deep_merge(base : Json, override : Json) -> Json {
-  match (base, override) {
+fn deep_merge(base : Json, overrides : Json) -> Json {
+  match (base, overrides) {
     (Object(b), Object(o)) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = Map([], capacity=0)
       for k, v in b {
         out[k] = v
       }
@@ -199,14 +205,14 @@ fn deep_merge(base : Json, override : Json) -> Json {
 /// 把「字符串简写」或对象统一成对象（`{key_name: 字符串}`）。
 fn as_dict(value : Json?, key_name : String) -> Result[Json, String] {
   match value {
-    None => Ok(Json::object(Map::new()))
+    None => Ok(Json::object(Map([], capacity=0)))
     Some(Object(_)) =>
       match value {
         Some(v) => Ok(v)
-        None => Ok(Json::object(Map::new()))
+        None => Ok(Json::object(Map([], capacity=0)))
       }
     Some(String(s)) => {
-      let m : Map[String, Json] = Map::new()
+      let m : Map[String, Json] = Map([], capacity=0)
       m[key_name] = Json::string(s)
       Ok(Json::object(m))
     }
@@ -256,7 +262,7 @@ pub fn default_exec() -> Json {
     "allow": Json::array([Json::string("action:*"), Json::string("handler:*")]),
     "allow_any": Json::boolean(false),
     "workdir": Json::string(""),
-    "env": Json::object(Map::new()),
+    "env": Json::object(Map([], capacity=0)),
     "timeout_sec": Json::number(3600.0),
     "shell": Json::boolean(false),
   })
@@ -574,7 +580,7 @@ pub fn TaskConfig::from_dict(
   // 主密钥回写进 resolved（key 节点被 skip 过，保持原样；字符串写法归一为密文持有者形态）
   resolved = match resolved {
     Object(m) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = Map([], capacity=0)
       for k, v in m {
         out[k] = v
       }
@@ -622,7 +628,7 @@ pub fn TaskConfig::from_dict(
     None =>
       match jget(queue_raw, "store_kind") {
         Some(v) => v
-        None => Json::object(Map::new())
+        None => Json::object(Map([], capacity=0))
       }
   }
   let store_spec = match as_dict(Some(store_raw), "kind") {
@@ -649,13 +655,13 @@ pub fn TaskConfig::from_dict(
     Some(Object(_)) =>
       match hb_raw_in {
         Some(v) => v
-        None => Json::object(Map::new())
+        None => Json::object(Map([], capacity=0))
       }
     Some(other) =>
       return Err(
         "配置 queue.heartbeat 必须是对象或文件名字符串，实际 \{Json::stringify(other)}",
       )
-    None => Json::object(Map::new())
+    None => Json::object(Map([], capacity=0))
   }
   let default_hb = Json::object({
     "file": Json::string(""),
@@ -751,7 +757,7 @@ pub fn TaskConfig::from_json_text(
 fn mask_keys(node : Json, keys : Array[String]) -> Json {
   match node {
     Object(m) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = Map([], capacity=0)
       for k, v in m {
         let hit = keys.contains(k)
         if hit {
@@ -783,7 +789,7 @@ fn mask_keys(node : Json, keys : Array[String]) -> Json {
 pub fn TaskConfig::to_dict(self : TaskConfig, mask : Bool) -> Json {
   let base = match self.resolved {
     Object(m) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = Map([], capacity=0)
       for k, v in m {
         out[k] = v
       }
@@ -811,7 +817,7 @@ pub fn TaskConfig::to_dict(self : TaskConfig, mask : Bool) -> Json {
   ])
   match masked_all {
     Object(m) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = Map([], capacity=0)
       for k, v in m {
         out[k] = v
       }

@@ -365,9 +365,9 @@ pub fn jump_pull(cfg : Json, payload : Json?) -> Json {
             ),
           })
         Some(remote) => {
-          let local = jump_scan_local(local_path, exclude)
+          let local_ = jump_scan_local(local_path, exclude)
           let plan_json = jump_compute_sync_plan(
-            local, remote, "download", false,
+            local_, remote, "download", false,
           )
           Json::object({
             "status": Json::string("ok"),
@@ -419,9 +419,9 @@ pub fn jump_sync(cfg : Json, payload : Json?) -> Json {
             ),
           })
         Some(remote) => {
-          let local = jump_scan_local(local_path, exclude)
+          let local_ = jump_scan_local(local_path, exclude)
           let plan_json = jump_compute_sync_plan(
-            local, remote, direction, delete_extra,
+            local_, remote, direction, delete_extra,
           )
           Json::object({
             "status": Json::string("ok"),
@@ -695,8 +695,8 @@ fn jump_unsupported(op : String, planned : Int32) -> Json {
 
 ///|
 /// 两条文件记录的内容是否相同（优先 sha256；缺失时退回 size 比较）。
-fn jump_same_content(local : Json?, remote : Json?) -> Bool {
-  let l = match local {
+fn jump_same_content(local_ : Json?, remote : Json?) -> Bool {
+  let l = match local_ {
     Some(v) => v
     None => return false
   }

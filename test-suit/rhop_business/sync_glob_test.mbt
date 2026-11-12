@@ -41,9 +41,9 @@ test "sync: 构造缺省值（pattern 空 → *，manifest 落 target 下）" {
   let one = sf.sync_once()
   match one {
     Object(members) => {
-      assert_true(members.get("pulled").is_some())
-      assert_true(members.get("skipped").is_some())
-      assert_true(members.get("errors").is_some())
+      assert_true(members.get("pulled") is Some(_))
+      assert_true(members.get("skipped") is Some(_))
+      assert_true(members.get("errors") is Some(_))
     }
     _ => abort("sync_once 应返回 JSON 对象")
   }

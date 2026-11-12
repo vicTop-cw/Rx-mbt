@@ -35,7 +35,7 @@ pub trait AbstractSigner {
 /// 与 vools `json.dumps({"task_id": task_id, "result": result}, sort_keys=True)`
 /// 逐字节一致。
 fn signer_preimage(task_id : String, result : Json) -> String {
-  let fields : Map[String, Json] = Map::new()
+  let fields : Map[String, Json] = Map([], capacity=0)
   fields["task_id"] = Json::string(task_id)
   fields["result"] = result
   canonical_json_ascii(Json::object(fields))
@@ -65,6 +65,9 @@ pub fn FileHashSigner::signature(
 }
 
 ///|
+///|
+pub extend FileHashSigner with AbstractSigner::{sign, verify}
+
 pub impl AbstractSigner for FileHashSigner with fn sign(self, task_id, result) {
   Some(self.signature(task_id, result))
 }
@@ -154,6 +157,9 @@ fn NPUSigner::resolved_serial(self : NPUSigner) -> String {
 }
 
 ///|
+///|
+pub extend NPUSigner with AbstractSigner::{sign, verify}
+
 pub impl AbstractSigner for NPUSigner with fn sign(self, task_id, result) {
   Some(
     self.marker +

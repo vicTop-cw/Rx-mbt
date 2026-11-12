@@ -26,6 +26,9 @@ pub fn LocalSharedPath::new(root : String) -> LocalSharedPath {
 ///|
 /// 根目录（"/" 分隔）。注意：契约里的 `SharedPath::root` 返回 `String?`，
 /// 本实现在 trait 里实现；这里不再额外提供同名 inherent 方法以免歧义。
+///|
+pub extend LocalSharedPath with SharedPath::{available, write_text, read_text, exists, remove, name, root}
+
 pub impl SharedPath for LocalSharedPath with fn available(self) {
   match fs_ensure_dir(self.root) {
     Ok(_) => true
@@ -75,7 +78,7 @@ pub impl SharedPath for LocalSharedPath with fn root(self) {
 /// 路径归一化为 "/" 分隔：反斜杠转正斜杠、折叠重复斜杠、去尾斜杠（保留盘符根）。
 pub fn normalize_path(p : String) -> String {
   let s = p.replace_all(old="\\", new="/")
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   let mut prev_slash = false
   for i in 0..<s.length() {
     let ch = s.get_char(i).unwrap_or('/')
@@ -105,7 +108,7 @@ pub fn normalize_path(p : String) -> String {
 /// 拼接 shared path 与文件名（统一 "/"）。
 pub fn join_shared(root : String, filename : String) -> String {
   let f = normalize_path(filename)
-  let f = if f.has_prefix("/") { f.substring(start=1) } else { f }
+  let f = if f.has_prefix("/") { f[1:].to_owned() } else { f }
   if root == "" {
     f
   } else if root.has_suffix("/") {
