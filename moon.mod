@@ -11,7 +11,7 @@
 
 name = "vicTop-cw/RX-MBT"
 
-version = "0.4.1"
+version = "0.4.2"
 
 readme = "README.mbt.md"
 
@@ -25,3 +25,6 @@ preferred_target = "wasm"
 
 description = "Rx-Rust 的 MoonBit 复刻：基于 Observer 模式的响应式编程库（Observable / Subject / Scheduler / 操作符），零外部依赖。"
 
+import {
+  "moonbitlang/async@0.22.9",
+}

@@ -65,9 +65,11 @@ pub fn FileHashSigner::signature(
 }
 
 ///|
+
 ///|
 pub extend FileHashSigner with AbstractSigner::{sign, verify}
 
+///|
 pub impl AbstractSigner for FileHashSigner with fn sign(self, task_id, result) {
   Some(self.signature(task_id, result))
 }
@@ -157,9 +159,11 @@ fn NPUSigner::resolved_serial(self : NPUSigner) -> String {
 }
 
 ///|
+
 ///|
 pub extend NPUSigner with AbstractSigner::{sign, verify}
 
+///|
 pub impl AbstractSigner for NPUSigner with fn sign(self, task_id, result) {
   Some(
     self.marker +

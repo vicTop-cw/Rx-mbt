@@ -352,5 +352,8 @@ test "secrets · find_secret_fields 对数组下标路径与空配置" {
   assert_eq(fields[0].path, "online[0].password")
   assert_eq(fields[0].kind, "leaf")
   assert_eq(@rt.find_secret_fields(Json::null()).length(), 0)
-  assert_eq(@rt.find_secret_fields(Json::object(Map([], capacity=0))).length(), 0)
+  assert_eq(
+    @rt.find_secret_fields(Json::object(Map([], capacity=0))).length(),
+    0,
+  )
 }

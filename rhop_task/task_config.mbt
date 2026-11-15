@@ -46,6 +46,7 @@ pub(all) enum TaskRole {
 
 ///|
 pub extend TaskRole with Eq::{not_equal, equal}
+
 ///|
 pub extend TaskRole with @moonbitlang/core/debug.Debug::{to_repr}
 

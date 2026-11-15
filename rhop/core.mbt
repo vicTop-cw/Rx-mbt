@@ -21,6 +21,7 @@ pub(all) enum Side {
 
 ///|
 pub extend Side with Eq::{not_equal, equal}
+
 ///|
 pub extend Side with @moonbitlang/core/debug.Debug::{to_repr}
 
@@ -88,6 +89,7 @@ pub(all) enum TaskStatus {
 
 ///|
 pub extend TaskStatus with Eq::{not_equal, equal}
+
 ///|
 pub extend TaskStatus with @moonbitlang/core/debug.Debug::{to_repr}
 

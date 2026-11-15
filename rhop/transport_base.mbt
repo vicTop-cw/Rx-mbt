@@ -104,9 +104,19 @@ pub fn EndpointSharedPath::new(view : &EndpointView) -> EndpointSharedPath {
 }
 
 ///|
-///|
-pub extend EndpointSharedPath with SharedPath::{available, write_text, read_text, exists, remove, name, root}
 
+///|
+pub extend EndpointSharedPath with SharedPath::{
+  available,
+  write_text,
+  read_text,
+  exists,
+  remove,
+  name,
+  root,
+}
+
+///|
 pub impl SharedPath for EndpointSharedPath with fn available(self) {
   EndpointView::available(self.view)
 }
@@ -178,9 +188,19 @@ pub fn SharedPathView::read_name(self : SharedPathView) -> String {
 }
 
 ///|
-///|
-pub extend SharedPathView with SharedPath::{available, write_text, read_text, exists, remove, name, root}
 
+///|
+pub extend SharedPathView with SharedPath::{
+  available,
+  write_text,
+  read_text,
+  exists,
+  remove,
+  name,
+  root,
+}
+
+///|
 pub impl SharedPath for SharedPathView with fn available(self) {
   SharedPath::available(self.write_view) &&
   SharedPath::available(self.read_view)

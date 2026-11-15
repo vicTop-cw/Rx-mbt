@@ -26,13 +26,16 @@ pub(all) enum WatchKind {
 
 ///|
 pub extend WatchKind with Eq::{not_equal, equal}
+
 ///|
 pub extend WatchKind with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 一次文件系统变更事件
+///
+/// 可见性说明：`pub(all)` 供外部消费者（如 mcp-watcher）跨包引用与模式匹配。
 #derive(Eq, Debug)
-pub struct WatchEvent {
+pub(all) struct WatchEvent {
   /// 触发事件的路径（js 后端为绝对路径；后端无法给出文件名时为监控根路径）
   path : String
   /// 事件类别
@@ -45,6 +48,7 @@ pub struct WatchEvent {
 
 ///|
 pub extend WatchEvent with Eq::{not_equal, equal}
+
 ///|
 pub extend WatchEvent with @moonbitlang/core/debug.Debug::{to_repr}
 
@@ -62,6 +66,7 @@ pub(all) enum WatchError {
 
 ///|
 pub extend WatchError with Eq::{not_equal, equal}
+
 ///|
 pub extend WatchError with @moonbitlang/core/debug.Debug::{to_repr}
 

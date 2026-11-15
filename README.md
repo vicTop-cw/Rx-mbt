@@ -70,7 +70,7 @@ moon test       # 运行全部测试
 | 编译目标 | `wasm`（`preferred_target = "wasm"`，见 `moon.mod`） |
 | 测试后端 | `moon test` 默认 wasm 后端；监控 / rhop 相关测试在 `js` 与 `native` 目标 |
 | 库版本 | `vicTop-cw/RX-MBT@0.4.0`（`moon.mod` 的 `version` 字段） |
-| 测试数量 | 全模块 **wasm 612 / js 825 / native 612**（2026-10-28 C3 快照，Windows 与 WSL 逐字一致）；rx 核心套件见 `TEST_REPORT.md`，rhop 明细见下方 rhop 章节与矩阵 |
+| 测试数量 | 全模块 **native 645 / js 888**（2026-11-15 复核，Windows 与 WSL 逐字一致）；rx 核心套件见 `TEST_REPORT.md`，rhop 明细见下方 rhop 章节与矩阵 |
 | 基准测试 | `test-suit/bench`（`#skip` 默认跳过，`moon test -g "bench"` 运行） |
 
 > 工具链版本以 `moon version` 输出为准。要求 `moon >= 0.1.20260724`（本项目使用了较新的 `moon.mod` / `moon.pkg` 语法与 Feature flags：`rr_moon_mod, rr_moon_pkg`）。

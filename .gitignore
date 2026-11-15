@@ -40,3 +40,28 @@ fist-mbt/reports/run-logs/
 # C4: 运行时生成的互操作产物（含随机 IV，不入库；见 fist-mbt/reports/.gitignore）
 test-suit/rhop_js/fixtures/moonbit_vectors.json
 fist-mbt/reports/moonbit_vectors_full.json
+
+# native 白盒测试的运行时临时目录（测试内创建，测试后残留）
+rhop_native_test/
+
+# 工具本地配置（非项目内容）
+.arts/
+
+# 误入的 Python 侧内容（本项目是 MoonBit，src/ 与 pytest 用例不属于本仓库）
+/src/
+/test-suit/core/test_generate_2048.py
+
+# 根目录散落的构建/测试运行日志（临时产物，不入库）
+/*_output.txt
+/*_test*.txt
+/check_err.txt
+/check_full.txt
+/build_full.txt
+/final_err.txt
+/final_test.txt
+/full_test.txt
+/info_output.txt
+/js_fail.txt
+/test_output.txt
+/test_result.txt
+/async_info.txt

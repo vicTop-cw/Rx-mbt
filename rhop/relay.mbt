@@ -235,9 +235,11 @@ pub fn RelayChannel::base(self : RelayChannel) -> String {
 }
 
 ///|
+
 ///|
 pub extend RelayChannel with OnlineChannel::{name, available, send, receive}
 
+///|
 pub impl OnlineChannel for RelayChannel with fn name(self) {
   "relay:" + self.base()
 }

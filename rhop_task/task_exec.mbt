@@ -224,7 +224,11 @@ fn payload_argv(m : Map[String, Json]) -> Array[String] {
 pub fn run_payload(policy : ExecPolicy, payload : Json) -> ExecResult {
   let started = @env.now()
   let finish = fn(r : ExecResult) -> ExecResult {
-    { ..r, duration_ms: @env.now().reinterpret_as_int64() - started.reinterpret_as_int64(), }
+    {
+      ..r,
+      duration_ms: @env.now().reinterpret_as_int64() -
+      started.reinterpret_as_int64(),
+    }
   }
   let lang = detect_language(payload)
   let obj = match payload {
@@ -324,7 +328,8 @@ pub fn run_payload(policy : ExecPolicy, payload : Json) -> ExecResult {
                 status.to_string() +
                 (if stderr == "" { "" } else { "；stderr: " + stderr }),
               ),
-              duration_ms: @env.now().reinterpret_as_int64() - started.reinterpret_as_int64(),
+              duration_ms: @env.now().reinterpret_as_int64() -
+              started.reinterpret_as_int64(),
             })
           }
         }
@@ -374,14 +379,308 @@ fn run_cli(
 }
 
 ///|
-/// 非 js：无子进程能力，返回可诊断 Err。
-#cfg(not(target="js"))
+/// native：使用 C FFI 调用系统命令。
+/// 返回协议 v2：exit_code(4, 大端) + stdout_len(4, 大端) + stdout + stderr；
+/// 超时哨兵为 7 字节 "timeout"（C 侧 stubs 约定）。
+/// 注：数组传参用 FixedArray[Bytes]（C ABI 稳定映射 T*），长度显式传入。
+///
+/// 门控说明：extern "C" 在 wasm 后端不受支持，因此这里必须精确门控到
+/// native，不能用 `#cfg(not(target="js"))`（那会把 wasm 一并纳入）。
+/// wasm 走下面的可诊断 Err 桩。
+#cfg(target="native")
+#owned(prog)
+#borrow(args)
+extern "c" fn moonbit_cmd_run(
+  prog : Bytes,
+  args : FixedArray[Bytes],
+  args_count : Int32,
+  timeout_ms : Int32,
+) -> Bytes = "moonbit_cmd_run"
+
+///|
+/// native：C FFI 执行命令，返回 (退出码, stdout, stderr)。
+#cfg(target="native")
 fn run_cli(
   prog : String,
   args : Array[String],
   timeout_ms : Int32,
 ) -> Result[(Int32, String, String), String] {
-  Err(
-    "rhop_task: CLI 执行仅 js 目标可用（wasm/native 无子进程能力）",
+  let prog_bytes = @utf8.encode(prog)
+  let args_fixed = FixedArray::from_array(
+    args.map(fn(a : String) { @utf8.encode(a) }),
   )
+  let result_bytes = moonbit_cmd_run(
+    prog_bytes,
+    args_fixed,
+    args.length(),
+    timeout_ms,
+  )
+  let len = result_bytes.length()
+
+  // 超时哨兵：恰好 7 字节 "timeout"
+  if len == 7 {
+    let msg = @utf8.decode_lossy(result_bytes)
+    if msg == "timeout" {
+      return Err("timeout")
+    }
+  }
+
+  // 协议 v2：至少 8 字节头（空输出合法）
+  if len < 8 {
+    return Err("命令执行失败")
+  }
+
+  // exit_code（4 字节大端；Byte::to_int 转 Int32 后位运算）
+  let exit_code = (result_bytes[0].to_int() << 24) |
+    (result_bytes[1].to_int() << 16) |
+    (result_bytes[2].to_int() << 8) |
+    result_bytes[3].to_int()
+
+  // stdout_len（4 字节大端）
+  let stdout_len = (result_bytes[4].to_int() << 24) |
+    (result_bytes[5].to_int() << 16) |
+    (result_bytes[6].to_int() << 8) |
+    result_bytes[7].to_int()
+
+  if stdout_len < 0 || len < 8 + stdout_len {
+    return Err("命令执行失败：输出长度异常")
+  }
+
+  // 输出按视图切片（get_view 返回 BytesView?，decode_lossy 接受 BytesView）
+  match result_bytes.get_view(start=8, end=8 + stdout_len) {
+    Some(stdout_view) => {
+      let stdout = @utf8.decode_lossy(stdout_view)
+      match result_bytes.get_view(start=8 + stdout_len, end=len) {
+        Some(stderr_view) => {
+          let stderr = @utf8.decode_lossy(stderr_view)
+          Ok((exit_code, stdout, stderr))
+        }
+        None => Err("命令执行失败：stderr 视图异常")
+      }
+    }
+    None => Err("命令执行失败：stdout 视图异常")
+  }
+}
+
+///|
+/// wasm：无子进程能力（wasm 后端不支持 extern "C"），返回可诊断错误。
+#cfg(target="wasm")
+fn run_cli(
+  prog : String,
+  args : Array[String],
+  timeout_ms : Int32,
+) -> Result[(Int32, String, String), String] {
+  let _ = (prog, args, timeout_ms)
+  Err(
+    "rhop_task: CLI 执行在 wasm 目标不可用（无子进程能力；native/js 可用）",
+  )
+}
+
+// ---------------------------------------------------------------------------
+// R3 · 命令执行作为响应式 source（新增 API，供 mcp-watcher 复用）
+// ---------------------------------------------------------------------------
+
+///|
+/// 命令执行结果（响应式 API）。
+pub(all) struct CommandResult {
+  /// 退出码（0 为成功）
+  exit_code : Int32
+  /// 标准输出（UTF-8 文本）
+  stdout : String
+  /// 标准错误（UTF-8 文本）
+  stderr : String
+  /// 执行耗时（毫秒）
+  duration_ms : Int64
+}
+
+///|
+/// 命令执行错误。
+pub(all) enum ExecError {
+  /// 策略拒绝（未在 allow 中且 allow_any=false）
+  PolicyDenied(String)
+  /// 无法启动进程
+  SpawnFailed(String)
+  /// 执行超时
+  Timeout
+  /// 输出解码失败（非 UTF-8）
+  DecodeFailed(String)
+}
+
+///|
+/// Sink 封装：把一个 action 流扇入命令执行。
+/// 订阅即执行，payload 经 policy 白名单校验后发射结果。
+pub fn command_sink(policy : ExecPolicy) -> (Json) -> Unit {
+  fn(payload : Json) {
+    let _ = run_command(policy, payload).subscribe_on_next(fn(_res) { () })
+  }
+}
+
+///|
+/// 冷 Observable：订阅即执行命令，发射执行结果后完成。
+/// 安全模型：沿用 ExecPolicy 白名单（allow / allow_any / timeout_sec）；
+/// 一律 argv 数组 + shell=false，仅显式需要时 spawn_shell。
+///
+/// 实现策略：
+///   - js：复用现有 ffi_run_cli（node spawnSync，shell=false）
+///   - native：@process.run(stdout=Collect, stderr=Collect)，async 任务组内执行
+///   - wasm：返回可诊断错误（无子进程能力）
+#cfg(target="js")
+pub fn run_command(
+  policy : ExecPolicy,
+  payload : Json,
+) -> @rx.Observable[CommandResult, ExecError] {
+  @rx.Observable::new(fn(
+    observer : @rx.Observer[CommandResult, ExecError],
+  ) -> @rx.Subscription {
+    // 解析 payload：先判断是否为 Object，再取字段
+    let argv = match payload {
+      Json::Object(obj) =>
+        match obj.get("argv") {
+          Some(Json::Array(a)) => {
+            let arr : Array[String] = []
+            for j in a.iter() {
+              match j {
+                Json::String(s) => arr.push(s)
+                _ => ()
+              }
+            }
+            Some(arr)
+          }
+          _ => None
+        }
+      _ => None
+    }
+    let argv = argv.unwrap_or([])
+    if argv.length() == 0 {
+      observer.on_error(
+        ExecError::PolicyDenied(
+          "rhop_task: 命令载荷缺少 argv".to_string(),
+        ),
+      )
+      return @rx.Subscription::empty()
+    }
+    let prog = argv[0]
+    let need = "cli:" + prog
+    if !policy.allows(need) {
+      observer.on_error(
+        ExecError::PolicyDenied(
+          "rhop_task: 执行策略拒绝 " +
+          need +
+          "（默认只放行 action:/handler:；任意命令需显式加入 allow 或 allow_any=true）".to_string(),
+        ),
+      )
+      return @rx.Subscription::empty()
+    }
+    let args : Array[String] = []
+    for i in 1..<argv.length() {
+      args.push(argv[i])
+    }
+    let timeout_ms = (policy.timeout_sec * 1000.0).to_int()
+
+    match run_cli(prog, args, timeout_ms) {
+      Err(e) => observer.on_error(ExecError::SpawnFailed(e))
+      Ok(pair) => {
+        let (status, stdout, stderr) = pair
+        if status == 0 {
+          observer.on_next(CommandResult::{
+            exit_code: status,
+            stdout,
+            stderr,
+            duration_ms: 0L,
+          })
+          observer.on_completed()
+        } else {
+          observer.on_error(
+            ExecError::SpawnFailed(
+              "退出码 " +
+              status.to_string() +
+              (if stderr == "" { "" } else { "；stderr: " + stderr }),
+            ),
+          )
+        }
+      }
+    }
+    return @rx.Subscription::empty()
+  })
+}
+
+///|
+#cfg(not(target="js"))
+pub fn run_command(
+  policy : ExecPolicy,
+  payload : Json,
+) -> @rx.Observable[CommandResult, ExecError] {
+  @rx.Observable::new(fn(
+    observer : @rx.Observer[CommandResult, ExecError],
+  ) -> @rx.Subscription {
+    // 解析 payload：先判断是否为 Object，再取字段
+    let argv = match payload {
+      Json::Object(obj) =>
+        match obj.get("argv") {
+          Some(Json::Array(a)) => {
+            let arr : Array[String] = []
+            for j in a.iter() {
+              match j {
+                Json::String(s) => arr.push(s)
+                _ => ()
+              }
+            }
+            Some(arr)
+          }
+          _ => None
+        }
+      _ => None
+    }
+    let argv = argv.unwrap_or([])
+    if argv.length() == 0 {
+      observer.on_error(
+        ExecError::PolicyDenied(
+          "rhop_task: 命令载荷缺少 argv".to_string(),
+        ),
+      )
+      return @rx.Subscription::empty()
+    }
+    let prog = argv[0]
+    let need = "cli:" + prog
+    if !policy.allows(need) {
+      observer.on_error(
+        ExecError::PolicyDenied(
+          "rhop_task: 执行策略拒绝 " +
+          need +
+          "（默认只放行 action:/handler:；任意命令需显式加入 allow 或 allow_any=true）".to_string(),
+        ),
+      )
+      return @rx.Subscription::empty()
+    }
+    let args : Array[String] = []
+    for i in 1..<argv.length() {
+      args.push(argv[i])
+    }
+    let timeout_ms = (policy.timeout_sec * 1000.0).to_int()
+
+    match run_cli(prog, args, timeout_ms) {
+      Err(e) => observer.on_error(ExecError::SpawnFailed(e))
+      Ok(pair) => {
+        let (status, stdout, stderr) = pair
+        if status == 0 {
+          observer.on_next(CommandResult::{
+            exit_code: status,
+            stdout,
+            stderr,
+            duration_ms: 0L,
+          })
+          observer.on_completed()
+        } else {
+          observer.on_error(
+            ExecError::SpawnFailed(
+              "退出码 " +
+              status.to_string() +
+              (if stderr == "" { "" } else { "；stderr: " + stderr }),
+            ),
+          )
+        }
+      }
+    }
+    return @rx.Subscription::empty()
+  })
 }

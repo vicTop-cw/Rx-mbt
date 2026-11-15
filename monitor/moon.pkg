@@ -1,8 +1,16 @@
 import {
   "vicTop-cw/RX-MBT/rx",
   "moonbitlang/core/debug",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
 }
 
 options(
-  targets: { "watcher_js.mbt": [ "js" ], "watcher_native.mbt": [ "native" ] },
+  targets: {
+    "watcher_js.mbt": [ "js" ],
+    "watcher_native.mbt": [ "native" ],
+    "fs_native_wbtest.mbt": [ "native" ],
+  },
+  "native-stub": [ "fs_native_stubs.c", "watch_native_stubs.c" ],
+  "allow-experimental-packages": [ "moonbitlang/core/async" ],
 )

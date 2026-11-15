@@ -57,9 +57,11 @@ pub fn GitChannel::remote(self : GitChannel) -> String {
 }
 
 ///|
+
 ///|
 pub extend GitChannel with OnlineChannel::{name, available, send, receive}
 
+///|
 pub impl OnlineChannel for GitChannel with fn name(self) {
   "git:" + self.remote_url
 }
@@ -134,9 +136,11 @@ pub fn SftpChannel::with_timeout(
 }
 
 ///|
+
 ///|
 pub extend SftpChannel with OnlineChannel::{name, available, send, receive}
 
+///|
 pub impl OnlineChannel for SftpChannel with fn name(self) {
   "sftp:\{if self.username == "" { "*" } else { self.username }}@\{self.host}:\{self.remote_dir}"
 }

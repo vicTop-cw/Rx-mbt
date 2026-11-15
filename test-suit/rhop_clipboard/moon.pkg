@@ -6,7 +6,5 @@ import {
 }
 
 options(
-  targets: {
-    "clipboard_test.mbt": [ "js" ],
-  },
+  targets: { "clipboard_test.mbt": [ "js" ] },
 )

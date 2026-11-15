@@ -8,7 +8,10 @@
 
 ///|
 /// 触发事件：事件名 + 载荷 + 事件序号 + 发生时刻（虚拟时钟毫秒）
-pub struct TriggerEvent[T] {
+///
+/// 可见性说明：`pub(all)` 是跨包可访问的最小声明。`pub` 仅包内可见，
+/// 外部消费者（如 mcp-watcher）无法引用 `TriggerEvent` 类型标注。
+pub(all) struct TriggerEvent[T] {
   name : String
   payload : T
   id : Int64
@@ -17,7 +20,7 @@ pub struct TriggerEvent[T] {
 
 ///|
 /// 触发器：事件名（支持通配）+ 条件 + 时机 + 处理器
-pub struct Trigger[T] {
+pub(all) struct Trigger[T] {
   id : Int32
   event_name : String
   condition : (TriggerEvent[T]) -> Bool
@@ -29,7 +32,7 @@ pub struct Trigger[T] {
 
 ///|
 /// 触发器注册表：集中管理 + 事件分发 + 幂等去重
-pub struct TriggerRegistry[T] {
+pub(all) struct TriggerRegistry[T] {
   triggers : Ref[Array[Trigger[T]]]
   seq : Ref[Int32]
   event_seq : Ref[Int64]
@@ -215,6 +218,17 @@ pub fn[T] TriggerRegistry::fire(
 }
 
 ///|
+/// 分发事件：时刻取墙钟当前时间（install_real_clock 后为真实墙钟，
+/// 未注入时等价默认虚拟时钟当前时间）
+pub fn[T] TriggerRegistry::fire_real(
+  self : TriggerRegistry[T],
+  name : String,
+  payload : T,
+) -> Unit {
+  self.fire_at(name, payload, real_now())
+}
+
+///|
 /// 幂等触发：key 已存在则整体跳过，否则记录 key 并分发
 pub fn[T] TriggerRegistry::fire_with_key(
   self : TriggerRegistry[T],
@@ -264,4 +278,59 @@ pub fn[T] TriggerRegistry::clear(self : TriggerRegistry[T]) -> Unit {
 /// 清后同 key 可再次触发。
 pub fn[T] TriggerRegistry::reset_dedup_keys(self : TriggerRegistry[T]) -> Unit {
   self.dedup_keys.val = @hashset.from_array([])
+}
+
+///|
+/// 当前墙钟时间（毫秒，单调时钟语义）。
+/// 未注入真实时钟时返回默认虚拟时钟当前值（占位/虚拟路径，既有确定性测试不变）；
+/// 调用 install_real_clock / install_real_clock_with 后返回真实墙钟当前时刻
+/// （@async.now 单调毫秒；可控注入时为注入墙钟读数）。
+/// EventBus::publish 默认 at 取本值，注入后即自动使用真实时间。
+pub fn real_now() -> Int64 {
+  if real_clock_enabled.val {
+    wall_now()
+  } else {
+    default_clock.now()
+  }
+}
+
+///|
+/// 事件总线：以 TriggerRegistry 为内核的类型化事件发布/订阅门面。
+/// 事件名采用 "." 分段 glob（`*` 单段通配 / `**` 多段通配），
+/// 订阅支持条件过滤、一次性、优先级，返回订阅 id 以便注销。
+pub(all) struct EventBus[T] {
+  registry : TriggerRegistry[T]
+}
+
+///|
+/// 创建空事件总线
+pub fn[T] EventBus::new() -> EventBus[T] {
+  { registry: TriggerRegistry::new(), }
+}
+
+///|
+/// 发布事件：按事件名 glob 匹配订阅者，按优先级降序、条件过滤后分发。
+/// at 默认取当前墙钟时间（R1 前为虚拟时钟占位）
+pub fn[T] EventBus::publish(
+  self : EventBus[T],
+  name : String,
+  payload : T,
+  at~ : Int64 = real_now(),
+) -> Unit {
+  self.registry.fire_at(name, payload, at)
+}
+
+///|
+/// 订阅事件：event_name 支持 "." 分段 glob（`*` / `**`）。
+/// condition 默认 None（不设条件）；once 触发一次后自动注销；
+/// priority 越大越先执行（同优先级按注册序）。返回订阅 id。
+pub fn[T] EventBus::subscribe(
+  self : EventBus[T],
+  event_name : String,
+  handler : (TriggerEvent[T]) -> Unit,
+  condition~ : ((TriggerEvent[T]) -> Bool)? = None,
+  once~ : Bool = false,
+  priority~ : Int32 = 0,
+) -> Int32 {
+  self.registry.register_with(event_name, handler, condition~, once~, priority~)
 }

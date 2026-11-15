@@ -29,9 +29,9 @@
 /// 十六进制数字字符（小写）：0..15 → '0'..'9' / 'a'..'f'。
 fn hex_digit_char(value : Int32) -> Char {
   if value < 10 {
-    Int::unsafe_to_char(48 + value)
+    Int32::unsafe_to_char(48 + value)
   } else {
-    Int::unsafe_to_char(87 + value)
+    Int32::unsafe_to_char(87 + value)
   }
 }
 

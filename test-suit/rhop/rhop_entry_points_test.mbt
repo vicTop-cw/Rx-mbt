@@ -246,7 +246,10 @@ test "rhop-entry · from_filesystem_with 坏信封跳过不中断、不报 error
   assert_true(dir != "")
   let cipher = @rp.Aes256GcmCipher::new("ep-pw-bad")
   // 1) 非 JSON 信封
-  assert_eq(@rp.rhop_fs_write_text(dir + "/bad-json.rhop", "not-json-at-all"), Ok(()))
+  assert_eq(
+    @rp.rhop_fs_write_text(dir + "/bad-json.rhop", "not-json-at-all"),
+    Ok(()),
+  )
   // 2) 信封合法但 v != 1
   let bad_v = @rp.RhopEnvelope::encode(2, "aes-256-gcm", "anything")
   assert_eq(@rp.rhop_fs_write_text(dir + "/bad-v.rhop", bad_v), Ok(()))
@@ -259,7 +262,10 @@ test "rhop-entry · from_filesystem_with 坏信封跳过不中断、不报 error
     "aes-256-gcm",
     @rp.RhopCipher::encrypt(cipher, "this is not a packet"),
   )
-  assert_eq(@rp.rhop_fs_write_text(dir + "/bad-packet.rhop", bad_pkt_ct), Ok(()))
+  assert_eq(
+    @rp.rhop_fs_write_text(dir + "/bad-packet.rhop", bad_pkt_ct),
+    Ok(()),
+  )
   let (got, errs, obs) = ep_collector()
   ffi_ep_install_fake_watch()
   let sub = @rp.from_filesystem_with(dir, cipher, false).subscribe(obs)
@@ -312,7 +318,9 @@ test "rhop-entry · dispose 关闭替身 watcher（无句柄泄漏）" {
   let (got, errs, obs) = ep_collector()
   ffi_ep_install_fake_watch()
   let before = ffi_ep_watch_count()
-  let sub = @rp.from_filesystem_with(dir, @rp.RhopCipherNone::new(), false).subscribe(obs)
+  let sub = @rp.from_filesystem_with(dir, @rp.RhopCipherNone::new(), false).subscribe(
+    obs,
+  )
   assert_eq(ffi_ep_watch_count(), before + 1)
   sub.dispose()
   assert_eq(ffi_ep_watch_count(), before)
@@ -329,7 +337,9 @@ test "rhop-entry · from_filesystem_with 监控路径不存在 → on_error（Wa
   // 不装替身：走真实 fs.watch，非存在路径在订阅时同步报错
   // （前序用例若中途 fail，替身可能残留 ⇒ 先显式还原）
   ffi_ep_restore_watch()
-  let sub = @rp.from_filesystem_with(ghost, @rp.RhopCipherNone::new(), false).subscribe(obs)
+  let sub = @rp.from_filesystem_with(ghost, @rp.RhopCipherNone::new(), false).subscribe(
+    obs,
+  )
   assert_eq(got.val.length(), 0)
   assert_eq(errs.val.length(), 1)
   assert_true(errs.val[0].contains("WatchError"))

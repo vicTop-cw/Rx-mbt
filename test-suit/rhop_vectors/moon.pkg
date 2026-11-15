@@ -4,7 +4,5 @@ import {
 }
 
 options(
-  targets: {
-    "producer_test.mbt": [ "js" ],
-  },
+  targets: { "producer_test.mbt": [ "js" ] },
 )

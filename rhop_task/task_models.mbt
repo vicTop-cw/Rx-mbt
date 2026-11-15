@@ -55,6 +55,7 @@ pub(all) enum TaskState {
 
 ///|
 pub extend TaskState with Eq::{not_equal, equal}
+
 ///|
 pub extend TaskState with @moonbitlang/core/debug.Debug::{to_repr}
 

@@ -326,11 +326,7 @@ test "envelope: to_dict / from_dict 往返（to_dict 不含 v 键）" {
       _ => fail("payload")
     },
     @rp.Side::Executor,
-    result=
-      @json.parse("{\"stdout\":\"ok\"}") catch {
-        _ => fail("result")
-      },
-
+    result=@json.parse("{\"stdout\":\"ok\"}") catch { _ => fail("result") },
     error="none",
   )
   let dict = env.to_dict()

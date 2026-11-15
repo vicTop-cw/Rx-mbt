@@ -1,4 +1,4 @@
 import {
-  "vicTop-cw/RX-MBT/rx" @rx,
-  "moonbitlang/core/hashset" @hashset,
+  "vicTop-cw/RX-MBT/rx",
+  "moonbitlang/core/hashset",
 } for "test"

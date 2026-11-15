@@ -1,9 +1,9 @@
 # RX-MBT API 文档
 
 > 本文档由 `rx/pkg.generated.mbti`（`moon info` 生成）与源码注释整理，列出全部公开 API 的签名与语义说明。
-> 库版本：`vicTop-cw/RX-MBT@0.4.0`　工具链：`moon 0.1.20261016`　编译目标：`wasm`（rhop 相关 API 另见各条目标标注）
+> 库版本：`vicTop-cw/RX-MBT@0.4.0`　工具链：`moon 0.1.20261104`　编译目标：`wasm`（rhop 相关 API 另见各条目标标注）
 >
-> C4 终态实测（2026-10-28）：`moon check` 三目标 0 error；项目级 **wasm 615 / js 851 / native 615** 全绿（Windows 与 WSL 一致）；
+> C4 终态实测（2026-11-15）：`moon check` 三目标 0 error；项目级 **native 645 / js 888** 全绿（Windows 与 WSL 一致）；
 > 互操作 `verify_interop.py --strict --require-negative` **47/47 PASS**；生成物 determinism PASS（产物已 untrack）。
 
 ## 目录

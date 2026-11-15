@@ -18,6 +18,8 @@ pub struct LocalSharedPath {
 }
 
 ///|
+
+///|
 /// 以根目录构造（相对路径按进程 cwd 解析成绝对路径）。
 pub fn LocalSharedPath::new(root : String) -> LocalSharedPath {
   { root: normalize_path(fs_abs(root)), }
@@ -26,9 +28,19 @@ pub fn LocalSharedPath::new(root : String) -> LocalSharedPath {
 ///|
 /// 根目录（"/" 分隔）。注意：契约里的 `SharedPath::root` 返回 `String?`，
 /// 本实现在 trait 里实现；这里不再额外提供同名 inherent 方法以免歧义。
-///|
-pub extend LocalSharedPath with SharedPath::{available, write_text, read_text, exists, remove, name, root}
 
+///|
+pub extend LocalSharedPath with SharedPath::{
+  available,
+  write_text,
+  read_text,
+  exists,
+  remove,
+  name,
+  root,
+}
+
+///|
 pub impl SharedPath for LocalSharedPath with fn available(self) {
   match fs_ensure_dir(self.root) {
     Ok(_) => true
@@ -161,7 +173,17 @@ pub fn read_text_at(root : String, filename : String) -> Result[String, String] 
   let p = join_shared(root, filename)
   match fs_read_text(p) {
     Ok(t) => Ok(t)
-    Err(e) => Err("rhop: 读取失败: \{p}: \{e}")
+    Err(e) => Err("rhop: 读取失败: \{p}: " + fs_error_to_string(e))
+  }
+}
+
+///|
+/// 将 FsError 转换为字符串。
+fn fs_error_to_string(e : FsError) -> String {
+  match e {
+    FsError::NotFound => "NotFound"
+    FsError::Io => "Io"
+    FsError::OutOfMemory => "OutOfMemory"
   }
 }
 
@@ -275,32 +297,20 @@ fn fs_rename(from : String, to : String) -> Result[Unit, String] {
 
 ///|
 #cfg(target="js")
-fn fs_read_text(p : String) -> Result[String, String] {
+fn fs_read_text(p : String) -> Result[String, FsError] {
   let t = ffi_fs_read_file(p)
   let err = ffi_fs_last_error()
   if err != "" {
-    Err(err)
+    Err(FsError::Io)
   } else {
     Ok(t)
   }
 }
 
 ///|
-#cfg(not(target="js"))
-fn fs_read_text(p : String) -> Result[String, String] {
-  Err("rhop: 读文件仅 js 目标可用（wasm/native 无文件系统 API）")
-}
-
-///|
 #cfg(target="js")
 fn fs_exists(p : String) -> Bool {
   ffi_fs_exists(p)
-}
-
-///|
-#cfg(not(target="js"))
-fn fs_exists(p : String) -> Bool {
-  false
 }
 
 ///|
@@ -317,10 +327,4 @@ fn fs_remove(p : String) -> Result[Unit, String] {
       Ok(())
     }
   }
-}
-
-///|
-#cfg(not(target="js"))
-fn fs_remove(p : String) -> Result[Unit, String] {
-  Err("rhop: 删文件仅 js 目标可用（wasm/native 无文件系统 API）")
 }

@@ -47,6 +47,7 @@ pub(all) enum Role {
 
 ///|
 pub extend Role with Eq::{not_equal, equal}
+
 ///|
 pub extend Role with @moonbitlang/core/debug.Debug::{to_repr}
 

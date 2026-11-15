@@ -61,9 +61,19 @@ pub fn LocalEndpoint::path(self : LocalEndpoint) -> String {
 }
 
 ///|
-///|
-pub extend LocalEndpoint with EndpointView::{kind, name, available, exists, read_text, write_text, remove}
 
+///|
+pub extend LocalEndpoint with EndpointView::{
+  kind,
+  name,
+  available,
+  exists,
+  read_text,
+  write_text,
+  remove,
+}
+
+///|
 pub impl EndpointView for LocalEndpoint with fn kind(self) {
   "local"
 }
@@ -106,9 +116,11 @@ pub impl EndpointView for LocalEndpoint with fn remove(self, filename) {
 }
 
 ///|
+
 ///|
 pub extend LocalEndpoint with SharedPath::{root}
 
+///|
 pub impl SharedPath for LocalEndpoint with fn available(self) {
   SharedPath::available(self.sp)
 }
@@ -181,9 +193,19 @@ pub fn FileUrlEndpoint::url(self : FileUrlEndpoint) -> String {
 }
 
 ///|
-///|
-pub extend FileUrlEndpoint with EndpointView::{kind, name, available, exists, read_text, write_text, remove}
 
+///|
+pub extend FileUrlEndpoint with EndpointView::{
+  kind,
+  name,
+  available,
+  exists,
+  read_text,
+  write_text,
+  remove,
+}
+
+///|
 pub impl EndpointView for FileUrlEndpoint with fn kind(self) {
   "file-url"
 }
@@ -226,9 +248,11 @@ pub impl EndpointView for FileUrlEndpoint with fn remove(self, filename) {
 }
 
 ///|
+
 ///|
 pub extend FileUrlEndpoint with SharedPath::{root}
 
+///|
 pub impl SharedPath for FileUrlEndpoint with fn available(self) {
   SharedPath::available(self.sp)
 }
@@ -305,9 +329,19 @@ pub fn HttpEndpoint::base(self : HttpEndpoint) -> String {
 }
 
 ///|
-///|
-pub extend HttpEndpoint with EndpointView::{kind, name, available, exists, read_text, write_text, remove}
 
+///|
+pub extend HttpEndpoint with EndpointView::{
+  kind,
+  name,
+  available,
+  exists,
+  read_text,
+  write_text,
+  remove,
+}
+
+///|
 pub impl EndpointView for HttpEndpoint with fn kind(self) {
   "http-url"
 }

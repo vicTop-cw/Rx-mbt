@@ -252,3 +252,48 @@ pub fn[T, E] Observable::all(
 ) -> Observable[Bool, E] {
   self.every(predicate)
 }
+
+// ============================================================================
+// 触发条件组合器：把多个 (TriggerEvent[T]) -> Bool 组合为复合条件
+// all_of = AND、any_of = OR、not_ = 取反；供 EventBus / TriggerRegistry 条件过滤使用
+// ============================================================================
+
+///|
+/// all_of：所有条件都满足时才为 true（AND 语义）。空数组视为恒真。
+pub fn[T] all_of(
+  conds : Array[(TriggerEvent[T]) -> Bool],
+) -> (TriggerEvent[T]) -> Bool {
+  fn(ev : TriggerEvent[T]) -> Bool {
+    let mut ok = true
+    for c in conds {
+      if !c(ev) {
+        ok = false
+        break
+      }
+    }
+    ok
+  }
+}
+
+///|
+/// any_of：任一条件满足即为 true（OR 语义）。空数组视为恒假。
+pub fn[T] any_of(
+  conds : Array[(TriggerEvent[T]) -> Bool],
+) -> (TriggerEvent[T]) -> Bool {
+  fn(ev : TriggerEvent[T]) -> Bool {
+    let mut ok = false
+    for c in conds {
+      if c(ev) {
+        ok = true
+        break
+      }
+    }
+    ok
+  }
+}
+
+///|
+/// not_：对单个条件取反。
+pub fn[T] not_(c : (TriggerEvent[T]) -> Bool) -> (TriggerEvent[T]) -> Bool {
+  fn(ev : TriggerEvent[T]) -> Bool { !c(ev) }
+}

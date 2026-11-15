@@ -4,14 +4,39 @@
 
 | Item | Value |
 |---|---|
-| Generated at | 2026-10-15 10:49:46 |
-| moon version | moon 0.1.20260920 (914d7da 2026-09-20) |
-| Test target | wasm |
-| Total tests | 400 |
-| Passed | 400 |
-| Failed | 0 |
+| Generated at | 2026-11-15 22:30（基座复核后实测重生成） |
+| moon version | moon 0.1.20261104 (940aa18 2026-11-04) |
+| Platform | Windows (Git Bash) · node = C:\Program Files\nodejs\node |
+| Gate entry | `bash scripts/test_all.sh`（check / wasm / js / native 四步） |
+| Total tests (native) | 673 |
+| Passed (native) | 673 |
+| Failed (native) | 0 |
+| Total tests (js) | 912 |
+| Passed (js) | 912 |
+| Failed (js) | 0 |
+| Total tests (wasm) | 662 |
+| Passed (wasm) | 662 |
+| Failed (wasm) | 0 |
+| moon check | 0 errors |
 
-**Result: PASS (all green)**
+**Result: PASS (all green)** —— 四步门禁 `check / wasm / js / native` 全部判绿。
+
+> 验证命令：`bash scripts/test_all.sh`（本机 Windows + MSVC 实测，2026-11-15 22:30）。
+>
+> **本次复核相对上一版的变更**：
+> 1. **修复基座引入的 3 处回归**——wasm 缺 fs 原语（7 errors）、wasm 误纳 extern "C"（1 error）、
+>    跨包类型可见性缺失（`pub` → `pub(all)`，阻断级）。
+> 2. 上一版只跑 native + js 两目标；本次补齐 **wasm 目标**并纳入门禁。
+> 3. 测试数变化源于新增测试文件：`rx/event_bus_test.mbt`（R4 EventBus）、
+>    `rx/ops_time_real_test.mbt`（R1 真实时钟）、`rhop_task/task_exec_test.mbt`（R3）。
+>
+> **下游（mcp-watcher）消费约束**（实测确认，详见
+> `mcp-watcher/workbuddy/plan/rx-baseline-verification.md`）：
+> - 泛型类型跨包引用**必须带完整类型标注**：
+>   `let b : @rx.EventBus[Int] = @rx.EventBus::new()`；
+>   直接写 `@rx.EventBus[Int]::new()` 会误报 "Value EventBus not found"。
+> - `monitor.watch_folder` 的**订阅闭包同步阻塞**，必须在后台 async 任务中 subscribe。
+> - `real_now()` 需先 `install_real_clock()` 才返回真实墙钟。
 
 ## Per-package stats
 
@@ -28,7 +53,16 @@
 | vicTop-cw/RX-MBT/test-suit/math_conditions | 21 |
 | vicTop-cw/RX-MBT/test-suit/stress | 10 |
 | vicTop-cw/RX-MBT/test-suit/transform | 10 |
-| **Total** | **400** |
+| vicTop-cw/RX-MBT/monitor | 5 |
+| vicTop-cw/RX-MBT/rhop | 15 |
+| vicTop-cw/RX-MBT/rhop_task | 25 |
+| **Total** | **645** |
+
+> ⚠️ 上表为 **2026-11-15 09:48 首次生成时的快照**（native 645）。基座复核后 native 总数已升至
+> **673**（新增 `rx/event_bus_test.mbt` R4 EventBus 用例、`rx/ops_time_real_test.mbt` R1 真实时钟用例、
+> `rhop_task/task_exec_test.mbt` R3 用例，以及 `monitor` / `rhop` 包的 native 白盒测试）。
+> 下方 Test listing 保留首次生成的逐条清单以便追溯；**当前权威读数见上方 Environment 表**
+> （native 673 / js 912 / wasm 662 / check 0 errors），四步门禁全 PASS。
 
 ## Test listing
 

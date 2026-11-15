@@ -249,9 +249,11 @@ fn rstrip_crlf(text : String) -> String {
 }
 
 ///|
+
 ///|
 pub extend CommandClipboardBackend with ClipboardBackend::{name, read, write}
 
+///|
 pub impl ClipboardBackend for CommandClipboardBackend with fn name(self) {
   self.backend_name
 }

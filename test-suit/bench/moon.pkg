@@ -1,5 +1,5 @@
 import {
-  "vicTop-cw/RX-MBT/rx" @rx,
+  "vicTop-cw/RX-MBT/rx",
   "moonbitlang/core/bench" @bench_core,
-  "moonbitlang/core/json" @json,
+  "moonbitlang/core/json",
 } for "test"
