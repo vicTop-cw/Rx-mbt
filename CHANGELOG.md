@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-11-15
+
+### Fixed
+- Fixed FFI annotation duplicate warnings in `monitor/fs_native.mbt` and `rhop/rhop_fs_native.mbt`
+- Removed unused packages (`async`, `hashmap`, `ref`) from `monitor/moon.pkg`, `cmd/watch_server/moon.pkg`, `demo/rhop_demo/moon.pkg`
+- Fixed JS compilation errors by restoring required packages
+
+### Changed
+- Updated test counts: native 645, js 888
+- Updated README.md and DOC.md with latest test results
+
+### Security
+- No security changes in this release
+
 ## [0.4.2] - 2026-11-15
 
 ### Fixed
