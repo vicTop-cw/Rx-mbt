@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-11-17
+
+### Fixed
+- **Fixed native file watcher path concatenation bug** in `monitor/watch_native_stubs.c`:
+  `WideCharToMultiByte` was called with an explicit length and therefore did not write a
+  `'\0'` terminator, while `buf_push()` used `strlen()` on the stack buffer. Adjacent
+  events could read stale stack bytes and concatenate paths (observed `keep.md` reported
+  as `keep.md.tmp`). The terminator is now written explicitly and the byte length is
+  passed to `buf_push()` as an explicit parameter (defense in depth).
+- Verified: mcp-watcher basic multi-event scenario went from FAIL (path mismatch) to PASS.
+
+### Changed
+- No API changes; only the native C FFI stub for `monitor.watch_folder_native`.
+
+### Security
+- No security changes in this release.
+
 ## [0.4.3] - 2026-11-15
 
 ### Fixed

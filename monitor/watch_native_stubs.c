@@ -44,7 +44,7 @@ static int g_recursive = 1;
 // ---------------------------------------------------------------------------
 // 环形缓冲写入（满则丢弃最旧）
 // ---------------------------------------------------------------------------
-static void buf_push(uint8_t kind, const char *path) {
+static void buf_push(uint8_t kind, const char *path, uint32_t path_len) {
   EnterCriticalSection(&g_cs);
   int next = (g_head + 1) % WATCH_BUF_CAP;
   if (next == g_tail) {
@@ -52,7 +52,10 @@ static void buf_push(uint8_t kind, const char *path) {
     g_tail = (g_tail + 1) % WATCH_BUF_CAP;
   }
   g_buf[g_head].kind = kind;
-  uint32_t len = (uint32_t)strlen(path);
+  // 修复（路径粘连）：使用调用方传入的显式长度，不再依赖 strlen。
+  // 栈上的 full[] 由 WideCharToMultiByte 用显式长度填充，不保证有 '\0' 终止符，
+  // strlen 会读到栈残留，导致相邻事件路径粘连（如 keep.md → keep.md.tmp）。
+  uint32_t len = path_len;
   if (len >= WATCH_PATH_MAX) len = WATCH_PATH_MAX - 1;
   g_buf[g_head].path_len = len;
   memcpy(g_buf[g_head].path, path, len);
@@ -138,13 +141,20 @@ static DWORD WINAPI watch_thread(LPVOID arg) {
       }
 
       // 宽字符转 UTF-8
+      //
+      // 修复（路径粘连）：WideCharToMultiByte 用显式长度 w（非 -1）时不会写入
+      // '\0' 终止符，full[] 末尾是栈残留字节。原来的 buf_push 用 strlen(full)
+      // 计算长度，会越过真实路径读到残留内容，导致连续事件路径互相粘连
+      // （实测 keep.md 被拼成 keep.md.tmp）。
+      // 这里显式写终止符，并把长度作为显式参数传给 buf_push，双保险。
       char full[WATCH_PATH_MAX];
       int fname_len = WideCharToMultiByte(CP_UTF8, 0, full_w, w,
           full, WATCH_PATH_MAX, NULL, NULL);
       if (fname_len <= 0) {
         fname_len = 0;
-        full[0] = '\0';
       }
+      if (fname_len >= WATCH_PATH_MAX) fname_len = WATCH_PATH_MAX - 1;
+      full[fname_len] = '\0';   // 关键：显式终止符
 
       uint8_t kind = 0;
       switch (fi->Action) {
@@ -156,7 +166,7 @@ static DWORD WINAPI watch_thread(LPVOID arg) {
         default: kind = 0; break;
       }
       if (kind != 0) {
-        buf_push(kind, full);
+        buf_push(kind, full, (uint32_t)fname_len);
       }
 
       if (fi->NextEntryOffset == 0) break;
