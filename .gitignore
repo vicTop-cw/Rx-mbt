@@ -66,3 +66,6 @@ rhop_native_test/
 /test_result.txt
 /async_info.txt
 __pycache__/
+temp/
+test-suit/_a5probe/
+test-suit/_q3only/
