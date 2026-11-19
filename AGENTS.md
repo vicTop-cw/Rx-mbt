@@ -54,3 +54,12 @@ You can browse and install extra skills here:
   scientific computations), prefer assertion tests. You can use
   `moon coverage analyze > uncovered.log` to see which parts of your code are
   not covered by tests.
+
+## 线上仓库凭据（必读）
+
+- 一切线上仓库操作（git push / release / PR / 包发布）一律使用环境变量认证：`GITCODE_TOKEN`、`GITHUB_TOKEN`、`PYPI_TOKEN`。
+- 禁止交互式向用户索要账号密码，禁止弹窗要求凭据；缺少对应变量时直接报告，并先完成本地可进行的工作。
+- 用法示例：
+  - GitHub push：`git push https://x-access-token:${GITHUB_TOKEN}@github.com/<owner>/<repo>.git <branch>`
+  - GitCode push：`git push https://oauth2:${GITCODE_TOKEN}@gitcode.com/<owner>/<repo>.git <branch>`
+  - mooncakes 发布：`moon publish`，凭据同样取自环境，不向用户要 token。

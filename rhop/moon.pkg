@@ -9,12 +9,14 @@ import {
   "moonbitlang/core/ref",
   "moonbitlang/core/debug",
   "moonbitlang/core/async",
+  "moonbitlang/core/random",
 }
 
 options(
   targets: {
     "rhop_js.mbt": [ "js" ],
     "rhop_native.mbt": [ "native" ],
+    "cipher_gcm.mbt": [ "native" ],
     "rhop_fs_types.mbt": [ "js", "native", "wasm" ],
     "rhop_native_wbtest.mbt": [ "native" ],
     "rhop_fs_native.mbt": [ "native", "wasm" ],

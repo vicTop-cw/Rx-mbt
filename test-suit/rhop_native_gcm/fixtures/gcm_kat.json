@@ -1,0 +1,28 @@
+{
+  "spec": "token=base64(iv):base64(tag):base64(ct); PBKDF2-HMAC-SHA256(pw, salt='rx-mbt-rhop-salt-v1', 100000, 32); AES-256-GCM iv=12B tag=16B no-AAD; IV=sha256('rx-mbt-gcm-kat:<name>')[:12] 确定性",
+  "generated_by": "gen_kat.js (node:v25.2.1, node:crypto 真实现)",
+  "password": "rx-mbt-gcm-native-cross-test",
+  "key32_hex": "8b32e0168c00febb4bdc609a360ac2045183b8d9dcd5fcf527fdd36964db9844",
+  "cases": [
+    {
+      "name": "ascii",
+      "plain": "hello rhop native gcm cross-check",
+      "token": "jCmgGKqcCZ/6eefy:NcAur0n6GFg+qmFXL0mlpA==:U+BsJ92qDE9K4MKpYZLK7uoCMJMy4xtcApF0mTZgHeFA"
+    },
+    {
+      "name": "utf8",
+      "plain": "世界-UTF8-测试-moonbit-Ω-🌙",
+      "token": "iSMHKrRug/e+IP8B:GRW+U8bydzQbs8SxKDoF6Q==:bDROJIIFaeDpQt/XMLa2szc9qpHT1JvC/8kNetD+kniZtw=="
+    },
+    {
+      "name": "empty",
+      "plain": "",
+      "token": "BEUTli8h1C9v8vWV:sc5E77UfZTZIPAIJAFR/8Q==:"
+    },
+    {
+      "name": "long",
+      "plain": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxtail-边界-16字节对齐测试",
+      "token": "83tHMjuiMg97uozM:YYlTmePM4xsUpO/eEigAgA==:UZOiwHBjWQjWvtZNyJ51u1MDtigYo26O8i5fuj3ux3p/HrFDf5C0hZ6d0Pgrt3gUqviHdxRjs2qGBAdWp3wSVax8+praAWRFXO+5HjQSh/GYpL6tDjMH2iOIo2bdVpH+FisiHxUPLORTR+iPLD6tm4whgtFhYW7Tv1Tpw6iTjw/cVJQHs8zJUOvFoCMTQsWgUuIdHvoY7PHjPBIAloZXlObBRSfs21pMwQR4viGZ4r0AXEMDuy3jC7Kd0g7INT9Z7YoS6Yc3IlD+UK+3+xD9ShGw34I3a+QTUADL2/8XtilKHFNE8d0/LfEY2kNhhJxydHngi47lJQNC3o6a18vWLw2Umi+oecjXjf/OEmNpalFQ+LqyPt9fd63eWFH1F+fcejJReqMxAjcohxYO0KhBps+QfAs0dFOtKftKnvj3CTi1x2CT5BRayfOaKUz5g37d+hbaKqEMEIJyBu1T1mJTctbUcQCwKOXvx+Q/H41ooEBVhSHoPu+vI5ijAfkZgmRpHfXCW1nt12vkP2C4wiN817MxreM8sAdiQ7SZ3idtv5zFyMMVHIMfnpr7lxNq9t3TaBMZNPoCtes+DH+46HxGP8Z9K+O4/o4DeWj5KnTPQQl88AdSHkoC54Pga86GCvD4AWMcvKcJ/zLMKIxk2Z4WB2es2L/nYGEOMJTaUBGJPSeYzILLmytePzJcFQTgJM0AVXfUAxyjpiDTF44d8sfAv1u6TcI93GJORbYOz2yZ2KBI4zyzf9lDAv5t+cJwx3f5WArpwvmZtrsfFEYWrKUoMHQ2CnKQE36hmBffhWJk6EO0cmxmEPRuQO1XRKUjvkBgcv4Vti2n9Y49Vx1IXXVt75Zz2QG5BYdmIbzpnrYokXVfyvieXM5HiOcjsLSdvRoG4uZqoQr8nPQ1T/q2AUV3+U8BjLanWiSJG62FpnA2UwJlEU5H7ITht9HFOiZmM17LqXGeZ5s/t9tbYhiIPS20oNyyTzGRA/9b31nBdpRDwCMR5wwdWPdKj7Illnwf1BxUFv7PT3Qs0kAX5B/ZnXOJ04d7Gc/fiaUZQna50D0xlThxp3Fw4Y/JBHQtFDKs03zUoKtBKuqbo0rNiDXYtC2IYB/AHcg1AWrYLhMS2LUV4VEtSxqywzdPeSgfDoTxV3VPmrEkQh1hfu1P9rCNhpIQzV+A7QYuxcgj2CH4eoKHvJlH/Mk9deZa3mz2hFc5bCVDBUI2gDJgqFSox8QraTxIl+lqxPdMVssyxGQNkbgIYOkRpEAkPG7RezxhavKESj+QBgpiU/XDRPjc5EXChOCiWk/FnPntN3B6wa3vFbdZGOtU0zJSNlmspuQZq4pg6zYPijb43TcBv3g6gq0qOtCSqXy2b9Vq53A6"
+    }
+  ]
+}

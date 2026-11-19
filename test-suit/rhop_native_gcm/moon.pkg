@@ -1,0 +1,14 @@
+import {
+  "vicTop-cw/RX-MBT/rhop" @rp,
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/env",
+}
+
+options(
+  targets: {
+    "gcm_native_test.mbt": [ "native" ],
+  },
+)
