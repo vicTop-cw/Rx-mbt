@@ -145,45 +145,100 @@ fn fs_remove_impl(path : String) -> Result[Unit, FsError] {
 }
 
 // ---------------------------------------------------------------------------
-// 非 native 实现（返回错误）
+// js 实现（node:fs 绑定；extern "js"；错误经 __rxmbt_fs_err 全局透出）。
+// 为什么不是独立 fs_js.mbt：五个 *_impl 在本文件以 #cfg 分发，js 版与 native
+// 版互斥并存，避免同名定义跨文件冲突。
 // ---------------------------------------------------------------------------
 
 ///|
-#cfg(not(target="native"))
+#cfg(target="js")
+extern "js" fn js_fs_op(
+  op : String,
+  path : String,
+  content : String,
+) -> Bool =
+  #| (op, path, content) => { try { const fs = process.getBuiltinModule("node:fs"); if (op === "exists") { return fs.existsSync(path); } if (op === "read") { globalThis.__rxmbt_fs_out = fs.readFileSync(path, "utf8"); return true; } if (op === "write") { const tmp = path + ".fswrite.tmp"; fs.writeFileSync(tmp, content); fs.renameSync(tmp, path); return true; } if (op === "list") { globalThis.__rxmbt_fs_out = JSON.stringify(fs.readdirSync(path, { recursive: true })); return true; } if (op === "remove") { fs.rmSync(path, { recursive: true }); return true; } return false; } catch (e) { globalThis.__rxmbt_fs_err = String(e && e.message || e); return false; } }
+
+///|
+#cfg(target="js")
+extern "js" fn js_fs_out() -> String =
+  #| () => { const v = globalThis.__rxmbt_fs_out; globalThis.__rxmbt_fs_out = undefined; return (v === undefined) ? "" : v; }
+
+///|
+#cfg(target="js")
+extern "js" fn js_fs_mtime_ns(path : String) -> Int64 =
+  #| (path) => { try { return process.getBuiltinModule("node:fs").statSync(path, { bigint: true }).mtimeNs; } catch { return BigInt(-1); } }
+
+///|
+#cfg(target="js")
+extern "js" fn js_fs_size(path : String) -> Int64 =
+  #| (path) => { try { return process.getBuiltinModule("node:fs").statSync(path, { bigint: true }).size; } catch { return BigInt(-1); } }
+
+///|
+#cfg(target="js")
 fn fs_read_text_impl(path : String) -> Result[String, FsError] {
-  let _ = path
-  Err(FsError::Io)
+  if !js_fs_op("exists", path, "") {
+    return Err(FsError::NotFound)
+  }
+  if !js_fs_op("read", path, "") {
+    return Err(FsError::Io)
+  }
+  Ok(js_fs_out())
 }
 
 ///|
-#cfg(not(target="native"))
+#cfg(target="js")
 fn fs_write_atomic_impl(
   path : String,
   content : String,
 ) -> Result[Unit, FsError] {
-  let _ = (path, content)
-  Err(FsError::Io)
+  if !js_fs_op("write", path, content) {
+    return Err(FsError::Io)
+  }
+  Ok(())
 }
 
 ///|
-#cfg(not(target="native"))
+#cfg(target="js")
 fn fs_list_rhop_impl(dir : String) -> Result[Array[String], FsError] {
-  let _ = dir
-  Err(FsError::Io)
+  if !js_fs_op("list", dir, "") {
+    return Err(FsError::Io)
+  }
+  let parsed = @json.parse(js_fs_out()) catch {
+    _ => return Err(FsError::Io)
+  }
+  let out : Array[String] = []
+  match parsed {
+    @json.Array(items) =>
+      for item in items {
+        match item {
+          @json.String(name) => out.push(name)
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  Ok(out)
 }
 
 ///|
-#cfg(not(target="native"))
+#cfg(target="js")
 fn fs_stat_impl(path : String) -> Result[FileStat, FsError] {
-  let _ = path
-  Err(FsError::Io)
+  let mtime_ns = js_fs_mtime_ns(path)
+  let size = js_fs_size(path)
+  if mtime_ns < 0L || size < 0L {
+    return Err(FsError::NotFound)
+  }
+  Ok(FileStat::{ mtime_ns, size })
 }
 
 ///|
-#cfg(not(target="native"))
+#cfg(target="js")
 fn fs_remove_impl(path : String) -> Result[Unit, FsError] {
-  let _ = path
-  Err(FsError::Io)
+  if !js_fs_op("remove", path, "") {
+    return Err(FsError::Io)
+  }
+  Ok(())
 }
 
 // ---------------------------------------------------------------------------
