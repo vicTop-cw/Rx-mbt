@@ -5,16 +5,12 @@ import {
   "moonbitlang/core/json",
 }
 
-// watcher 与 fs 层只有 js/native 双实现（watcher_js/watcher_native、
-// fs_native 的 #cfg 分发），wasm 不在本包支持面内——不声明的话
-// moon publish 会按全目标检查而在这五个 fs 原语上撞 unbound。
-supported_targets = "js+native"
-
 options(
   targets: {
     "watcher_js.mbt": [ "js" ],
     "watcher_native.mbt": [ "native" ],
     "fs_native_wbtest.mbt": [ "native" ],
+    "fs_stubs_wasm.mbt": [ "wasm", "wasm-gc" ],
   },
   "native-stub": [ "fs_native_stubs.c", "watch_native_stubs.c" ],
   "allow-experimental-packages": [ "moonbitlang/core/async" ],
