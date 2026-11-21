@@ -121,12 +121,15 @@ pub fn normalize_path(p : String) -> String {
 pub fn join_shared(root : String, filename : String) -> String {
   let f = normalize_path(filename)
   let f = if f.has_prefix("/") { f[1:].to_owned() } else { f }
-  if root == "" {
+  // 根也归一化：root 以 "\" 结尾（Windows 原样路径）时原实现会拼出 "C:\dir\/x"
+  // 这种 "\/" 混合形态，与事件侧 seen 键比对失配 ⇒ skip_existing 重放（BUG-1 同族）。
+  let r = normalize_path(root)
+  if r == "" {
     f
-  } else if root.has_suffix("/") {
-    root + f
+  } else if r.has_suffix("/") {
+    r + f
   } else {
-    root + "/" + f
+    r + "/" + f
   }
 }
 

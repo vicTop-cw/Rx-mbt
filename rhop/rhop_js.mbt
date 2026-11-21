@@ -143,10 +143,13 @@ pub fn[T : RhopCipher] from_filesystem_with(
 
 ///|
 fn join_path(root : String, fname : String) -> String {
-  if root.has_suffix("/") || root.has_suffix("\\") {
-    root + fname
+  // 根先归一化：根尾为 "\" 时原实现会原样拼出反斜杠路径（与统一 "/" 口径相悖），
+  // 喂给 seen 键比对即失配（BUG-1 同族）。
+  let r = normalize_path(root)
+  if r.has_suffix("/") {
+    r + fname
   } else {
-    root + "/" + fname
+    r + "/" + fname
   }
 }
 

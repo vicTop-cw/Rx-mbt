@@ -266,7 +266,10 @@ fn RhopWatcher::handle_event(
   if ev.kind == @monitor.WatchKind::Removed {
     return
   }
-  let _ = self.process_file(ev.path)
+  // 事件路径先归一化再进 process_file：种子侧（seed_seen → join_shared）产 "/" 键，
+  // 事件侧喂未归一化路径（Windows 反斜杠/混合形态）会让 seen 比对失配
+  // ⇒ skip_existing 重放已存在项（BUG-1 同族，本侧根治）。
+  let _ = self.process_file(normalize_path(ev.path))
 }
 
 ///|

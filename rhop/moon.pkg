@@ -19,6 +19,7 @@ options(
     "cipher_gcm.mbt": [ "native" ],
     "rhop_fs_types.mbt": [ "js", "native", "wasm" ],
     "rhop_native_wbtest.mbt": [ "native" ],
+    "rhop_js_wbtest.mbt": [ "js" ],
     "rhop_fs_native.mbt": [ "native", "wasm" ],
   },
   "native-stub": [ "rhop_fs_native_stubs.c" ],

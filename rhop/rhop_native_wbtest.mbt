@@ -73,3 +73,17 @@ async test "rhop_send: 覆盖已存在文件" {
     Err(_) => fail("fs_list_rhop failed")
   }
 }
+
+///|
+test "rhop-native  join_path：根尾反斜杠/正斜杠均产出 \"/\" 拼接" {
+  assert_eq(join_path("C:\\dir\\", "x.rhop"), "C:/dir/x.rhop")
+  assert_eq(join_path("C:/dir/", "x.rhop"), "C:/dir/x.rhop")
+  assert_eq(join_path("C:/dir", "x.rhop"), "C:/dir/x.rhop")
+}
+
+///|
+test "rhop-native  seen_key：多段反斜杠路径全归一化" {
+  // 修复前 replace 只换首个反斜杠：C:\a\b\x → C:/a\b\x（漏归一化）
+  assert_eq(seen_key("C:\\a\\b\\x.rhop"), "C:/a/b/x.rhop")
+  assert_eq(seen_key("C:/a/x.rhop"), "C:/a/x.rhop")
+}

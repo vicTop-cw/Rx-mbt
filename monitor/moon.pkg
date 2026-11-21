@@ -10,6 +10,7 @@ options(
     "watcher_js.mbt": [ "js" ],
     "watcher_native.mbt": [ "native" ],
     "fs_native_wbtest.mbt": [ "native" ],
+    "watcher_js_wbtest.mbt": [ "js" ],
     "fs_stubs_wasm.mbt": [ "wasm", "wasm-gc" ],
   },
   "native-stub": [ "fs_native_stubs.c", "watch_native_stubs.c" ],

@@ -24,7 +24,13 @@ fn watch_path(path : String) -> @rx.Observable[WatchEvent, WatchError] {
     observer : @rx.Observer[WatchEvent, WatchError],
   ) -> @rx.Subscription {
     let id = ffi_watch_start(path, fn(id, kind_tag, ts, raw, fname) {
-      let full = if fname == "" { path } else { join_path(path, fname) }
+      // fname 为空（后端给不出文件名）时事件路径 = 监控根本身，同样归一化，
+      // 保证下发给消费者的路径恒为 "/" 分隔口径。
+      let full = if fname == "" {
+        normalize_root(path)
+      } else {
+        join_path(path, fname)
+      }
       let kind = match kind_tag {
         0 => WatchKind::Created
         1 => WatchKind::Modified
@@ -43,13 +49,43 @@ fn watch_path(path : String) -> @rx.Observable[WatchEvent, WatchError] {
 }
 
 ///|
+/// 路径归一化为 "/" 分隔：反斜杠转正斜杠、折叠重复分隔符、去尾分隔符。
+/// monitor 不依赖 rhop 包，与 rhop transport_local 的 normalize_path 同口径本地实现。
+fn normalize_root(p : String) -> String {
+  let s = p.replace_all(old="\\", new="/")
+  let sb = StringBuilder()
+  let mut prev_slash = false
+  for i in 0..<s.length() {
+    let ch = s.get_char(i).unwrap_or('/')
+    if ch == '/' {
+      if !prev_slash {
+        sb.write_char(ch)
+      }
+      prev_slash = true
+    } else {
+      sb.write_char(ch)
+      prev_slash = false
+    }
+  }
+  let collapsed = sb.to_string()
+  if collapsed.length() > 1 && collapsed.has_suffix("/") {
+    collapsed[:collapsed.length() - 1].to_owned()
+  } else {
+    collapsed
+  }
+}
+
+///|
 /// 拼接监控根路径与 fs.watch 回调给出的相对文件名。
 /// 统一使用 "/" 分隔：node fs 在 Windows 下同样接受 "/"，可跨平台。
+/// 根先归一化：根尾为 "\" 时原实现会原样拼出反斜杠路径，喂给下游 seen
+/// 键比对即失配（skip_existing 重放，BUG-1 同族）。
 fn join_path(root : String, fname : String) -> String {
-  if root.has_suffix("/") || root.has_suffix("\\") {
-    root + fname
+  let r = normalize_root(root)
+  if r.has_suffix("/") {
+    r + fname
   } else {
-    root + "/" + fname
+    r + "/" + fname
   }
 }
 

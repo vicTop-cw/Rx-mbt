@@ -120,14 +120,18 @@ pub fn[T : RhopCipher] from_filesystem_with(
 
 ///|
 fn join_path(root : String, fname : String) -> String {
-  if root.has_suffix("/") || root.has_suffix("\\") {
-    root + fname
+  // 根先归一化：根尾为 "\" 时原实现会原样拼出反斜杠路径，喂给 seen 键比对即失配。
+  let r = normalize_path(root)
+  if r.has_suffix("/") {
+    r + fname
   } else {
-    root + "/" + fname
+    r + "/" + fname
   }
 }
 
 ///|
 fn seen_key(path : String) -> String {
-  path.replace(old="\\", new="/")
+  // replace 只换首个反斜杠，多段 Windows 路径（C:\a\b\x）会漏归一化；
+  // 统一走 normalize_path（同包工具），与 js 侧 seen_key 同口径。
+  normalize_path(path)
 }
